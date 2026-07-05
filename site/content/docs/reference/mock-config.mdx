@@ -1,0 +1,101 @@
+---
+title: mock.config.js
+description: Every field, with its default
+---
+
+All fields are optional. This shows every default:
+
+```js
+module.exports = {
+  dir: 'mock',                  // where mock/api and mock/data live, relative to cwd
+  seed: 'mockingpug',            // deterministic generation seed
+  baseUrl: '/api',               // used by mockingpug/react and mockingpug/next
+  persist: {
+    adapter: 'file',             // 'file' | 'memory'
+    strategy: 'always',          // 'always' (reconcile) | 'fresh' (regenerate every run)
+  },
+  pagination: {
+    strategy: 'page',            // 'page' | 'offset' | 'cursor' | false
+    params: { page: 'page', limit: 'limit', offset: 'offset', cursor: 'cursor' },
+    defaultLimit: 20,
+    maxLimit: 100,
+    envelope: true,               // true -> { data, meta } body; false -> raw array + X-* headers
+  },
+  limits: {
+    maxAmount: 100_000,           // doctor warns (fails with --strict) above this per-entity `amount`
+    maxArrayDepth: 3,             // doctor warns (fails with --strict) above this array[type].N
+  },
+  runtime: {
+    errorRate: 0,                 // [0,1] fraction of requests synthetically failing with a 500
+    delay: 0,                     // artificial latency (ms) added to every mock response
+  },
+};
+```
+
+CommonJS (`module.exports`) works out of the box regardless of your
+project's own module type, since mockingpug loads this file via a plain
+dynamic `import()` and Node's CJS/ESM interop handles the rest. An ESM
+`export default {...}` also works if your project has `"type": "module"`.
+
+## Field reference
+
+### `dir`
+
+Path to the folder holding `api/` and `data/` subfolders, relative to
+`process.cwd()`. Change this if your schemas live somewhere other than
+`mock/`. For example, CRA projects typically need `src/mock` (see the
+[React guide](/docs/guides/react#cra--webpack-gotcha-keep-mock-inside-src)).
+
+### `seed`
+
+Any string or number. Every generated value is a pure function of
+`(seed, entity, index, fieldName)`: changing the seed reshuffles the
+entire dataset; keeping it fixed reproduces the exact same dataset on any
+machine.
+
+### `baseUrl`
+
+The path prefix `mockingpug/react` and `mockingpug/next` mount entities
+under, e.g. `/api/user` for entity `user` with the default `/api`.
+
+### `persist.adapter`
+
+- `'file'`: `.mockingpug/db/<entity>.json`. Default for the CLI and
+  `mockingpug/next`.
+- `'memory'`: nothing survives the process. The only sensible choice for
+  `mockingpug/react` in a browser (there's no filesystem to write to), and
+  useful anywhere you don't want `.mockingpug/db` written to disk at all.
+
+### `persist.strategy`
+
+- `'always'`: reconcile (see [Reconciliation & Storage](/docs/concepts/reconciliation-and-storage)).
+- `'fresh'`: wipe and fully regenerate on every run.
+
+### `pagination.*`
+
+See [Pagination](/docs/concepts/pagination) for the full breakdown of
+strategies, query param naming, and the envelope option.
+
+### `limits.maxAmount` / `limits.maxArrayDepth`
+
+Guardrails checked by `mpug doctor` (not enforced at generation
+time itself). A schema with an `amount` or `array[type].N` above these
+values produces a warning (a hard failure under `--strict`). This exists
+both as a performance sanity check and as a DoS-guard: a schema merged
+from an untrusted PR shouldn't be able to silently blow up CI's memory or
+runtime.
+
+### `runtime.errorRate` / `runtime.delay`
+
+Synthetic latency/failure injection, applied identically by
+`mockingpug/react` and `mockingpug/next` at the start of every request:
+
+- `delay` (ms): `await`ed before any real work happens.
+- `errorRate` (`[0, 1]`): the probability that a request throws an
+  unexpected error instead of resolving, which surfaces to the client as
+  a generic `500` (the same path a genuine internal failure takes, not a
+  `RequestError`, since this is meant to simulate a *real* backend
+  failure for testing your app's error-handling UI).
+
+Both default to `0` (disabled). Edit them live without a restart via
+[`<MockDevtools>`](/docs/guides/devtools) if you're using it.

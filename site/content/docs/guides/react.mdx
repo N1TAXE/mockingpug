@@ -1,0 +1,245 @@
+---
+title: React
+description: Mocking a REST API in a React SPA via MSW
+---
+
+Quick start for mocking a REST API in a React SPA (Vite, CRA, or any
+bundler) via [MSW](https://mswjs.io). No separate server process, no
+changes to your HTTP client code.
+
+## 1. Install
+
+```bash
+npm install mockingpug msw
+npx msw init public/ --save
+```
+
+`msw` is a peer dependency, not bundled with `mockingpug`: install it
+alongside so your project controls its version (and so there's only ever
+one copy of it, avoiding duplicate-type errors if you ever `npm link`/`file:`
+install `mockingpug` locally instead of from the registry).
+
+The `npx msw init` command is MSW's own setup step. It drops
+`mockServiceWorker.js` into your `public/` directory (or wherever your
+bundler serves static assets from). This file is what actually intercepts
+network requests in the browser; `mockingpug` doesn't replace it, it
+generates the *handlers* that run inside it.
+
+## 2. Describe your data
+
+Same `mock/` convention used by the CLI and `mockingpug/next`. See
+[Getting Started](/docs/getting-started) if you haven't written a schema
+yet, and [Schema DSL](/docs/concepts/schema-dsl) for the full syntax.
+
+Run `npx mpug doctor` any time to validate. It catches typos in
+generator types, broken `data.*` references, and cross-entity cycles before
+you've wired anything into your app (the same validator the CLI and
+`mockingpug/next` both use).
+
+## 3. Load the schemas into your app
+
+Unlike `mockingpug/next` (which runs in Node and can read `mock/` off disk
+directly), there is no filesystem inside a browser bundle: schemas have to
+get there at *build time* instead.
+
+### Option A: Vite plugin (recommended if you're on Vite)
+
+```ts title="vite.config.ts"
+import { defineConfig } from 'vite';
+import { mockingpug } from 'mockingpug/vite';
+
+export default defineConfig({
+  plugins: [mockingpug()],
+});
+```
+
+```ts title="src/mocks/schemas.ts"
+import { schemas, customDictionaries } from 'virtual:mockingpug/schemas';
+export { schemas, customDictionaries };
+```
+
+The plugin scans `mock/api/**`/`mock/data/**` at build/dev time and exposes
+the already-parsed result as a virtual module, with no per-entity import list
+to maintain. It also watches `mock/` and `mock.config.js` while `vite dev`
+is running: editing a schema triggers a full reload instead of a stale
+cache. See the [Vite guide](/docs/guides/vite) for the full picture.
+
+TypeScript projects need a small ambient declaration for the virtual
+module, since it can't be resolved on disk:
+
+```ts title="src/mockingpug-virtual.d.ts"
+declare module 'virtual:mockingpug/schemas' {
+  import type { CustomDictionaryEntry, EntitySchema } from 'mockingpug';
+  export const schemas: Record<string, EntitySchema>;
+  export const customDictionaries: Record<string, CustomDictionaryEntry[]>;
+}
+```
+
+### Option B: manual static import (any bundler, no plugin needed)
+
+```ts title="src/mocks/schemas.ts"
+import { parseEntitySchema } from 'mockingpug';
+import userRaw from '../../mock/api/user/schema.json';
+import blogpostRaw from '../../mock/api/blogpost/schema.json';
+import roleDictionary from '../../mock/data/role.json';
+
+export const schemas = {
+  user: parseEntitySchema('user', 'mock/api/user/schema.json', userRaw, ['role']),
+  blogpost: parseEntitySchema('blogpost', 'mock/api/blogpost/schema.json', blogpostRaw),
+};
+
+export const customDictionaries = { role: roleDictionary };
+```
+
+Use this if you're not on Vite (CRA, plain webpack, etc.): one import per
+entity file, parsed with the same function the plugin uses internally.
+
+#### CRA / webpack gotcha: keep `mock/` inside `src/`
+
+Create React App (and any un-ejected `react-scripts` project) refuses to
+bundle imports that reach outside `src/`. You'll get `Module not found:
+... falls outside of the project src/ directory. Relative imports outside
+of src/ are not supported.` if `mock/` sits at the project root like it
+does for the CLI/Next.js convention.
+
+Fix: put the schema files under `src/mock/` instead, adjust the imports in
+`schemas.ts` to `../mock/api/...`, and point `mock.config.js` at the same
+folder:
+
+```js title="mock.config.js"
+module.exports = {
+  dir: 'src/mock', // not 'mock', see the CRA note above
+  seed: 'my-app',
+};
+```
+
+Plain webpack configs without CRA's restriction can keep `mock/` at the
+root as usual; this only applies to `react-scripts`.
+
+Also: CRA's default `tsconfig.json` uses `moduleResolution: "node"`, which
+doesn't understand `package.json`'s `exports` map. You'll need
+`"moduleResolution": "bundler"` (TypeScript ≥5.0) to resolve
+`mockingpug/react` as a subpath import at all.
+
+## 4. Generate data and start the worker
+
+```ts title="src/mocks/browser.ts"
+import { setupWorker } from 'msw/browser';
+import { MemoryStoreAdapter, generateAll, createMockHandlers } from 'mockingpug/react';
+import { schemas, customDictionaries } from './schemas'; // from option A or B above
+
+export async function startMocking() {
+  const store = new MemoryStoreAdapter();
+  await generateAll(schemas, store, { seed: 'my-app', customDictionaries });
+
+  const ctx = {
+    schemas,
+    store,
+    seed: 'my-app',
+    customDictionaries,
+    pagination: {
+      strategy: 'page' as const,
+      params: { page: 'page', limit: 'limit', offset: 'offset', cursor: 'cursor' },
+      defaultLimit: 20,
+      maxLimit: 100,
+      envelope: true,
+    },
+  };
+
+  const worker = setupWorker(...createMockHandlers(ctx, '/api'));
+  await worker.start({ onUnhandledRequest: 'bypass' });
+}
+```
+
+```tsx title="src/main.tsx (Vite)"
+async function bootstrap() {
+  if (import.meta.env.DEV) {
+    const { startMocking } = await import('./mocks/browser');
+    await startMocking();
+  }
+  const { createRoot } = await import('react-dom/client');
+  createRoot(document.getElementById('root')!).render(<App />);
+}
+bootstrap();
+```
+
+```jsx title="src/index.js (CRA / webpack, no import.meta, use process.env instead)"
+import ReactDOM from 'react-dom/client';
+import App from './App';
+
+function render() {
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(<App />);
+}
+
+if (process.env.NODE_ENV !== 'production') {
+  import('./mocks/browser').then(({ startMocking }) => startMocking().then(render));
+} else {
+  render();
+}
+```
+
+The dev-only guard (`import.meta.env.DEV` on Vite, `process.env.NODE_ENV`
+on webpack/CRA) plus the dynamic `import()` is what keeps `mockingpug/react`,
+MSW, and your mock data generators out of a production bundle.
+`mockingpug` doesn't do this for you automatically: your bundler's
+dead-code elimination does, as long as the call site is gated like this.
+`import.meta` is Vite-specific syntax and will fail to parse under CRA's
+webpack config, so don't copy the Vite snippet verbatim into a CRA project.
+
+Add `runtime: { delay: 300, errorRate: 0.1 }` to `ctx` above to exercise
+your app's loading/error states against synthetic latency/failures. Both
+default to `0` (disabled) if omitted. [`<MockDevtools>`](/docs/guides/devtools)
+lets you edit these live without a restart.
+
+`MemoryStoreAdapter` is the right choice for a SPA: it's a plain
+in-process `Map`, gone on reload, with no filesystem dependency. If you
+want mutations (`POST`/`PUT`/`DELETE` made while testing) to survive a page
+reload, you'd need to plug in your own `IndexedDB`-backed adapter
+(implementing the same `StoreAdapter` interface). Not shipped today.
+
+## `<MockProvider>` + `<MockDevtools>` (optional)
+
+Instead of hand-writing the `setupWorker()`/`worker.start()` boilerplate
+above, `<MockProvider>`/`<MockDevtools>` wrap it in a component with a
+floating dev panel (mock/off toggle, live delay/errorRate editing, a
+per-entity record viewer, and more). See the
+[dedicated devtools guide](/docs/guides/devtools).
+
+## Switching mock ↔ real API
+
+Nothing to configure for the all-or-nothing case: MSW intercepts
+`fetch`/`XHR` *below* your HTTP client, so as long as `startMocking()` is
+never called, requests go straight to whatever real backend your app
+already points at, the same behavior it would have without `mockingpug` in
+the picture at all.
+
+### Per-entity bypass
+
+For "mock everything except one endpoint whose real backend is already
+ready," two equivalent options:
+
+```json title="mock/api/user/schema.json: schema-level, static"
+{ "amount": 1000, "bypass": true, "data": { "...": "..." } }
+```
+
+```ts
+// runtime, e.g. from a devtools toggle or a debug console
+import { bypass, unbypass } from 'mockingpug/react';
+bypass('user');   // this entity's requests now hit the real network (MSW passthrough())
+unbypass('user'); // back to mocked
+```
+
+Either one is enough: a bypassed entity's MSW handlers call
+`passthrough()` instead of answering with generated data.
+`<MockDevtools>` exposes the runtime half as a checkbox per entity.
+
+## Logs and errors
+
+Everything mockingpug logs is prefixed `[mockingpug]`. A schema problem
+(bad generator type, missing custom dictionary, cross-entity cycle) throws
+during `generateAll()` with a stable error code and a location pointing at
+the offending file/field. Run `npx mpug doctor` to see the same
+errors without having to boot your app first. Unexpected failures at
+request time never leak internals to the response body; they show up as a
+generic `500` with the full detail only in your browser's devtools console.

@@ -1,0 +1,9 @@
+{
+  "amount": 1000,
+  "data": {
+    "id": "uuid",
+    "title": "lorem.32",
+    "author": "data.user.id",
+    "text": "lorem.240"
+  }
+}

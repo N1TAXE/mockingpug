@@ -1,0 +1,70 @@
+---
+title: Reconciliation & Storage
+description: How mockingpug decides what to (re)generate, and where data lives
+---
+
+## Store adapters
+
+mockingpug ships two `StoreAdapter` implementations:
+
+- **`MemoryStoreAdapter`**: a plain in-process `Map`. Nothing survives a
+  process restart or (in the browser) a page reload. This is the right
+  choice for `mockingpug/react` in a SPA, since there's no filesystem to
+  write to anyway.
+- **`FileStoreAdapter`**: one JSON file per entity under
+  `.mockingpug/db/<entity>.json` (`{ meta, records }`). This is the default
+  for the CLI and `mockingpug/next`, so mutations made while testing
+  (`POST`/`PUT`/`DELETE`) and the dataset itself survive between `next dev`
+  restarts.
+
+Configured via `mock.config.js`'s `persist.adapter: 'memory' | 'file'`; see
+[Reference → mock.config.js](/docs/reference/mock-config).
+
+## `persist.strategy`
+
+- **`'always'`** (default): every `generate()` call **reconciles**: it
+  compares each entity's current schema against what was previously
+  generated, and only touches what actually changed.
+- **`'fresh'`**: wipes the store first; every run is a full regeneration
+  from scratch.
+
+## How reconciliation decides what changed
+
+Each entity's stored metadata includes a **fingerprint**, a stable hash of
+its `data` block (field names + generator types, independent of key
+order). Before regenerating anything, mockingpug compares the old
+fingerprint's per-field hashes against the current schema and produces a
+plan covering exactly these cases, only doing the work each one requires:
+
+| Change | What happens |
+|---|---|
+| New entity (no prior fingerprint) | Full generation of `amount` records. |
+| Unchanged schema, unchanged `amount` | **Skipped entirely**: not even re-read/re-hashed beyond the cheap fingerprint comparison. Reported as `skipped` in the CLI's `generate` output. |
+| `amount` increased | Existing records untouched; new records appended, continuing `number.increment` counters past the current max (not restarting at 1). |
+| `amount` decreased | Generated (`_seed: true`) records are trimmed from the end first; only if that's not enough does trimming touch manually-created records. |
+| Field added | Only the new field is generated and added to every existing record; other fields are untouched. |
+| Field removed | The key is deleted from every existing record; nothing else regenerated. |
+| Field's generator type changed | Only that field is regenerated on every existing record (same seed, so still deterministic per record). |
+| Any combination of the above at once | Applied in this order: shrink → remove fields → change/add fields → grow. |
+| Schema deleted entirely (entity still in the store) | Reported as an **orphan**: data left behind with no corresponding schema. Not deleted automatically; see `mpug prune` in the [CLI guide](/docs/guides/cli). |
+
+The practical effect: editing one field in a 10,000-record entity
+regenerates that one field on 10,000 records. It does not throw away and
+regenerate the other 9 fields, and it does not touch any other entity.
+
+## Manual mutations survive reconciliation
+
+Records created via `POST` while testing (not part of the original
+`amount`) are tracked as **manual** (`_seed: false` internally; this and
+`_index` are stripped from every API response, never visible to your
+app). When `amount` shrinks, generated records are trimmed first
+specifically so manual test data isn't silently deleted by a schema change
+elsewhere.
+
+## Safe merging
+
+`PUT`/`PATCH` bodies are merged into a stored record via a merge function
+that explicitly drops `__proto__`/`constructor`/`prototype` keys at every
+level of nesting, rather than a bare `{...target, ...body}` spread (which
+does not protect against prototype pollution). See
+[Security](/docs/security) for the full threat model.

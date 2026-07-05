@@ -1,0 +1,57 @@
+---
+title: Pagination
+description: page / offset / cursor strategies, query param names, and response shape
+---
+
+`GET` list endpoints (`/api/user`) are paginated according to
+`mock.config.js`'s `pagination` block. Every transport (`react`, `next`)
+shares the same implementation, so behavior is identical regardless of how
+you're serving the data.
+
+## Strategies
+
+Set via `pagination.strategy`:
+
+- **`'page'`** (default): `?page=2&limit=20`. Response `meta`:
+  `{ strategy: 'page', total, page, limit, pageCount }`.
+- **`'offset'`**: `?offset=40&limit=20`. Response `meta`:
+  `{ strategy: 'offset', total, offset, limit }`.
+- **`'cursor'`**: `?cursor=<opaque>&limit=20`. Response `meta`:
+  `{ strategy: 'cursor', total, limit, nextCursor }`. `nextCursor` is
+  `null` once there's nothing left.
+- **`false`**: pagination disabled entirely; `GET` returns every record.
+
+## Query parameter names
+
+Customizable per-project via `pagination.params`, the defaults:
+
+```js
+params: { page: 'page', limit: 'limit', offset: 'offset', cursor: 'cursor' }
+```
+
+Rename `limit` to `perPage`, for instance, if that's your existing API's
+convention:
+
+```js
+pagination: { params: { limit: 'perPage' } }
+```
+
+## Bounds and fallbacks
+
+- An invalid or non-positive `limit` in the query string falls back to
+  `pagination.defaultLimit`. It never produces a `500` or an empty result
+  because of a malformed query param.
+- `limit` is always clamped to `pagination.maxLimit`, even if the query
+  string asks for more.
+
+## Response envelope
+
+`pagination.envelope` controls the response body shape:
+
+- **`true`** (default): `{ data: [...], meta: {...} }`.
+- **`false`**: a bare array as the body, with pagination info moved to
+  response headers instead: `X-Total-Count`, `X-Limit`, and whichever of
+  `X-Page` / `X-Offset` / `X-Next-Cursor` applies to the active strategy.
+
+Pick `false` if your app's HTTP client (or an existing real API you're
+mocking the shape of) expects a raw array rather than an envelope object.

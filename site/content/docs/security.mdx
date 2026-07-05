@@ -1,0 +1,86 @@
+---
+title: Security
+description: mockingpug is a dev/test tool, and here's how it stays that way
+---
+
+The core invariant behind every decision below: **mockingpug is a
+development/testing tool that must never accidentally become a production
+API surface**, whether through a config mistake or a deploy mistake.
+
+## Keeping the mock layer out of production
+
+- **Next.js**: nothing in `mockingpug` automatically excludes
+  `app/api/[[...mock]]/route.ts` from your production build. That's your
+  responsibility, via an environment guard inside the handler and/or
+  `rewrites()` pointing `/api/**` at your real backend when
+  `MOCK_MODE !== 'mock'`. See the [Next.js guide](/docs/guides/nextjs#switching-mock--real-api).
+- **React/MSW**: gate every import of `mockingpug/react` (and your own
+  `startMocking()`) behind a dead-code-eliminable check
+  (`if (import.meta.env.DEV)` / `if (process.env.NODE_ENV !== 'production')`)
+  with a dynamic `import()`. This is what actually keeps MSW, the
+  generators, and `<MockDevtools>` out of your production bundle. Also make
+  sure `mockServiceWorker.js` itself isn't shipped to your production
+  `public/` output if you can avoid it: it's a static file, reachable
+  directly regardless of whether `worker.start()` is ever called.
+- **CI gate**: `npx mpug doctor --assert-prod-safe <build-output-dir>`
+  greps a finished production build for exactly these leaks
+  (`mockServiceWorker.js`, a bundled `mockingpug/dist/react`/`.../next`
+  reference) and fails the build if found. See
+  [CLI → doctor](/docs/guides/cli#doctor). It's a best-effort static grep,
+  not a guarantee against a sufficiently mangled minified bundle hiding the
+  string. Treat it as a safety net, not the only line of defense.
+
+## Path traversal
+
+The resolver that turns a URL into a schema, and the file-store adapter
+that turns an entity name into a path on disk, never build a filesystem
+path out of request input. Route matching happens only against the
+already-known set of entities discovered by scanning `mock/api/**` at
+startup. A request for `../../etc/passwd` as an "entity name" simply
+doesn't match any known entity (`MP-REQ-001`, a normal 404); it never
+reaches anything resembling `fs.readFile(userInput)`.
+
+## Prototype pollution
+
+`PUT`/`PATCH` request bodies are merged into a stored record through a
+merge function that explicitly strips `__proto__`, `constructor`, and
+`prototype` keys **before** assignment, at every level of nesting. Not a
+bare `{...target, ...body}` spread, which does not protect against this.
+The same merge function is used for custom-dictionary entries and for
+building the final response object. This is exercised by dedicated
+attack-payload tests (`JSON.parse('{"__proto__":{"polluted":true}}')`
+style), not just "normal input" tests.
+
+## Body validation on mutation endpoints
+
+`POST`/`PUT`/`PATCH` bodies are merged against the entity's schema shape:
+fields that don't correspond to anything in the schema don't get silently
+absorbed into the stored record and echoed back to every other client via
+`GET`. Internal bookkeeping fields (`_seed`, `_index`) can never be set
+via a request body, regardless of what the client sends.
+
+## Resource limits
+
+`mock.config.js`'s `limits.maxAmount`/`limits.maxArrayDepth` (see
+[Reference](/docs/reference/mock-config#limitsmaxamount--limitsmaxarraydepth))
+exist specifically so a schema merged in from an untrusted PR, or edited by
+mistake, can't quietly ask for hundreds of millions of records and take
+down a dev machine or a CI runner by memory/time exhaustion.
+`runtime.errorRate`/`runtime.delay` are similarly validated to sane bounds
+(`[0,1]` and non-negative) so a typo in `mock.config.js` can't turn a
+shared dev environment into a permanent 500/timeout for the whole team.
+
+## CLI destructive commands
+
+`mpug reset` and `mpug prune` permanently delete data,
+including any manual mutations accumulated during testing sessions, which
+may be hard to reproduce. Both refuse to run without an explicit `--yes`
+flag; neither has a "delete everything, no confirmation, ever" mode.
+
+## What mockingpug can't protect you from
+
+`mock/api/**` and `mock/data/*.json` are source code: they get committed
+to git like anything else. mockingpug has no way to stop you from putting
+real secrets, tokens, or PII into a custom dictionary "as a convenient
+example." Don't put real credentials or personal data anywhere under
+`mock/`.

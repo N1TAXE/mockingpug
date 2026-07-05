@@ -1,0 +1,5 @@
+[
+  { "value": "ADMIN", "max": 5 },
+  { "value": "USER", "chance": 0.9 },
+  { "value": "MODER", "chance": 0.2 }
+]

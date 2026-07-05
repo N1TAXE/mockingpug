@@ -1,0 +1,66 @@
+import { generateAll } from '../generator/index.js';
+import { jsonResponse, readJsonBody, type QueryContext } from '../query/index.js';
+import { DEVTOOLS_SEGMENT } from './devtoolsPath.js';
+
+export { DEVTOOLS_SEGMENT };
+
+async function entityCounts(ctx: QueryContext): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  for (const entity of Object.keys(ctx.schemas)) {
+    const stored = await ctx.store.load(entity);
+    counts[entity] = stored?.records.length ?? 0;
+  }
+  return counts;
+}
+
+function runtimeSnapshot(ctx: QueryContext): { delay: number; errorRate: number } {
+  return { delay: ctx.runtime?.delay ?? 0, errorRate: ctx.runtime?.errorRate ?? 0 };
+}
+
+/**
+ * Server-side counterpart to `mockingpug/react`'s `useMockContext()` for the
+ * Next.js transport, where there's no client-side store to read directly.
+ * This is what `<MockDevtools>` from `mockingpug/next` talks to over
+ * `fetch()`. Unlike the React/MSW devtools, there's no "mock network"
+ * toggle or per-entity bypass here: a Route Handler *is* the real server,
+ * so there's nothing to intercept (see `next/README.md`).
+ *
+ * `ctx.runtime` is mutated in place (not replaced) so the change is visible
+ * to every subsequent request handled by this same process, the same object
+ * reference `createNextHandlers` reads `runtime`/`errorRate` from.
+ */
+export async function handleDevtoolsRequest(
+  segments: string[],
+  method: string,
+  request: Request,
+  ctx: QueryContext,
+): Promise<Response> {
+  const [action, entity] = segments;
+
+  if (!action && method === 'GET') {
+    return jsonResponse({ entities: await entityCounts(ctx), runtime: runtimeSnapshot(ctx) });
+  }
+
+  if (action === 'runtime' && method === 'POST') {
+    const body = (await readJsonBody(request)) as { delay?: number; errorRate?: number };
+    if (ctx.runtime) {
+      if (typeof body.delay === 'number') ctx.runtime.delay = Math.max(0, body.delay);
+      if (typeof body.errorRate === 'number') ctx.runtime.errorRate = Math.min(1, Math.max(0, body.errorRate));
+    }
+    return jsonResponse(runtimeSnapshot(ctx));
+  }
+
+  if (action === 'records' && entity && method === 'GET') {
+    const stored = await ctx.store.load(entity);
+    return jsonResponse({ records: stored?.records.slice(0, 10) ?? [] });
+  }
+
+  if (action === 'reset' && entity && method === 'POST') {
+    await ctx.store.deleteEntity(entity);
+    await generateAll(ctx.schemas, ctx.store, { seed: ctx.seed, customDictionaries: ctx.customDictionaries });
+    const stored = await ctx.store.load(entity);
+    return jsonResponse({ records: stored?.records.slice(0, 10) ?? [] });
+  }
+
+  return jsonResponse({ error: { message: 'not found' } }, { status: 404 });
+}

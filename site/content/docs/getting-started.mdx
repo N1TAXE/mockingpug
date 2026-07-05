@@ -1,0 +1,127 @@
+---
+title: Getting Started
+description: Install, describe your first entity, and generate data
+---
+
+This page walks through the framework-agnostic core: describing an entity
+and generating data from it via the CLI. Once you're comfortable with that,
+jump to the [guides](/docs/guides) for wiring a specific transport (React,
+Next.js, Vite) into your app.
+
+## 1. Install
+
+```bash
+npm install -D mockingpug
+```
+
+## 2. Scaffold a project
+
+```bash
+npx mpug init
+```
+
+This creates:
+
+- `mock.config.js`: the project config (safe to commit; see the
+  [config reference](/docs/reference/mock-config) for every field).
+- `mock/api/`: one folder per entity, each holding a `schema.json` schema.
+- `mock/data/`: custom weighted dictionaries, referenced by schemas.
+
+`init` is idempotent and non-destructive: it never overwrites an existing
+`mock.config.js`, and only drops an example schema if `mock/api/` is
+completely empty.
+
+## 3. Describe an entity
+
+```json title="mock/api/user/schema.json"
+{
+  "amount": 1000,
+  "data": {
+    "id": "number.increment",
+    "name": "username.FS",
+    "email": "email[gmail.com]",
+    "role": "role",
+    "posts": "data.blogpost"
+  }
+}
+```
+
+```json title="mock/api/blogpost/schema.json"
+{
+  "amount": 1000,
+  "data": {
+    "id": "uuid",
+    "title": "lorem.32",
+    "author": "data.user.id",
+    "text": "lorem.240"
+  }
+}
+```
+
+```json title="mock/data/role.json"
+[
+  { "value": "ADMIN", "max": 5 },
+  { "value": "USER", "chance": 0.9 },
+  { "value": "MODER", "chance": 0.2 }
+]
+```
+
+Three things are happening here that are worth naming up front (each has
+its own dedicated page under [Concepts](/docs/concepts)):
+
+- `role` isn't a built-in generator. It's a **custom dictionary**
+  (`mock/data/role.json`), referenced by name. `max: 5` caps how many
+  generated `ADMIN` users can ever exist; `chance: 0.9` is a relative
+  weight among the remaining entries.
+- `blogpost.author: "data.user.id"` is a **field-level relation**: every
+  generated blog post's `author` is a real `id` picked from an
+  already-generated user.
+- `user.posts: "data.blogpost"` is a **bare relation** (no trailing
+  field), resolved the other way around, lazily, at read time: "every
+  blogpost whose `author` points back at this user." It's never stored on
+  the user record itself.
+
+## 4. Validate before generating anything
+
+```bash
+npx mpug doctor
+```
+
+Catches unknown generator types (with a "did you mean" suggestion),
+malformed `amount`/`data`, broken `data.*` references, and unresolvable
+dependency cycles, before any data is actually produced. Safe to run
+constantly while iterating on schemas.
+
+## 5. Generate data
+
+```bash
+npx mpug generate
+```
+
+Writes to `.mockingpug/db/*.json` by default (`persist.adapter: 'file'`).
+Add `.mockingpug/` to `.gitignore`. `init` does this automatically.
+
+Run it again after editing a schema: unchanged entities are left alone
+(reported as `skipped`), while added/removed/changed fields and grown or
+shrunk `amount` are reconciled in place. See
+[Reconciliation & Storage](/docs/concepts/reconciliation-and-storage) for
+exactly what "in place" means for existing records.
+
+## 6. Wire it into your app
+
+The CLI is transport-agnostic: actually *serving* this data to your app
+over HTTP is the job of `mockingpug/react` or `mockingpug/next`:
+
+- [React guide](/docs/guides/react): MSW-backed mocking for any SPA
+  (Vite, CRA, plain webpack).
+- [Next.js guide](/docs/guides/nextjs): a real App Router Route Handler.
+- [Vite guide](/docs/guides/vite): the auto-discovery plugin that removes
+  the need to hand-import every schema file in a React+Vite app.
+
+## Deterministic by design
+
+Every generated value is a pure function of `(seed, entity, index,
+fieldName)`: no hidden state, no `Date.now()`, no `Math.random()` calls
+in the generation path itself. The same `mock.config.js`'s `seed` always
+reproduces the exact same dataset, on any machine, in CI or locally. This
+is what makes "the bug reproduced yesterday" still reproduce today.

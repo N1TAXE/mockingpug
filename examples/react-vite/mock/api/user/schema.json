@@ -1,0 +1,11 @@
+{
+  "amount": 1000,
+  "data": {
+    "id": "number.increment",
+    "name": "username.FS",
+    "email": "email[gmail.com]",
+    "password": "hash",
+    "role": "role",
+    "posts": "data.blogpost"
+  }
+}

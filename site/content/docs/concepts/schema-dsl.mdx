@@ -1,0 +1,103 @@
+---
+title: Schema DSL
+description: Every generator type an entity's data block can use
+---
+
+Each entity is one JSON file, conventionally at `mock/api/<entity>/schema.json`:
+
+```json
+{
+  "amount": 1000,
+  "data": { "fieldName": "<DSL string>" },
+  "bypass": false
+}
+```
+
+- **`amount`**: how many records to generate for this entity. Required,
+  non-negative.
+- **`data`**: one DSL string per field. Required.
+- **`bypass`** *(optional, `mockingpug/react` only)*: `true` makes every
+  request for this entity fall through to the real network instead of
+  being mocked. See [React guide § bypass](/docs/guides/react#bypass).
+
+Every DSL string below is parsed by `core`'s `parseFieldType()`. The exact
+same function backs the CLI, `mockingpug/next`, the Vite plugin, and the
+manual-import path for `mockingpug/react`, so behavior never diverges
+between transports.
+
+## Scalars
+
+| DSL | Type | Notes |
+|---|---|---|
+| `uuid` | `string` | Seeded UUID v4, **not** `crypto.randomUUID()`. Deterministic from the seed, and dependency-free in a browser bundle. |
+| `number` | `number` | Random integer in `[0, 1_000_000]` by default. |
+| `number.<min>-<max>` | `number` | Random integer in `[min, max]`, e.g. `number.1-100`. Negative bounds are allowed: `number.-50-50`. |
+| `number.increment` | `number` | Auto-incrementing counter, starting at 1, scoped per entity+field. Continues past the existing max when more records are appended to an entity later (not restarted at 1). |
+| `username.FS` | `string` | `"First Last"`: a real first + last name pair. |
+| `username.NN` | `string` | `"AdjectiveNoun123"`: an adjective + noun + number nickname. |
+| `email` | `string` | `local.1234@<random-domain>`. |
+| `email[<domain>]` | `string` | Same, with a fixed domain: `email[gmail.com]` → `jane.492@gmail.com`. |
+| `hash` / `hash.md5` / `hash.sha256` | `string` | A hex string shaped like a digest (32/32/64 hex chars). **Not a real cryptographic hash**: there's nothing to verify it against, and a real one would require Node's `node:crypto` (unavailable in a browser bundle) or the async Web Crypto API. |
+| `lorem` | `string` | 6 to 24 random lorem-ipsum words. |
+| `lorem.<N>` | `string` | Lorem text truncated/padded to exactly `N` characters. |
+| `date` / `date.past` / `date.future` | `string` (ISO) | A timestamp within one year of a fixed reference date, before/after/around it depending on the suffix. |
+| `boolean` | `boolean` | 50/50 by default. |
+| `boolean.<p>` | `boolean` | `true` with probability `p` (`0` to `1`), e.g. `boolean.0.9`. |
+| `enum[a,b,c]` | `string` | Uniformly random pick among the literal, comma-separated values. |
+
+## Arrays
+
+`array[<inner type>].<count>` generates a fixed-length array, recursing into
+the inner type for every element. The inner type can be anything above,
+including another `array[...]` (nested arrays) or a `crossRef`:
+
+```json
+{ "tags": "array[lorem.8].5" }
+```
+
+`count` is checked against `mock.config.js`'s `limits.maxArrayDepth` by
+`mpug doctor`; see [Reference → mock.config.js](/docs/reference/mock-config).
+
+## Custom dictionaries
+
+A bare word that isn't one of the built-in types (`role`, `department`, …)
+is looked up in `mock/data/<name>.json`, a JSON array of weighted entries:
+
+```json title="mock/data/role.json"
+[
+  { "value": "ADMIN", "max": 5 },
+  { "value": "USER", "chance": 0.9 },
+  { "value": "MODER", "chance": 0.2 }
+]
+```
+
+- **`value`**: the literal value to emit (any JSON type, not just strings).
+- **`max`** *(optional)*: hard cap on how many times this value can appear
+  **across the current generation run's new records**. Once the cap is hit,
+  the entry drops out of the pool for the rest of that run.
+- **`chance`** *(optional)*: relative weight in `[0, 1]` among the entries
+  that still have room under their `max`. Entries with no `chance` share
+  the remaining probability mass evenly.
+
+## Cross-entity relations
+
+`data.<entity>` and `data.<entity>.<field>` are the two relation forms.
+They behave very differently, and have their own dedicated page:
+[Relations & Generation Order](/docs/concepts/relations-and-generation).
+
+## Typo detection
+
+An unrecognized type (`emial[gmail.com]`, `bool`, `usernme.FS`) fails with a
+`SchemaError` (`MP-SCHEMA-001`) that includes a Levenshtein-distance "did
+you mean" suggestion against both the built-in type list and your project's
+own custom dictionary names. The comparison is done on the type's *base word*
+(the part before any `[...]`/`.` suffix), so a bracket parameter never
+throws off the match:
+
+```
+unknown generator type "emial[gmail.com]"
+  did you mean "email"?
+```
+
+Run `npx mpug doctor` any time to surface these before they ever
+reach generation.

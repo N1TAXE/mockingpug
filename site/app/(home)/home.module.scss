@@ -1,0 +1,1189 @@
+// mockingpug docs — home page. One SCSS module, BEM blocks, one block per section.
+@use 'sass:color';
+
+$paper: #fffdf7;
+$border: #ebe7db;
+$border-soft: #f0ebdd;
+$ink: #23272f;
+$muted: #7a8090;
+$faded: #b0ab99;
+$orange: #e8890c;
+$amber: #b06e0a;
+$yellow: #ffe066;
+$code-chip: #f4f1e8;
+$red: #e05d4a;
+$green-bg: #e3f6e6;
+$green: #1d9e4b;
+$schema-bg: #fff3d6;
+$table-highlight: #fffbe8;
+
+$font-ui: var(--home-font-ui);
+$font-code: var(--home-font-code);
+
+$tablet: 1024px;
+$mobile: 640px;
+
+@mixin container {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 56px;
+  box-sizing: border-box;
+
+  @media (max-width: $tablet) {
+    padding: 0 32px;
+  }
+
+  @media (max-width: $mobile) {
+    padding: 0 20px;
+  }
+}
+
+@mixin eyebrow {
+  font: 800 12px/16px #{$font-code};
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: $orange;
+}
+
+@mixin section-title {
+  font: 900 32px/1.25 #{$font-ui};
+  color: $ink;
+  letter-spacing: -0.02em;
+
+  @media (max-width: $mobile) {
+    font-size: 26px;
+  }
+}
+
+.page {
+  background: $paper;
+  color: $ink;
+  font-family: $font-ui;
+  overflow-x: hidden;
+}
+
+// ---------------------------------------------------------------- header --
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(255, 253, 247, 0.94);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid $border-soft;
+
+  &__inner {
+    @include container;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 72px;
+  }
+
+  &__nav {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+  }
+
+  &__logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font: 900 18px/24px #{$font-ui};
+    color: $ink;
+    text-decoration: none;
+  }
+
+  &__logo-mark {
+    display: flex;
+    color: $ink;
+  }
+
+  &__link {
+    font: 700 14px/16px #{$font-ui};
+    color: $muted;
+    text-decoration: none;
+    transition: color 0.2s ease;
+
+    &:hover {
+      color: $ink;
+    }
+
+    @media (max-width: $tablet) {
+      display: none;
+    }
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  &__search {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    width: 320px;
+    height: 40px;
+    padding: 8px 12px 8px 16px;
+    background: #fff;
+    border: 1px solid $border;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+
+    &:hover {
+      border-color: color.adjust($border, $lightness: -10%);
+    }
+
+    @media (max-width: $tablet) {
+      width: 220px;
+    }
+
+    @media (max-width: $mobile) {
+      display: none;
+    }
+  }
+
+  &__search-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font: 700 14px/16px #{$font-ui};
+    color: $ink;
+  }
+
+  &__kbd-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  &__kbd {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 6px;
+    height: 24px;
+    background: $ink;
+    border-radius: 6px;
+    font: 800 12px/16px #{$font-ui};
+    color: #fff;
+  }
+
+  &__github {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: $ink;
+    border-radius: 12px;
+    color: #fff;
+    text-decoration: none;
+    font: 700 14px/16px #{$font-ui};
+    transition: background 0.2s ease;
+
+    &:hover {
+      background: color.adjust($ink, $lightness: 10%);
+    }
+
+    @media (max-width: $mobile) {
+      padding: 10px 12px;
+      span {
+        display: none;
+      }
+    }
+  }
+}
+
+// ------------------------------------------------------------------ hero --
+.hero {
+  background:
+    radial-gradient(40% 55% at 88% 15%, #e8f4ff 0%, transparent 60%),
+    radial-gradient(35% 45% at 5% 90%, #fff3d6 0%, transparent 60%);
+  border-bottom: 1px solid $border-soft;
+
+  &__inner {
+    @include container;
+    padding-top: 88px;
+    padding-bottom: 72px;
+    display: flex;
+    flex-direction: column;
+    gap: 52px;
+  }
+
+  &__copy {
+    max-width: 680px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  &__title {
+    margin: 0;
+    font: 900 54px/1.25 #{$font-ui};
+    letter-spacing: -1.08px;
+    color: $ink;
+
+    @media (max-width: $tablet) {
+      font-size: 44px;
+    }
+
+    @media (max-width: $mobile) {
+      font-size: 34px;
+    }
+  }
+
+  &__title-highlight {
+    background: linear-gradient(transparent 60%, $yellow 60%);
+  }
+
+  &__subtitle {
+    margin: 0;
+    max-width: 600px;
+    font: 500 18px/1.5 #{$font-ui};
+    color: $muted;
+  }
+
+  &__actions {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  &__cta {
+    background: $ink;
+    color: $paper;
+    padding: 14px 28px;
+    border-radius: 12px;
+    font: 800 15px/16px #{$font-ui};
+    text-decoration: none;
+    box-shadow: 0 10px 24px -10px rgba(35, 39, 47, 0.4);
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.2s ease;
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 28px -10px rgba(35, 39, 47, 0.45);
+    }
+  }
+
+  &__ghost {
+    background: #fff;
+    border: 1px solid $border;
+    color: $ink;
+    padding: 13px 22px;
+    border-radius: 12px;
+    font: 800 14px/16px #{$font-ui};
+    text-decoration: none;
+    transition: border-color 0.2s ease;
+
+    &:hover {
+      border-color: color.adjust($border, $lightness: -15%);
+    }
+  }
+
+  &__panels {
+    display: grid;
+    grid-template-columns: 1fr 52px 1fr;
+    align-items: stretch;
+
+    @media (max-width: $tablet) {
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+  }
+
+  &__arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 700 24px/33px #{$font-ui};
+    color: $faded;
+
+    @media (max-width: $tablet) {
+      transform: rotate(90deg);
+      padding: 4px 0;
+    }
+  }
+}
+
+.panel {
+  background: #fff;
+  border: 1px solid $border;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 24px 56px -28px rgba(35, 39, 47, 0.25);
+
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    border-bottom: 1px solid #f2eee2;
+  }
+
+  &__path {
+    font: 700 12px/16px #{$font-code};
+    color: $faded;
+  }
+
+  &__badge {
+    font: 800 11px/16px #{$font-ui};
+    border-radius: 99px;
+    padding: 4px 10px;
+
+    &--schema {
+      background: $schema-bg;
+      color: $amber;
+    }
+
+    &--ok {
+      background: $green-bg;
+      color: $green;
+    }
+  }
+
+  &__code {
+    margin: 0;
+    padding: 20px 24px;
+    font: 500 13px/24px #{$font-code};
+    color: $ink;
+    overflow-x: auto;
+  }
+}
+
+.token {
+  &--key {
+    color: $orange;
+  }
+  &--type {
+    color: $amber;
+  }
+  &--value {
+    color: $green;
+  }
+  &--muted {
+    color: $faded;
+  }
+}
+
+// ------------------------------------------------------------------ pain --
+.pain {
+  border-bottom: 1px solid $border-soft;
+
+  &__inner {
+    @include container;
+    padding: 72px 56px;
+
+    @media (max-width: $tablet) {
+      padding: 56px 32px;
+    }
+    @media (max-width: $mobile) {
+      padding: 40px 20px;
+    }
+  }
+
+  &__eyebrow {
+    @include eyebrow;
+    margin-bottom: 12px;
+  }
+
+  &__title {
+    @include section-title;
+    margin: 0 0 32px;
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+
+    @media (max-width: $tablet) {
+      grid-template-columns: 1fr;
+    }
+  }
+}
+
+.pain-card {
+  background: #fff;
+  border: 1px solid $border;
+  border-radius: 18px;
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+
+  &__mark {
+    font: 700 16px/16px #{$font-code};
+    color: $red;
+  }
+
+  &__title {
+    font: 800 16px/16px #{$font-ui};
+    color: $ink;
+  }
+
+  &__text {
+    margin: 0;
+    font: 500 14px/1.5 #{$font-ui};
+    color: $muted;
+  }
+
+  &__code {
+    font-family: $font-code;
+    font-size: 12.5px;
+    line-height: 20px;
+    background: $code-chip;
+    padding: 1px 6px;
+    border-radius: 5px;
+  }
+}
+
+// --------------------------------------------------------- how it works --
+.how {
+  border-bottom: 1px solid $border-soft;
+
+  &__inner {
+    @include container;
+    padding: 80px 56px;
+
+    @media (max-width: $tablet) {
+      padding: 56px 32px;
+    }
+    @media (max-width: $mobile) {
+      padding: 40px 20px;
+    }
+  }
+
+  &__head {
+    max-width: 600px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 40px;
+  }
+
+  &__eyebrow {
+    @include eyebrow;
+  }
+
+  &__title {
+    @include section-title;
+    margin: 0;
+  }
+
+  &__steps {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+}
+
+.step {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 64px;
+
+  @media (min-width: $tablet) and (min-width: $mobile) {
+    &Wrapper {
+      &:nth-child(even) {
+        .step {
+          &__code:last-child {
+            order: -1;
+          }
+        }
+      }
+    }
+  }
+
+  @media (max-width: $tablet) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  &__copy {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  &__label {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  &__eyebrow {
+    @include eyebrow;
+  }
+
+  &__title {
+    margin: 0;
+    font: 900 32px/1.25 #{$font-ui};
+    color: $ink;
+  }
+
+  &__text {
+    margin: 0;
+    font: 500 14px/1.5 #{$font-ui};
+    color: $muted;
+  }
+
+  &__code-inline {
+    font-family: $font-code;
+    font-size: 12.5px;
+  }
+
+  &__code {
+    margin: 0;
+    background: #fff;
+    border: 1px solid $border;
+    border-radius: 16px;
+    padding: 20px 24px;
+    font: 500 12px/24px #{$font-code};
+    color: $ink;
+    white-space: pre;
+    overflow-x: auto;
+  }
+}
+
+// -------------------------------------------------------------- features --
+.features {
+  border-bottom: 1px solid $border-soft;
+
+  &__inner {
+    @include container;
+    padding: 80px 56px;
+
+    @media (max-width: $tablet) {
+      padding: 56px 32px;
+    }
+    @media (max-width: $mobile) {
+      padding: 40px 20px;
+    }
+  }
+
+  &__head {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 32px;
+  }
+
+  &__eyebrow {
+    @include eyebrow;
+  }
+
+  &__title {
+    @include section-title;
+    margin: 0;
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+
+    @media (max-width: $tablet) {
+      grid-template-columns: 1fr;
+    }
+  }
+}
+
+.feature {
+  box-sizing: border-box;
+  background: #fff;
+  border: 1px solid $border;
+  border-radius: 16px;
+  padding: 24px;
+  height: 114px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+
+  @media (max-width: $mobile) {
+    height: auto;
+  }
+
+  &__flag {
+    font: 700 14px/16px #{$font-code};
+    color: $amber;
+    white-space: nowrap;
+  }
+
+  &__text {
+    margin: 0;
+    font: 500 14px/1.5 #{$font-ui};
+    color: $muted;
+  }
+
+  &__code-inline {
+    font-family: $font-code;
+    font-size: 12px;
+  }
+}
+
+// --------------------------------------------------------- runs-anywhere --
+.strip {
+  border-bottom: 1px solid $border-soft;
+
+  &__inner {
+    @include container;
+    padding: 48px 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 24px;
+
+    @media (max-width: $tablet) {
+      padding: 32px;
+      justify-content: flex-start;
+    }
+  }
+
+  &__label {
+    font: 800 12px/16px #{$font-code};
+    color: $faded;
+    letter-spacing: 2px;
+  }
+
+  &__pills {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+}
+
+.pill {
+  border-radius: 99px;
+  padding: 9px 18px;
+  font: 700 14px/16px #{$font-code};
+  color: $ink;
+
+  &--react {
+    background: #e8f4ff;
+  }
+  &--next {
+    background: $schema-bg;
+  }
+  &--vite {
+    background: #ffe4dc;
+  }
+  &--cli {
+    background: $green-bg;
+  }
+
+  &__muted {
+    color: $muted;
+    font-weight: 500;
+  }
+}
+
+// ----------------------------------------------------------- devtools ---
+.devtools {
+  border-bottom: 1px solid $border-soft;
+  background: radial-gradient(35% 50% at 90% 50%, #fff3d6 0%, transparent 60%);
+
+  &__inner {
+    @include container;
+    padding: 80px 56px;
+
+    @media (max-width: $tablet) {
+      padding: 56px 32px;
+    }
+    @media (max-width: $mobile) {
+      padding: 40px 20px;
+    }
+  }
+
+  &__eyebrow {
+    @include eyebrow;
+    margin-bottom: 8px;
+  }
+
+  &__title {
+    @include section-title;
+    margin: 0 0 14px;
+  }
+
+  &__layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 64px;
+
+    @media (max-width: $tablet) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  &__copy {
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__text {
+    margin: 0;
+    font: 500 14px/1.75 #{$font-ui};
+    color: $muted;
+  }
+
+  &__code-inline {
+    font-family: $font-code;
+    font-size: 13.5px;
+    background: $code-chip;
+    padding: 1px 6px;
+    border-radius: 5px;
+    font-feature-settings: 'calt' off;
+  }
+
+  &__card {
+    background: #fff;
+    border: 1px solid $border;
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 20px 48px -24px rgba(35, 39, 47, 0.25);
+  }
+
+  &__row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid #f2eee2;
+    font-size: 14px;
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+
+  &__row-label {
+    font: 700 12px/16px #{$font-code};
+    color: $faded;
+    align-self: center;
+  }
+
+  &__row-value {
+    font: 700 14px/16px #{$font-code};
+    color: $ink;
+    transition: color 0.2s ease;
+
+    &--masked {
+      color: $green;
+    }
+  }
+
+  &__toggle {
+    margin-top: 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font: 700 13px/16px #{$font-code};
+    color: $muted;
+    cursor: pointer;
+    user-select: none;
+    border: none;
+    background: none;
+    padding: 0;
+  }
+
+  &__switch {
+    width: 38px;
+    height: 20px;
+    border-radius: 99px;
+    background: #d9d4c5;
+    position: relative;
+    flex: none;
+    display: inline-block;
+    transition: background 0.15s ease;
+
+    &--on {
+      background: $green;
+    }
+  }
+
+  &__knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(35, 39, 47, 0.3);
+    transition: transform 0.15s ease;
+
+    &--on {
+      transform: translateX(18px);
+    }
+  }
+}
+
+// --------------------------------------------------------- comparison ---
+.compare {
+  border-bottom: 1px solid $border-soft;
+
+  &__inner {
+    @include container;
+    padding: 80px 56px;
+
+    @media (max-width: $tablet) {
+      padding: 56px 32px;
+    }
+    @media (max-width: $mobile) {
+      padding: 40px 20px;
+    }
+  }
+
+  &__head {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+
+  &__eyebrow {
+    @include eyebrow;
+  }
+
+  &__title {
+    @include section-title;
+    margin: 0;
+  }
+
+  &__card {
+    background: #fff;
+    border: 1px solid $border;
+    border-radius: 20px;
+    overflow: hidden;
+    overflow-x: auto;
+  }
+
+  &__table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 640px;
+    font: 500 14px/1 #{$font-ui};
+    color: $ink;
+  }
+
+  tr {
+    &:not(:last-child) {
+      th {
+        border-bottom: 1px solid $border-soft;
+      }
+    }
+  }
+
+  thead {
+    border-bottom: 1px solid $border-soft;
+  }
+
+  &__th {
+    text-align: left;
+    padding: 16px 22px;
+    font: 700 13px/16px #{$font-code};
+    color: $muted;
+
+    &--us {
+      background: $table-highlight;
+      color: $ink;
+      font-weight: 800;
+    }
+
+    &--row {
+      font-weight: 700;
+      white-space: nowrap;
+      font-family: $font-ui;
+      font-size: 14px;
+      line-height: 16px;
+      color: $ink;
+    }
+  }
+
+  &__td {
+    padding: 14px 22px;
+    border-bottom: 1px solid $border-soft;
+    font: 500 13px/16px #{$font-code};
+    color: $muted;
+
+    &--us {
+      background: $table-highlight;
+      font-weight: 700;
+      color: $green;
+    }
+
+    &--yes {
+      color: $green;
+      font-weight: 700;
+    }
+
+    tr:last-child & {
+      border-bottom: none;
+    }
+  }
+}
+
+// ------------------------------------------------------------- mascot ---
+.mascot {
+  &__inner {
+    @include container;
+    padding: 80px 56px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 32px;
+
+    @media (max-width: $tablet) {
+      padding: 56px 32px;
+    }
+    @media (max-width: $mobile) {
+      padding: 40px 20px;
+    }
+  }
+
+  &__head {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__eyebrow {
+    @include eyebrow;
+  }
+
+  &__title {
+    @include section-title;
+    margin: 0;
+  }
+
+  &__text {
+    margin: 0;
+    font: 500 14px/1.5 #{$font-ui};
+    color: $muted;
+  }
+}
+
+.slider {
+  position: relative;
+  width: 372px;
+  max-width: 100%;
+  height: 496px;
+  margin: 0 auto;
+
+  @media (max-width: $mobile) {
+    width: 280px;
+    height: 373px;
+  }
+
+  &__stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    touch-action: pan-y;
+  }
+
+  &__group {
+    position: absolute;
+    inset: 0;
+    cursor: grab;
+    transition: opacity 0.22s ease;
+    will-change: opacity;
+
+    &--dragging {
+      cursor: grabbing;
+      transition: none;
+    }
+  }
+
+  &__card {
+    position: absolute;
+    inset: 0;
+    border-radius: 20px;
+    overflow: hidden;
+    border: 1px solid $border;
+    background: #fff;
+    padding: 0;
+    appearance: none;
+  }
+
+  &__card--side {
+    top: 1.5%;
+    bottom: 1.5%;
+    left: 4.3%;
+    right: 4.3%;
+    opacity: 0.5;
+    cursor: pointer;
+  }
+
+  &__card--left {
+    transform: rotate(-6deg) translateX(-14%);
+    z-index: 0;
+  }
+
+  &__card--right {
+    transform: rotate(6deg) translateX(14%);
+    z-index: 1;
+  }
+
+  &__card--center {
+    z-index: 2;
+  }
+
+  &__img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    pointer-events: none;
+  }
+
+  &__dots {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 18px;
+  }
+
+  &__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: $border;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition:
+      background 0.2s ease,
+      transform 0.2s ease;
+
+    &--active {
+      background: $orange;
+      transform: scale(1.3);
+    }
+  }
+}
+
+// ------------------------------------------------------------- final-cta --
+.cta {
+  @include container;
+  padding-top: 72px;
+  padding-bottom: 72px;
+
+  &__card {
+    background: $yellow;
+    border-radius: 24px;
+    padding: 64px 48px;
+    text-align: center;
+
+    @media (max-width: $mobile) {
+      padding: 40px 24px;
+    }
+  }
+
+  &__eyebrow {
+    font: 800 12px/16px #{$font-code};
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #8f854f;
+    margin-bottom: 14px;
+  }
+
+  &__title {
+    margin: 0 0 22px;
+    font: 900 38px/40px #{$font-ui};
+    color: $ink;
+
+    @media (max-width: $mobile) {
+      font-size: 28px;
+    }
+  }
+
+  &__install {
+    font: 700 14px/16px #{$font-code};
+    color: $ink;
+    margin-bottom: 28px;
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  &__primary {
+    background: $ink;
+    color: $paper;
+    padding: 15px 32px;
+    border-radius: 12px;
+    font: 800 14px/16px #{$font-ui};
+    text-decoration: none;
+    box-shadow: 0 10px 24px -10px rgba(35, 39, 47, 0.45);
+    transition: transform 0.2s ease;
+
+    &:hover {
+      transform: translateY(-2px);
+    }
+  }
+
+  &__ghost {
+    background: $paper;
+    border: 1px solid #d8cd8e;
+    color: $ink;
+    padding: 14px 26px;
+    border-radius: 12px;
+    font: 800 14px/16px #{$font-ui};
+    text-decoration: none;
+  }
+}
+
+// ------------------------------------------------------------------ footer --
+.footer {
+  border-top: 1px solid $border-soft;
+
+  &__inner {
+    @include container;
+    padding: 26px 56px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    font: 600 14px/16px #{$font-ui};
+    color: $muted;
+
+    @media (max-width: $mobile) {
+      justify-content: center;
+      text-align: center;
+    }
+  }
+
+  &__links {
+    display: flex;
+    gap: 22px;
+  }
+
+  &__link {
+    color: $muted;
+    text-decoration: none;
+    transition: color 0.2s ease;
+
+    &:hover {
+      color: $ink;
+    }
+  }
+}

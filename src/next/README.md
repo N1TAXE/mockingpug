@@ -1,0 +1,203 @@
+# mockingpug + Next.js
+
+Quick start for mocking a REST API in a Next.js App Router project: one
+catch-all Route Handler, no separate server process, real filesystem access
+so `mock/` is read the same way the CLI reads it.
+
+## 1. Install
+
+```bash
+npm install mockingpug
+```
+
+No `msw` needed here: a Next.js Route Handler already runs inside a real
+server, so there's nothing to intercept, only requests to answer directly.
+
+## 2. Describe your data
+
+Same `mock/` convention as the CLI (and `mockingpug/react`):
+
+```json
+// mock/api/user/schema.json
+{
+  "amount": 1000,
+  "data": {
+    "id": "number.increment",
+    "name": "username.FS",
+    "email": "email[gmail.com]",
+    "role": "role",
+    "posts": "data.blogpost"
+  }
+}
+```
+
+```json
+// mock/data/role.json
+[
+  { "value": "ADMIN", "max": 5 },
+  { "value": "USER", "chance": 0.9 }
+]
+```
+
+## 3. `mock.config.js` at your project root
+
+```js
+module.exports = {
+  dir: 'mock',
+  seed: 'my-app',
+  baseUrl: '/api',
+  persist: { adapter: 'file', strategy: 'always' },
+};
+```
+
+If you omit this file entirely, sane defaults are used (`dir: 'mock'`,
+`baseUrl: '/api'`, file-backed persistence); see `cli/README.md` for the
+full option reference, including `limits` (per-entity `amount`/`array` caps,
+enforced by `doctor`) and `runtime` (`delay`/`errorRate` synthetic latency
+and failures, applied to every request this Route Handler answers, same as
+`mockingpug/react`). Editing `mock.config.js` and restarting (or waiting for
+the file watcher, see below) changes `runtime` values too, but see
+`<MockDevtools>` below for a live toggle without a restart.
+
+Per-entity `bypass` (either the schema-level flag or the runtime
+`bypass()`/`unbypass()` calls documented in `react/README.md`) is **React/MSW-specific**
+and has no effect here: a Next.js Route Handler *is* the real server
+endpoint, there's no upstream request to "pass through" to. Use the
+`rewrites()` recipe below instead to route a specific real backend path
+around the mock entirely.
+
+## 4. The catch-all Route Handler
+
+```ts
+// app/api/[[...mock]]/route.ts
+import { createNextHandlers, getMockContext, type NextRouteContext } from 'mockingpug/next';
+
+const handlersPromise = getMockContext(process.cwd()).then(({ ctx }) => createNextHandlers(ctx));
+
+export const GET = async (request: Request, routeCtx: NextRouteContext) => (await handlersPromise).GET(request, routeCtx);
+export const POST = async (request: Request, routeCtx: NextRouteContext) => (await handlersPromise).POST(request, routeCtx);
+export const PUT = async (request: Request, routeCtx: NextRouteContext) => (await handlersPromise).PUT(request, routeCtx);
+export const PATCH = async (request: Request, routeCtx: NextRouteContext) => (await handlersPromise).PATCH(request, routeCtx);
+export const DELETE = async (request: Request, routeCtx: NextRouteContext) => (await handlersPromise).DELETE(request, routeCtx);
+```
+
+`getMockContext()` loads `mock.config.js`, parses every schema (the same
+`cli/schemaLoader.ts` the CLI uses), and reconciles/generates the store, so
+the very first request already has data, without running `mockingpug
+generate` as a separate step. It's memoized per `projectDir` for the life of
+the process, so `next dev` doesn't re-scan `mock/` and re-run reconciliation
+on every request.
+
+`app/api/[[...mock]]/route.ts` (double brackets, an *optional* catch-all)
+means `/api` itself, `/api/user`, and `/api/user/1` all route here;
+`routeCtx.params.mock` is `undefined`/`['user']`/`['user', '1']`
+respectively. `NextRouteContext`'s `params` type accepts both the pre-15
+plain-object shape and 15+'s `Promise`-wrapped one; the same handler code
+works either way.
+
+## `<MockDevtools>`
+
+A floating dev-only panel, same idea as `mockingpug/react`'s, adapted for a
+server-side transport. It talks to a small devtools sub-API the catch-all
+Route Handler already serves under `{baseUrl}/__mockingpug/*`, since there's
+no client-side store to read directly here:
+
+```tsx
+// somewhere in your root layout, dev-only
+import { MockDevtools } from 'mockingpug/next/client';
+
+{process.env.NODE_ENV === 'development' && <MockDevtools />}
+```
+
+It's imported from `mockingpug/next/client`, not `mockingpug/next`, because
+`<MockDevtools>` is a `'use client'` component, and `mockingpug/next`'s main
+entry also carries server-only code (`createNextHandlers`, `getMockContext`,
+both touching the filesystem), which can never share a bundle with a client
+component under Next.js's App Router rules. You can render it directly from
+a Server Component (like `page.tsx`) without wrapping it yourself.
+
+`baseUrl` defaults to `/api`, matching the transport's own default; pass it
+explicitly if `mock.config.js` sets a different one. It gives you:
+
+- Live `delay`/`errorRate` editing, applied immediately to the next request
+  the Route Handler answers (no restart, unlike editing `mock.config.js`).
+- A "Mock Data" list of every entity and its record count. Clicking one
+  opens its stored records in a separate floating window, draggable by its
+  header, with its own reset button (wipes and regenerates just that
+  entity). Multiple entities' windows can be open at once.
+- The same "highlight mock data" masking as `mockingpug/react`'s: masks
+  every value that actually came from a generated record with `***` of the
+  same length, so a hardcoded string sitting next to real mock data stands
+  out.
+
+There's no "mock network" toggle or per-entity `bypass` checkbox here:
+both are React/MSW-specific concepts that don't apply to a Route Handler,
+which *is* the real server. Use the `rewrites()` recipe below to route a
+specific path around the mock entirely.
+
+## Switching mock ↔ real API
+
+`mockingpug` doesn't try to resolve where your real backend lives; that
+stays your app's own configuration (env vars, etc). The standard recipe is
+Next's own `rewrites()`, which natively supports an absolute destination:
+
+```js
+// next.config.js
+module.exports = {
+  async rewrites() {
+    if (process.env.MOCK_MODE !== 'mock') {
+      return [{ source: '/api/:path*', destination: `${process.env.REAL_API_URL}/:path*` }];
+    }
+    return []; // /api/** stays on the catch-all Route Handler above
+  },
+};
+```
+
+For defense-in-depth (in case `rewrites()` isn't wired up everywhere, or the
+route somehow ships in a build where it shouldn't), guard the handlers
+themselves:
+
+```ts
+export const GET = async (request: Request, routeCtx: NextRouteContext) => {
+  if (process.env.MOCK_MODE !== 'mock') {
+    return new Response('Not Found', { status: 404 });
+  }
+  return (await handlersPromise).GET(request, routeCtx);
+};
+```
+
+`mockingpug` does not exclude this route from your production build for
+you; that's your bundler/deploy config's job (e.g. not shipping the file,
+or an environment check like above).
+
+## Live schema reloading
+
+`getMockContext()` watches your resolved mock dir and `mock.config.js`
+(`node:fs`'s recursive `watch()`). Editing a schema while `next dev` is
+running invalidates the cached context automatically, so the next request
+picks it up without a manual restart. This is best effort: some
+platforms/filesystems don't support recursive watching (older Linux
+kernels, some network filesystems); if that's the case here, watching is
+silently skipped and you're back to restarting the dev server to pick up
+changes, nothing crashes either way.
+
+## Known limitations
+
+- **No serverless-specific handling.** Every mutating request
+  (`POST`/`PUT`/`PATCH`/`DELETE`) with `persist.adapter: 'file'` writes
+  synchronously to `.mockingpug/db`. On a platform without a persistent
+  filesystem between invocations (most serverless hosts), those writes
+  won't survive the next cold start. Use `persist.adapter: 'memory'` there
+  if persistence across requests isn't required, or accept that `'file'`
+  behaves like `'fresh'` in practice on such platforms.
+
+## Logs and errors
+
+Everything mockingpug logs is prefixed `[mockingpug]`. Run
+`npx mpug doctor` to validate the exact same schemas the Route Handler
+loads, without starting `next dev` first, useful in CI (`doctor --strict`
+turns warnings like orphaned entities into a hard failure). At request time,
+an unexpected internal failure always responds with a generic `500` body
+(`{ "error": { "source": "mockingpug", "message": "internal error" } }`).
+The full error, including stack trace, only goes to your server-side
+console, never to the client.

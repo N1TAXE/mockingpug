@@ -1,0 +1,130 @@
+---
+title: CLI
+description: init, doctor, generate, reset, prune, types
+---
+
+Command reference for `mockingpug`'s CLI. Every command operates on
+`process.cwd()`: there's no `--dir <path>` flag; run it from your project
+root, same as `npm` or `git`.
+
+```bash
+npm install -D mockingpug
+npx mpug <command>
+```
+
+The binary is also registered as `mockingpug` (`npx mockingpug <command>`),
+kept as an alternative for anyone who prefers the full name.
+
+## `init`
+
+```bash
+npx mpug init
+```
+
+Scaffolds `mock.config.js`, `mock/api/`, and `mock/data/` in the current
+directory. Idempotent and non-destructive:
+
+- If `mock.config.js` already exists, it prints `already exists, nothing
+  to do` and stops. It never overwrites your config.
+- An example schema (`mock/api/example/schema.json`) is only added if
+  `mock/api/` is completely empty, so running `init` in a project that
+  already has real schemas doesn't clutter it.
+
+## `doctor`
+
+```bash
+npx mpug doctor
+npx mpug doctor --strict
+npx mpug doctor --assert-prod-safe <build-output-dir>
+```
+
+Validates every schema under `mock/api/**` **without touching the store**:
+unknown generator types (with a "did you mean" suggestion on typos),
+missing/malformed `amount`/`data`, broken `data.*` cross-entity references,
+and unresolvable dependency cycles. If `persist.adapter: 'file'`, it also
+checks for orphaned entities: data left in `.mockingpug/db` whose schema
+no longer exists. It also warns when an entity's `amount` or an
+`array[type].N` exceeds `limits.maxAmount`/`limits.maxArrayDepth`, a
+DoS-guard as much as a perf one.
+
+- Exit code `0` if everything's valid (orphans and limit overruns are only
+  **warnings**, not failures, by default).
+- `--strict` promotes those warnings to a hard failure (exit code `1`),
+  meant for CI, so a schema silently removed without pruning its old data
+  (or one that quietly grew past a sane `amount`) doesn't slip through.
+- `--assert-prod-safe <dir>` greps a production build output directory
+  (e.g. your Next.js `.next` or Vite `dist`) for markers that mean the mock
+  layer leaked into it: `mockServiceWorker.js`, or a bundled reference to
+  `mockingpug/dist/react`/`mockingpug/dist/next`. Always a hard failure
+  regardless of `--strict`, meant as a CI gate right after your production
+  build step. Best-effort: it's a static grep, not a guarantee against a
+  minified bundle hiding the reference.
+
+## `generate`
+
+```bash
+npx mpug generate
+```
+
+Loads your schemas and reconciles them into the configured store
+(`persist.adapter: 'file'` → `.mockingpug/db/*.json`, `'memory'` → nothing
+persists past this process). See
+[Reconciliation & Storage](/docs/concepts/reconciliation-and-storage) for
+exactly what "reconciles" means when a schema changed since the last run.
+
+Exit code `1` on a schema error (invalid JSON, unknown type, broken
+reference, etc.). The message includes a stable error code (e.g.
+`MP-SCHEMA-007`) and which file/field is at fault.
+
+Useful in CI for deterministic fixtures: `mpug generate` produces the
+exact same dataset every time, given the same seed and schemas.
+
+## `reset`
+
+```bash
+npx mpug reset --yes
+```
+
+Wipes the store entirely: **destructive and irreversible**, including any
+manual mutations made while testing (`POST`/`PUT`/`DELETE` against a
+running app). Refuses to run without `--yes`.
+
+## `prune`
+
+```bash
+npx mpug prune          # lists what would be deleted
+npx mpug prune --yes    # actually deletes it
+```
+
+Deletes only orphaned entities (schema removed from `mock/api`, data still
+sitting in the store), leaving everything else untouched. Also refuses
+without `--yes`; without it, it lists which entities it found and exits `1`.
+
+## `types`
+
+```bash
+npx mpug types
+```
+
+Writes `.mockingpug/types/index.d.ts`: one `export interface` per entity,
+mirroring its schema's `data` block (`crossRef` fields resolve to the
+target entity's type or field type, custom dictionaries with all-primitive
+values become a literal union, e.g. `role: "ADMIN" | "USER" | "MODER"`).
+Regenerate it any time after changing `mock/api/**`. There's no watch
+mode, this is a one-shot codegen step.
+
+## Logs and errors
+
+Every message is prefixed `[mockingpug]`; warnings are prefixed
+`[mockingpug] warning:`. Errors carry a stable code (see
+[Reference → Error Codes](/docs/reference/error-codes)) and, where
+relevant, the exact file/field at fault plus a fix suggestion. Anything
+that reaches the CLI *without* one of these codes is treated as a genuine
+bug in mockingpug itself, not a project misconfiguration: it prints with
+its full stack trace (`unexpected internal error:`) instead of a clean
+one-liner, on purpose.
+
+## Full config reference
+
+See [Reference → mock.config.js](/docs/reference/mock-config) for every
+field this file accepts.

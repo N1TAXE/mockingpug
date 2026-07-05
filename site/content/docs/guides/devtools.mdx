@@ -1,0 +1,192 @@
+---
+title: MockProvider & MockDevtools
+description: Optional React components for worker lifecycle, live runtime editing, and mock-data highlighting
+---
+
+`mockingpug/react` exports two optional components on top of
+`createMockHandlers()`: `<MockProvider>` (owns the MSW worker's lifecycle
+and exposes a context) and `<MockDevtools>` (a floating panel that reads
+and writes that context). Neither is required: you can keep hand-writing
+`setupWorker()`/`worker.start()` as shown in the [React guide](/docs/guides/react)
+if you don't want a devtools panel.
+
+## Setup
+
+```tsx title="src/mocks/browser.tsx"
+import { setupWorker } from 'msw/browser';
+import { MemoryStoreAdapter, generateAll, createMockHandlers } from 'mockingpug/react';
+import { schemas, customDictionaries } from './schemas';
+
+export async function createMockingpug() {
+  const store = new MemoryStoreAdapter();
+  await generateAll(schemas, store, { seed: 'my-app', customDictionaries });
+  const ctx = {
+    schemas,
+    store,
+    seed: 'my-app',
+    customDictionaries,
+    pagination: {
+      strategy: 'page' as const,
+      params: { page: 'page', limit: 'limit', offset: 'offset', cursor: 'cursor' },
+      defaultLimit: 20,
+      maxLimit: 100,
+      envelope: true,
+    },
+  };
+  const worker = setupWorker(...createMockHandlers(ctx, '/api'));
+  return { ctx, worker };
+}
+```
+
+```tsx
+import { MockProvider, MockDevtools } from 'mockingpug/react';
+
+const { ctx, worker } = await createMockingpug();
+
+<MockProvider worker={worker} ctx={ctx}>
+  <App />
+  <MockDevtools />
+</MockProvider>;
+```
+
+Both components must be behind the same dev-only dynamic `import()` gate as
+`startMocking()` itself (see the [React guide](/docs/guides/react)). Never
+import them at the top level of a file that ships to production.
+
+## `<MockProvider>`
+
+```ts
+interface MockProviderProps {
+  children: ReactNode;
+  worker: { start(options?: unknown): Promise<unknown>; stop(): void }; // duck-typed: an MSW setupWorker() result satisfies this
+  ctx: QueryContext;
+  initialMode?: 'mock' | 'off'; // default: 'mock'
+  storageKey?: string | null;   // localStorage key for persisting the toggle; default: 'mockingpug:mode'; null disables persistence
+}
+```
+
+- Starts the worker when `mode === 'mock'`, stops it when `'off'`. The
+  chosen mode is saved to `localStorage` and restored across page reloads.
+- Mutates `ctx.runtime` **in place** (same object reference `createMockHandlers()`
+  already closed over) whenever a consumer calls `setRuntime()`. No
+  worker restart is needed, the next request picks up the new
+  `delay`/`errorRate` immediately.
+
+Read the current state anywhere inside the provider with `useMockContext()`:
+
+```ts
+const { mode, setMode, ctx, runtime, setRuntime, bypass, unbypass, isBypassed } = useMockContext();
+```
+
+Calling `useMockContext()` outside a `<MockProvider>` throws immediately
+(fail-fast) rather than returning `undefined`/a default silently.
+
+## `<MockDevtools>`
+
+A floating collapsed button that expands into a settings panel with:
+
+- Mock network toggle: same as `mode`/`setMode` above.
+- Live `delay`/`errorRate` inputs: edits `ctx.runtime` through the
+  provider.
+- A "Highlight mock data" toggle (see below).
+- A "Mock Data" row that navigates to a second page listing every entity,
+  its record count, and a per-entity bypass switch (the runtime half of
+  [bypass](/docs/guides/react#per-entity-bypass)), plus a "reset all"
+  button in that page's header.
+
+Clicking an entity in that list opens its stored records (reads
+`ctx.store.load()` directly, not over HTTP) in a separate floating window
+that can be dragged by its header and repositioned anywhere on the page;
+its own header has a reset button (`store.deleteEntity()` + `generateAll()`
+for just that entity) and a close button. Multiple entities' windows can be
+open at once; clicking an entity that's already open just brings its
+window to the front instead of opening a duplicate.
+
+It renders nothing but the toggle button by default; the panel only
+appears once opened, and unmounts cleanly (undoing any active mask,
+disconnecting its `MutationObserver`) when removed from the tree.
+
+## Highlighting mock data on the page
+
+The idea: replace every value that actually came from a generated record
+with a `***` string of the same length, everywhere it's currently
+rendered on the page. A value that *doesn't* change when you toggle
+this on is, by definition, not mock data (a hardcoded label, a static
+heading, etc).
+
+How it works, concretely:
+
+1. On toggle, it reads every currently-stored record across every entity
+   directly from `ctx.store` (not from network responses, this catches
+   data that hasn't been fetched by the current page yet, too) and
+   flattens every string/number leaf value (at least 3 characters long)
+   into a lookup set.
+2. It walks every text node under `document.body`
+   (`document.createTreeWalker(..., NodeFilter.SHOW_TEXT)`). Any node
+   whose text exactly matches, or contains as a substring, one of those
+   known values gets its entire text content replaced with
+   `'*'.repeat(originalLength)`.
+3. The devtools panel's own DOM (the floating toggle, the settings/list
+   panel, every open data window) is excluded from the walk, so masking is
+   never applied to the raw record values `<MockDevtools>` itself displays,
+   like the JSON viewer in an open data window: only your app's rendered
+   content gets masked.
+4. The original text is remembered (so untoggling restores it exactly),
+   and a `MutationObserver` re-applies the mask to any newly-inserted
+   content while the toggle stays on (e.g. loading the next page of a
+   paginated list).
+5. Untoggling restores every masked node's original text and disconnects
+   the observer.
+
+This is a pure DOM-level operation: the actual JSON response your app's
+`fetch()` calls receive is never altered.
+
+## `<MockDevtools>` for Next.js
+
+`mockingpug/next/client` exports its own `<MockDevtools>` for the Route
+Handler transport, since a Route Handler runs server-side and there's no
+client-side store or `MockProvider` context to read there:
+
+```tsx
+import { MockDevtools } from 'mockingpug/next/client';
+
+{process.env.NODE_ENV === 'development' && <MockDevtools />}
+```
+
+It's a separate subpath from `mockingpug/next` (rather than exported
+alongside `createNextHandlers`) because it's a `'use client'` component:
+`mockingpug/next`'s main entry also carries server-only, filesystem-touching
+code, and the two can't share a bundle under Next.js's App Router rules. You
+can still render it directly from a Server Component (e.g. `page.tsx`)
+without wrapping it in a client component yourself.
+
+It talks to a small devtools sub-API the catch-all Route Handler already
+serves under `{baseUrl}/__mockingpug/*` (`baseUrl` defaults to `/api`, pass
+it explicitly if `mock.config.js` sets a different one) instead of reading
+a context directly:
+
+- `GET {baseUrl}/__mockingpug`: entity record counts plus the current
+  `runtime` config.
+- `POST {baseUrl}/__mockingpug/runtime`: patches `delay`/`errorRate`,
+  mutating the same `ctx.runtime` object reference `createNextHandlers()`
+  reads from, so the change applies to the very next request with no
+  restart.
+- `GET {baseUrl}/__mockingpug/records/:entity`: up to 10 current records.
+- `POST {baseUrl}/__mockingpug/reset/:entity`: deletes and regenerates
+  just that entity.
+
+Same panel, same "Mock Data" list page, same draggable floating record
+windows, and the same "highlight mock data" masking as the React version
+(collects known generated values over `fetch()` instead of reading
+`ctx.store` directly, then does the identical DOM `TreeWalker` pass). There's
+no mock-network toggle or per-entity bypass switch here: both are
+React/MSW-specific, and a Route Handler *is* the real server, so there's
+nothing to switch off or bypass (see the [Next.js guide](/docs/guides/nextjs)
+for routing a specific path around the mock entirely instead).
+
+## Reference
+
+Full prop/context shapes are in `mockingpug/react`'s type exports:
+`MockProviderProps`, `MockContextValue`, `MockMode`, `MockWorker`. The
+Next.js devtools component's props (`MockDevtoolsProps`) are exported from
+`mockingpug/next`.

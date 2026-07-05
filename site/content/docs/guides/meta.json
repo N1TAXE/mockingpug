@@ -1,0 +1,4 @@
+{
+  "title": "Guides",
+  "pages": ["index", "cli", "react", "nextjs", "vite", "devtools"]
+}

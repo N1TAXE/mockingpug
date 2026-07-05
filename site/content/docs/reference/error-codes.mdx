@@ -1,0 +1,105 @@
+---
+title: Error Codes
+description: Every stable MP-* error code and what causes it
+---
+
+Every error mockingpug throws extends a single `MockingpugError` base class
+and carries a stable code (`MP-<CATEGORY>-<NNN>`), so your code (or a human
+reading a log) can reliably tell "this is an expected/documented failure"
+apart from "something broke inside mockingpug." Codes never change meaning
+between versions: new codes get new numbers, existing ones are never
+reused for something else.
+
+Each error also carries, where relevant, a `location` (`{ file, path }`
+pointing at the offending schema file/field) and a `hint` (a short,
+actionable suggestion, often a "did you mean" typo correction).
+
+## `MP-SCHEMA-*`: invalid schema DSL
+
+Thrown while parsing `mock/api/**/schema.json` / `mock/data/*.json`.
+
+| Code | Cause |
+|---|---|
+| `MP-SCHEMA-001` | Unrecognized generator type (e.g. `emial[gmail.com]`), comes with a "did you mean" suggestion. |
+| `MP-SCHEMA-004` | Failed to read a schema/custom-dictionary file (I/O error). |
+| `MP-SCHEMA-005` | The file's content isn't valid JSON. |
+| `MP-SCHEMA-006` | The schema file's root isn't a JSON object. |
+| `MP-SCHEMA-007` | `"amount"` is missing, non-numeric, or negative. |
+| `MP-SCHEMA-008` | `"data"` is missing or isn't an object. |
+| `MP-SCHEMA-009` | A field's DSL value isn't a string. |
+| `MP-SCHEMA-010` | A custom dictionary file's content isn't a JSON array. |
+| `MP-SCHEMA-011` | Two schema files resolve to the same entity name (folder name collision). |
+| `MP-SCHEMA-012` | `"bypass"` is present but not a boolean. |
+
+## `MP-DEP-*`: cross-entity reference graph
+
+Thrown while validating `data.*` references across all schemas (before any
+generation happens).
+
+| Code | Cause |
+|---|---|
+| `MP-DEP-001` | A `data.<entity>(.field)` reference points at an entity with no schema, comes with a "did you mean" suggestion against known entity names. |
+| `MP-DEP-002` | An unresolvable field-level reference cycle (A needs B's field, B needs A's field). |
+| `MP-DEP-003` | A bare relation (`data.<entity>`, no field) has no matching back-reference in the target schema. |
+| `MP-DEP-004` | A bare relation's target schema has more than one field-level reference back, so it's ambiguous: mockingpug won't guess which one is the real foreign key. |
+
+## `MP-GEN-*`: generation-time failures
+
+| Code | Cause |
+|---|---|
+| `MP-GEN-000` | Internal exhaustiveness guard, should be unreachable for any valid schema; report it as a bug if you see it. |
+| `MP-GEN-001` | A `crossRef` field reached the low-level value generator directly instead of going through the dependency-graph resolver. An internal invariant violation, not a user-facing scenario. |
+| `MP-GEN-002` / `MP-GEN-003` | A custom dictionary is empty, or every entry has already hit its `max` cap and there's nothing left to pick from. |
+| `MP-GEN-004` / `MP-GEN-005` | A field-level reference (`data.user.id`) couldn't resolve because the target entity has zero generated records, or the referenced field doesn't exist on it. |
+
+## `MP-STORE-*`: persistent store failures
+
+| Code | Cause |
+|---|---|
+| `MP-STORE-001` | A store file on disk contains invalid JSON (corrupted `.mockingpug/db/<entity>.json`). Fix: delete the file or run `mpug reset`. |
+| `MP-STORE-002` | Failed to write a store file (disk/permission error). |
+| `MP-STORE-003` | An unsafe entity name was rejected before it could be used to build a file path, a path-traversal guard, not expected to trigger from a normal schema. |
+| `MP-STORE-004` | Failed to read a store file, or list the store directory (I/O error). |
+
+## `MP-CONFIG-*`: invalid `mock.config.js`
+
+| Code | Cause |
+|---|---|
+| `MP-CONFIG-001` | The config file doesn't export an object. |
+| `MP-CONFIG-002` | `"dir"` isn't a string. |
+| `MP-CONFIG-003` | `"seed"` isn't a string or number. |
+| `MP-CONFIG-004` | `"persist"` isn't an object. |
+| `MP-CONFIG-005` | `"persist.adapter"` isn't `'file'`/`'memory'`. |
+| `MP-CONFIG-006` | `"persist.strategy"` isn't `'always'`/`'fresh'`. |
+| `MP-CONFIG-007` | The config file itself threw while being loaded (syntax error, etc). |
+| `MP-CONFIG-008` | `"baseUrl"` isn't a string. |
+| `MP-CONFIG-009` | `"pagination"` isn't an object. |
+| `MP-CONFIG-010` | `"pagination.strategy"` isn't one of `page`/`offset`/`cursor`/`false`. |
+| `MP-CONFIG-011` | `"pagination.defaultLimit"` isn't a positive number. |
+| `MP-CONFIG-012` | `"pagination.maxLimit"` isn't a positive number. |
+| `MP-CONFIG-013` | `"pagination.params"` isn't an object. |
+| `MP-CONFIG-014` | `"limits"` isn't an object. |
+| `MP-CONFIG-015` | `"limits.maxAmount"` isn't a positive number. |
+| `MP-CONFIG-016` | `"limits.maxArrayDepth"` isn't a positive number. |
+| `MP-CONFIG-017` | `"runtime"` isn't an object. |
+| `MP-CONFIG-018` | `"runtime.errorRate"` isn't a number in `[0, 1]`. |
+| `MP-CONFIG-019` | `"runtime.delay"` isn't a non-negative number. |
+
+## `MP-REQ-*`: expected request-level failures
+
+Not bugs: the normal REST-ish 4xx path, returned as
+`{ error: { code, message } }` in the response body.
+
+| Code | HTTP status | Cause |
+|---|---|---|
+| `MP-REQ-001` | 404 | Unknown entity: no schema matches the requested path. |
+| `MP-REQ-002` | 404 | The entity exists, but no record with that `id` was found. |
+
+## Anything without an `MP-*` code
+
+If a caught error doesn't carry one of the codes above, it's treated as a
+genuine bug inside mockingpug, not a project misconfiguration. The CLI
+prints its full stack trace (`unexpected internal error:`) instead of a
+clean one-liner, and transport adapters (`react`/`next`) log it in full to
+the server/devtools console while the client only ever sees a generic
+`500` with no internal detail.

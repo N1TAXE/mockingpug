@@ -1,0 +1,103 @@
+---
+title: Overview
+description: What mockingpug is, and when to reach for it
+---
+
+**mockingpug** is a declarative, JSON-schema-driven mock data generator and
+REST-like API mocker for JavaScript/TypeScript apps: React SPAs (via
+[MSW](https://mswjs.io)) and Next.js (via a real App Router Route Handler).
+No separate mock server process, no hand-written fixture arrays, no
+imperative factory functions to maintain.
+
+You describe each entity once, as a small JSON file:
+
+```json title="mock/api/user/schema.json"
+{
+  "amount": 1000,
+  "data": {
+    "id": "number.increment",
+    "name": "username.FS",
+    "email": "email[gmail.com]",
+    "role": "role",
+    "posts": "data.blogpost"
+  }
+}
+```
+
+and mockingpug generates 1000 deterministic, seed-stable records, resolves
+`posts` as a live join against another entity's schema, and, depending on
+which transport you wire up, either intercepts your app's real `fetch()`
+calls in the browser (`mockingpug/react`) or serves them from a genuine
+Next.js API route (`mockingpug/next`). Either way, your application code
+never knows the difference: it calls the exact same `/api/user` endpoint it
+would call in production.
+
+## Why not just hand-write fixtures / use Faker directly?
+
+Hand-written fixture arrays and ad-hoc `faker.js` calls scattered through
+test setup work fine for a handful of records, but stop scaling once you
+need:
+
+- **Cross-entity relations** that stay consistent: a blog post's `author`
+  field pointing at a real, already-generated user's `id`, not a random
+  unrelated string.
+- **Deterministic reruns**: the same seed produces the same dataset, so a
+  bug reproduction from yesterday still reproduces today.
+- **Incremental changes**: add a field to a schema and only *that* field
+  gets (re)generated across existing records; the rest of the dataset (and
+  any manual `POST`/`PUT` mutations made while testing) survives.
+- **A real REST surface**: pagination, `GET`/`POST`/`PUT`/`PATCH`/`DELETE`,
+  search, without writing a Route Handler or an MSW handler by hand for
+  every entity.
+
+mockingpug's `core` module handles the first two (schema parsing, seeded
+generation, dependency resolution); `store` handles the third
+(fingerprint-based reconciliation); `query` + the transport adapters
+(`react`, `next`) handle the fourth.
+
+## How the pieces fit together
+
+```
+mock/api/user/schema.json  ─┐
+mock/api/blogpost/schema.json ─┼─▶  core (parse + validate)  ─▶  generator (generateAll)  ─▶  store (memory / file)
+mock/data/role.json     ─┘                                                                        │
+                                                                                                    ▼
+                                                              query (list/get/create/update/delete, pagination)
+                                                                                                    │
+                                                                        ┌───────────────────────────┴───────────────────────────┐
+                                                                        ▼                                                       ▼
+                                                          mockingpug/react (MSW handlers,                         mockingpug/next (App Router
+                                                          <MockProvider>/<MockDevtools>)                           catch-all Route Handler)
+```
+
+Every transport shares the exact same `query` resolver: pagination,
+cross-entity relation resolution, and error shaping are implemented once,
+not duplicated per framework. Adding a new transport (Vue is the next
+roadmap item) means writing a thin adapter over `query`, not reimplementing
+generation or storage.
+
+## What's in this package
+
+mockingpug ships as one npm package with several sub-path exports, so a
+project only pulls in what it actually uses:
+
+| Import | What it's for |
+|---|---|
+| `mockingpug` | Core: schema parsing, generators, seeded RNG, dependency graph. No framework dependency. |
+| `mockingpug/cli` | Programmatic access to the CLI commands (`init`, `doctor`, `generate`, `reset`, `prune`, `types`). |
+| `mockingpug/react` | MSW handler generation, `<MockProvider>`/`<MockDevtools>`, `bypass()`/`unbypass()`. |
+| `mockingpug/next` | App Router catch-all Route Handler builder + context loader. |
+| `mockingpug/vite` | Vite plugin: auto-discovers `mock/api/**`/`mock/data/**` as a virtual module. |
+
+Plus a CLI binary (`npx mpug <command>`, alias `npx mockingpug <command>`)
+for scaffolding, validating, and generating data offline (useful for CI
+fixtures).
+
+## Where to go next
+
+- **New to the library?** Start with [Getting Started](/docs/getting-started).
+- **Want the full schema syntax?** See [Schema DSL](/docs/concepts/schema-dsl).
+- **Wiring up a specific framework?** Jump straight to the
+  [guides](/docs/guides): React, Next.js, Vite, or the CLI on its own.
+- **Looking for a specific config key or error code?** See
+  [Reference](/docs/reference).

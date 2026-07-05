@@ -1,0 +1,83 @@
+---
+title: Performance
+description: Where the cost actually is, and what mockingpug does about it
+---
+
+The main risks are large `amount`s (thousands to hundreds of thousands of
+records), cross-entity references (potentially `O(n·m)` with a naive
+implementation), and file I/O inside Next.js's serverless-style runtime,
+where blocking the event loop hurts every concurrent request, not just one.
+
+## Generation is a pure, per-record function
+
+Every field's value depends only on `(seed, entity, index, fieldName)`,
+never on other fields or on previously generated records. This is why
+reconciliation (see [Reconciliation & Storage](/docs/concepts/reconciliation-and-storage))
+can regenerate a single changed field across every existing record without
+touching anything else, and why `number.increment` correctly continues
+past the existing max when more records are appended, rather than
+restarting.
+
+## Cross-references don't materialize whole entities
+
+A field-level reference (`data.user.id`) only needs a cheap array of
+already-generated `id` values from the target entity, not full copies of
+every target record. A bare relation (`data.blogpost`, see
+[Relations & Generation Order](/docs/concepts/relations-and-generation))
+is computed as a lazy join at read time and is never persisted alongside
+the "owning" record, so an N-to-M relationship doesn't grow storage
+quadratically.
+
+## Reconciliation avoids unnecessary work
+
+An entity's schema fingerprint (a stable hash of its `data` block) is
+compared cheaply before deciding anything needs to happen. An unchanged
+entity is skipped without re-reading or re-hashing its stored records.
+Only the specific fields/records a schema change actually touches get
+regenerated.
+
+## Route matching
+
+Both transports build their request handlers **once**, at startup.
+`createMockHandlers()` for `mockingpug/react` produces an array of MSW
+handlers up front (matched internally by MSW's own matcher, not
+re-evaluated by mockingpug per request); `mockingpug/next`'s catch-all
+resolves an entity via a plain object property lookup
+(`schemas[entityName]`), not a linear scan. At the route counts a real
+project has (tens to low hundreds of entities), this is effectively O(1)
+without needing a dedicated routing data structure.
+
+## Known limitation: full materialization
+
+The generator currently materializes an entity's entire `amount` on any
+run that needs to touch it. It does not (yet) generate only the specific
+page of records a `GET ?page=3&limit=20` actually asked for. For the
+typical range this library targets (low thousands of records per entity)
+this is not noticeable. If you're pushing `amount` toward the upper end of
+what `limits.maxAmount` allows, be aware that a schema change touching
+that entity regenerates however many records the reconciliation plan
+requires, in memory, before persisting. This is a known, intentionally
+deferred piece of future work, not an oversight: `limits.maxAmount`
+exists partly to keep this from becoming a real problem in practice today.
+
+## File I/O and serverless
+
+`persist.adapter: 'file'` writes are synchronous today. On a platform
+without a persistent filesystem between invocations (most serverless
+hosts), those writes simply won't survive the next cold start. Use
+`persist.adapter: 'memory'` there if you don't need mutations to persist
+across requests. There is no automatic serverless-environment detection
+(e.g. auto-switching based on `process.env.VERCEL`) yet; this is a
+documented limitation, not silent data loss. See the
+[Next.js guide's known limitations](/docs/guides/nextjs#known-limitations).
+
+## Bundle size (React/browser)
+
+Nothing generator- or MSW-related should reach a production bundle at
+all. See [Security → keeping the mock layer out of production](/docs/security#keeping-the-mock-layer-out-of-production)
+for the dead-code-elimination pattern this depends on. Within the dev-only
+mock bundle itself, `uuid`/`hash` generators are implemented on the same
+seeded RNG as everything else (not `node:crypto` or the async Web Crypto
+API), which keeps them synchronous and dependency-free in a browser
+context (a deliberate tradeoff, since mock hashes/UUIDs never need to be
+cryptographically real).

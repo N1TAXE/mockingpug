@@ -1,0 +1,93 @@
+{
+  "name": "mockingpug",
+  "version": "0.1.0",
+  "description": "Declarative JSON-schema mock data generation and REST-like mocking for React/Next.js — no separate server.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/N1TAXE/mockingpug.git"
+  },
+  "homepage": "https://github.com/N1TAXE/mockingpug",
+  "bugs": {
+    "url": "https://github.com/N1TAXE/mockingpug/issues"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli/index.d.ts",
+      "import": "./dist/cli/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    },
+    "./next": {
+      "types": "./dist/next/index.d.ts",
+      "import": "./dist/next/index.js"
+    },
+    "./next/client": {
+      "types": "./dist/next/MockDevtools.d.ts",
+      "import": "./dist/next/MockDevtools.js"
+    },
+    "./vite": {
+      "types": "./dist/vite/index.d.ts",
+      "import": "./dist/vite/index.js"
+    }
+  },
+  "bin": {
+    "mpug": "./dist/cli/bin.js",
+    "mockingpug": "./dist/cli/bin.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^26.1.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitest/coverage-v8": "^4.1.9",
+    "jsdom": "^29.1.1",
+    "msw": "^2.14.6",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.3",
+    "vite": "^8.1.3",
+    "vitest": "^4.1.9"
+  },
+  "peerDependencies": {
+    "msw": "^2.0.0",
+    "react": ">=18",
+    "react-dom": ">=18",
+    "vite": ">=4"
+  },
+  "peerDependenciesMeta": {
+    "msw": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    }
+  },
+  "overrides": {
+    "esbuild": "^0.28.1"
+  }
+}

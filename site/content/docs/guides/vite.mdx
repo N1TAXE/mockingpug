@@ -1,0 +1,77 @@
+---
+title: Vite plugin
+description: Auto-discovery of mock/api/** as a virtual module
+---
+
+`mockingpug/vite` closes the "schemas into the browser" gap for
+`mockingpug/react`: a Vite dev server/build runs in Node, so, unlike the
+shipped browser bundle itself, a *build-time* plugin can read `mock/` off
+disk with the same loader the CLI uses, and hand the already-parsed result
+to your app as a virtual module. No per-entity `import` list to maintain.
+
+## Setup
+
+```ts title="vite.config.ts"
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { mockingpug } from 'mockingpug/vite';
+
+export default defineConfig({
+  plugins: [react(), mockingpug()],
+});
+```
+
+```ts title="src/mocks/schemas.ts"
+import { schemas, customDictionaries } from 'virtual:mockingpug/schemas';
+export { schemas, customDictionaries };
+```
+
+Then follow [the React guide](/docs/guides/react) from step 4 onward
+(`generateAll()` + `createMockHandlers()` + `setupWorker()`, or
+`<MockProvider>`).
+
+## What the virtual module exports
+
+```ts
+export const schemas: Record<string, EntitySchema>;
+export const customDictionaries: Record<string, CustomDictionaryEntry[]>;
+export const mockConfig: MockConfig; // the fully-resolved mock.config.js, with defaults filled in
+```
+
+`mockConfig` is handy if you want to read `seed`/`pagination`/`runtime` at
+the call site instead of hardcoding them again in `browser.ts`.
+
+## Options
+
+```ts
+mockingpug({
+  dir: 'src/mock', // overrides mock.config.js's `dir`, rarely needed
+})
+```
+
+## TypeScript
+
+The virtual module can't be resolved on disk, so TypeScript needs a small
+ambient declaration (Vite's own `virtual:*` env modules work the same way):
+
+```ts title="src/mockingpug-virtual.d.ts"
+declare module 'virtual:mockingpug/schemas' {
+  import type { CustomDictionaryEntry, EntitySchema } from 'mockingpug';
+  export const schemas: Record<string, EntitySchema>;
+  export const customDictionaries: Record<string, CustomDictionaryEntry[]>;
+}
+```
+
+## Live reload while editing schemas
+
+The plugin watches `mock/api/**`, `mock/data/**`, and `mock.config.js`
+while `vite dev` is running. Any change triggers a full page reload rather
+than a stale virtual-module cache, so you don't need to restart the dev
+server after editing a schema.
+
+## Only for Vite
+
+This plugin has no effect on CRA, plain webpack, Next.js, or any other
+bundler. Those use [Option B (manual static import)](/docs/guides/react#option-b--manual-static-import-any-bundler-no-plugin-needed)
+instead. There is currently no equivalent auto-discovery plugin for
+non-Vite bundlers. It's a known gap, tracked on the roadmap, not a bug.

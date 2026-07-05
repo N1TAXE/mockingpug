@@ -1,0 +1,92 @@
+---
+title: Relations & Generation Order
+description: Field-level vs. bare cross-entity relations, and how generation order is decided
+---
+
+`data.<entity>` and `data.<entity>.<field>` look similar but resolve
+completely differently. Understanding the split explains a lot of
+mockingpug's behavior (why a bare relation never shows up in `.mockingpug/db`,
+why self-references aren't supported yet, why generation order matters).
+
+## Field-level relations (`data.<entity>.<field>`)
+
+```json title="mock/api/blogpost/schema.json"
+{ "author": "data.user.id" }
+```
+
+At generation time, mockingpug picks a **random, already-generated** `user`
+record and copies its `id` into `author`. This is a real, stored value: it
+shows up in `.mockingpug/db/blogpost.json` (or in memory, if using
+`MemoryStoreAdapter`) exactly like any other field.
+
+Because this needs `user` records to already exist, **`user` must be
+generated before `blogpost`**. mockingpug builds a dependency graph from
+every field-level reference across all schemas and generates entities in
+topological order automatically. You don't declare an order anywhere.
+
+If no record of the target entity exists yet (`amount: 0`, or the entity is
+empty for any other reason), resolving the reference fails with a
+`GenerationError` (`MP-GEN-004`)/(`MP-GEN-005`) rather than silently
+emitting `null` or `undefined`.
+
+## Bare relations (`data.<entity>`, no field)
+
+```json title="mock/api/user/schema.json"
+{ "posts": "data.blogpost" }
+```
+
+This is the *inverse* direction: "every `blogpost` whose field-level
+reference points back at this `user`." It is resolved **lazily, at read
+time**: a `GET /api/user/1` computes `posts` by scanning `blogpost` records
+for ones where `author === 1`, on that request, every time. Nothing is
+precomputed, cached alongside the user record, or written to
+`.mockingpug/db/user.json`. `user.json` on disk never has a `posts` key.
+
+This matters for two reasons:
+
+- **It stays fresh.** If a `blogpost` is created or deleted after `user` was
+  generated, the next `GET` on that user reflects it immediately, with no
+  re-generation step needed.
+- **It doesn't participate in generation order.** A bare relation on `user`
+  pointing at `blogpost` does *not* create a "generate `blogpost` before
+  `user`" requirement, since nothing is resolved until read time. Only
+  field-level references affect the topological order.
+
+For a bare relation to resolve, the target schema must have exactly one
+field-level reference pointing back at the source entity. Zero such fields
+is a `DependencyError` (`MP-DEP-003`, "no matching back-reference"); more
+than one is `MP-DEP-004` ("ambiguous: which field is the actual foreign
+key?"), since mockingpug won't guess.
+
+## Cycles
+
+A genuine cycle, two entities whose **field-level** references point at
+each other (`A.bRef: "data.b.id"` and `B.aRef: "data.a.id"`), is
+unresolvable (neither can be generated first) and fails fast with a
+`DependencyError` (`MP-DEP-002`) at `doctor`/`generate` time, before any
+data is produced.
+
+This is *not* the same as the common `user` ↔ `blogpost` pattern above: a
+field-level ref one way (`blogpost.author → user.id`) plus a bare relation
+the other way (`user.posts → data.blogpost`) is not a cycle at all, since
+the bare half never participates in the ordering graph.
+
+## What's not supported yet
+
+**Self-references within the same entity** (e.g. `user.managerId: "data.user.id"`,
+a manager hierarchy on the `user` entity itself) aren't resolvable today.
+Generation processes one entity fully before moving to the next, so a
+self-reference would need to point at records that don't exist yet within
+that same run. This throws a clear error rather than silently producing
+`null`. Track the roadmap if you need this.
+
+## Generation is otherwise a pure function
+
+Every non-relation field's value depends only on `(seed, entity, index,
+fieldName)`, not on any other field, not on generation order, not on wall
+clock time. This is what makes `number.increment` continue correctly when
+more records are appended later, and what makes the whole dataset
+reproducible from the seed alone. See
+[Reconciliation & Storage](/docs/concepts/reconciliation-and-storage) for
+what happens when a schema changes and some (not all) of an entity's
+records need to be touched again.
