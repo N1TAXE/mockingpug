@@ -5,7 +5,7 @@
 Please do not open a public GitHub issue for security vulnerabilities.
 
 Instead, report it privately via [GitHub Security Advisories](https://github.com/N1TAXE/mockingpug/security/advisories/new)
-for this repository, or email n1t4x3@gmail.com.
+for this repository, or email n1taxe.com@gmail.com.
 
 Include what you can:
 - A description of the vulnerability and its potential impact.
