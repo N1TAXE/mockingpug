@@ -1,7 +1,22 @@
 {
   "name": "mockingpug",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Declarative JSON-schema mock data generation and REST-like mocking for React/Next.js — no separate server.",
+  "keywords": [
+    "mock",
+    "mock-data",
+    "mock-api",
+    "json-schema",
+    "msw",
+    "react",
+    "nextjs",
+    "vite",
+    "cli",
+    "testing",
+    "fixtures",
+    "faker"
+  ],
+  "author": "N1TAXE <n1t4x3@gmail.com>",
   "type": "module",
   "license": "MIT",
   "repository": {
