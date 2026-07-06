@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { RuntimeConfig } from '../cli/mockConfig.js';
-import { DEFAULT_RUNTIME, type QueryContext } from '../query/index.js';
+import { DEFAULT_RUNTIME, RequestLog, type QueryContext } from '../query/index.js';
 import { bypass as bypassEntity, isRuntimeBypassed, unbypass as unbypassEntity } from './bypassState.js';
 
 export type MockMode = 'mock' | 'off';
@@ -62,6 +62,18 @@ export function MockProvider({
 }: MockProviderProps) {
   const [mode, setModeState] = useState<MockMode>(() => readStoredMode(storageKey) ?? initialMode);
   const [runtime, setRuntimeState] = useState<RuntimeConfig>(ctx.runtime ?? DEFAULT_RUNTIME);
+
+  // Ensures `ctx.requestLog` exists before any request could plausibly reach
+  // `createMockHandlers()` (which only happens after `worker.start()`, itself
+  // only called from this same component's effect below). A `ref` guard
+  // (rather than `useEffect`) makes this synchronous and idempotent even
+  // under StrictMode's double-render: only the first pass's assignment
+  // survives, since `requestLogRef.current` is already set by then.
+  const requestLogRef = useRef<RequestLog | null>(null);
+  if (!requestLogRef.current) {
+    requestLogRef.current = ctx.requestLog ?? new RequestLog();
+    ctx.requestLog = requestLogRef.current;
+  }
 
   useEffect(() => {
     if (mode === 'mock') {

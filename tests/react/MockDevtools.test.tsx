@@ -52,6 +52,18 @@ async function openList() {
   fireEvent.click(screen.getByRole('button', { name: /Mock Data/ }));
 }
 
+/**
+ * The JSON viewer's syntax highlighting splits its text across several
+ * `<span>` children, so a plain `getByText(regex)` matches both the `<pre>`
+ * (whose aggregated `textContent` contains the text) and, often, one of
+ * those inner spans too, throwing "multiple elements found". Restricting
+ * the match to the `<pre>` element itself (there's exactly one per open
+ * `DataWindow`, read-only view or edit-mode overlay) sidesteps that.
+ */
+function preContains(text: string) {
+  return screen.getByText((_, element) => element?.tagName === 'PRE' && (element.textContent ?? '').includes(text));
+}
+
 describe('MockDevtools', () => {
   it('renders collapsed, showing only the round toggle button', async () => {
     await renderDevtools();
@@ -124,7 +136,7 @@ describe('MockDevtools', () => {
 
     const stored = await ctx.store.load('user');
     await waitFor(() => {
-      expect(screen.getByText(new RegExp(String(stored!.records[0]!.id)))).toBeTruthy();
+      expect(preContains(String(stored!.records[0]!.id))).toBeTruthy();
     });
   });
 
@@ -136,7 +148,7 @@ describe('MockDevtools', () => {
 
     const stored = await ctx.store.load('user');
     await waitFor(() => {
-      expect(screen.getByText(new RegExp(String(stored!.records[0]!.id)))).toBeTruthy();
+      expect(preContains(String(stored!.records[0]!.id))).toBeTruthy();
     });
   });
 
@@ -148,7 +160,7 @@ describe('MockDevtools', () => {
 
     const stored = await ctx.store.load('user');
     await waitFor(() => {
-      expect(screen.getByText(new RegExp(String(stored!.records[0]!.id)))).toBeTruthy();
+      expect(preContains(String(stored!.records[0]!.id))).toBeTruthy();
     });
 
     const closeButton = screen.getByRole('button', { name: 'Close user window' });
@@ -200,4 +212,100 @@ describe('MockDevtools', () => {
     });
   });
 
+  it('editing a record\'s JSON and saving persists the change to the store', async () => {
+    const ctx = await renderDevtools();
+    openPanel();
+    await openList();
+    fireEvent.click(screen.getByRole('button', { name: 'Open user records' }));
+
+    const stored = await ctx.store.load('user');
+    const firstId = stored!.records[0]!.id;
+    await waitFor(() => expect(preContains(String(firstId))).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit user records' }));
+    const textarea = screen.getByLabelText('Edit user records as JSON') as HTMLTextAreaElement;
+    const edited = JSON.parse(textarea.value) as Array<Record<string, unknown>>;
+    edited[0]!.name = 'Edited By Devtools';
+    fireEvent.change(textarea, { target: { value: JSON.stringify(edited, null, 2) } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save user changes' }));
+
+    await waitFor(async () => {
+      const after = await ctx.store.load('user');
+      expect(after!.records.find((r) => r.id === firstId)?.name).toBe('Edited By Devtools');
+    });
+    // Back to the read-only viewer, reflecting the saved value.
+    await waitFor(() => expect(preContains('Edited By Devtools')).toBeTruthy());
+  });
+
+  it('cancelling an edit discards changes without touching the store', async () => {
+    const ctx = await renderDevtools();
+    openPanel();
+    await openList();
+    fireEvent.click(screen.getByRole('button', { name: 'Open user records' }));
+
+    const stored = await ctx.store.load('user');
+    const firstId = stored!.records[0]!.id;
+    await waitFor(() => expect(preContains(String(firstId))).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit user records' }));
+    const textarea = screen.getByLabelText('Edit user records as JSON') as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: 'not valid json at all' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel editing user' }));
+
+    expect(screen.queryByLabelText('Edit user records as JSON')).toBeNull();
+    const after = await ctx.store.load('user');
+    expect(after!.records.find((r) => r.id === firstId)?.name).toBe(stored!.records[0]!.name);
+  });
+
+  it('shows an error and keeps editing open when the JSON is invalid', async () => {
+    const ctx = await renderDevtools();
+    openPanel();
+    await openList();
+    fireEvent.click(screen.getByRole('button', { name: 'Open user records' }));
+
+    const stored = await ctx.store.load('user');
+    await waitFor(() => expect(preContains(String(stored!.records[0]!.id))).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit user records' }));
+    const textarea = screen.getByLabelText('Edit user records as JSON');
+    fireEvent.change(textarea, { target: { value: '{ not valid json' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save user changes' }));
+
+    await waitFor(() => expect(screen.getByText('Invalid JSON.')).toBeTruthy());
+    expect(screen.getByLabelText('Edit user records as JSON')).toBeTruthy();
+  });
+
+  it('the Requests view shows "no requests yet" until something has been logged', async () => {
+    await renderDevtools();
+    openPanel();
+    fireEvent.click(screen.getByRole('button', { name: 'Requests' }));
+    await waitFor(() => expect(screen.getByText('No requests yet.')).toBeTruthy());
+  });
+
+  it('the Requests view lists logged requests, most-recent-first', async () => {
+    const ctx = await renderDevtools();
+    ctx.requestLog!.record({ method: 'GET', path: '/api/user', status: 200, durationMs: 5, timestamp: 1 });
+    ctx.requestLog!.record({ method: 'POST', path: '/api/user', status: 201, durationMs: 8, timestamp: 2 });
+
+    openPanel();
+    fireEvent.click(screen.getByRole('button', { name: 'Requests' }));
+
+    await waitFor(() => expect(screen.getAllByText('/api/user')).toHaveLength(2));
+    // POST (timestamp 2) rendered before GET (timestamp 1): most-recent-first.
+    expect(screen.getByText('201')).toBeTruthy();
+    expect(screen.getByText('200')).toBeTruthy();
+  });
+
+  it('"Clear request log" empties the log and refreshes the view', async () => {
+    const ctx = await renderDevtools();
+    ctx.requestLog!.record({ method: 'GET', path: '/api/user', status: 200, durationMs: 5, timestamp: 1 });
+
+    openPanel();
+    fireEvent.click(screen.getByRole('button', { name: 'Requests' }));
+    await waitFor(() => expect(screen.getByText('/api/user')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear request log' }));
+    await waitFor(() => expect(screen.getByText('No requests yet.')).toBeTruthy());
+  });
 });

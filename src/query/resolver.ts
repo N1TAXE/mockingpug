@@ -19,7 +19,9 @@ import {
 } from '../generator/index.js';
 import type { PaginationConfig, RuntimeConfig } from '../cli/mockConfig.js';
 import { filterRecords } from './filter.js';
+import type { OneShotOverrides } from './oneShotOverride.js';
 import { paginate, type PaginatedResult } from './pagination.js';
+import type { RequestLog } from './requestLog.js';
 import { searchRecords } from './search.js';
 import { sortRecords } from './sort.js';
 
@@ -35,6 +37,10 @@ export interface QueryContext {
   customDictionaries?: Record<string, readonly CustomDictionaryEntry[]>;
   /** Synthetic latency/error injection, defaults to disabled (`{errorRate: 0, delay: 0}`) when omitted. */
   runtime?: RuntimeConfig;
+  /** Ring buffer of recently-answered requests, read by `<MockDevtools>`'s request log. Omit to disable logging entirely. */
+  requestLog?: RequestLog;
+  /** Per-entity one-shot fail/delay overrides armed by `<MockDevtools>`, checked before `runtime.errorRate`/`delay`. Omit to disable the feature entirely. */
+  oneShotOverrides?: OneShotOverrides;
 }
 
 /** What a consumer actually sees: internal bookkeeping fields stripped. */

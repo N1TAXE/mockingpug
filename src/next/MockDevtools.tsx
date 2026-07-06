@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import type { RequestLogEntry } from '../query/index.js';
 import { DevtoolsPanel } from '../shared/devtoolsUI.js';
 import { DEVTOOLS_SEGMENT } from './devtoolsPath.js';
 
@@ -59,6 +60,19 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
     return records;
   }
 
+  async function updateRecord(entity: string, id: string, patch: Record<string, unknown>): Promise<unknown> {
+    const res = await fetch(`${apiBase}/records/${entity}/${id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+      throw new Error(body?.error?.message ?? `Failed to update ${entity}/${id} (${res.status})`);
+    }
+    return (await res.json()) as unknown;
+  }
+
   async function updateRuntime(patch: { delay?: number; errorRate?: number }) {
     const res = await fetch(`${apiBase}/runtime`, {
       method: 'POST',
@@ -69,6 +83,16 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
     setSnapshot((prev) => ({ ...prev, runtime }));
   }
 
+  async function fetchRequestLog(): Promise<RequestLogEntry[]> {
+    const res = await fetch(`${apiBase}/requests`);
+    const { requests } = (await res.json()) as { requests: RequestLogEntry[] };
+    return requests;
+  }
+
+  async function clearRequestLog(): Promise<void> {
+    await fetch(`${apiBase}/requests/clear`, { method: 'POST' });
+  }
+
   return (
     <DevtoolsPanel
       title="mockingpug (next)"
@@ -77,6 +101,9 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
       onRuntimeChange={(patch) => void updateRuntime(patch)}
       onFetchRecords={fetchRecords}
       onResetEntity={resetEntity}
+      onUpdateRecord={updateRecord}
+      onFetchRequestLog={fetchRequestLog}
+      onClearRequestLog={clearRequestLog}
       onOpen={() => void refresh()}
     />
   );

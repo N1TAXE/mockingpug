@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { generateAll } from '../generator/index.js';
+import { updateRecord, type RequestLogEntry } from '../query/index.js';
 import { DevtoolsPanel } from '../shared/devtoolsUI.js';
 import { useMockContext } from './MockProvider.js';
 
@@ -37,6 +38,18 @@ export function MockDevtools() {
     return stored?.records.slice(0, 10) ?? [];
   }
 
+  async function updateRecordInPanel(entity: string, id: string, patch: Record<string, unknown>): Promise<unknown> {
+    return updateRecord(entity, id, patch, ctx);
+  }
+
+  async function fetchRequestLog(): Promise<RequestLogEntry[]> {
+    return ctx.requestLog?.list() ?? [];
+  }
+
+  async function clearRequestLog(): Promise<void> {
+    ctx.requestLog?.clear();
+  }
+
   return (
     <DevtoolsPanel
       title="mockingpug"
@@ -45,6 +58,9 @@ export function MockDevtools() {
       onRuntimeChange={setRuntime}
       onFetchRecords={fetchRecords}
       onResetEntity={resetEntity}
+      onUpdateRecord={updateRecordInPanel}
+      onFetchRequestLog={fetchRequestLog}
+      onClearRequestLog={clearRequestLog}
       onOpen={() => void refreshCounts()}
       mockNetwork={{ enabled: mode === 'mock', onToggle: (next) => setMode(next ? 'mock' : 'off') }}
       bypass={{

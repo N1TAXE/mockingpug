@@ -8,6 +8,7 @@ import {
   jsonResponse,
   listRecords,
   readJsonBody,
+  recordRequest,
   simulateRuntime,
   updateRecord,
   type QueryContext,
@@ -43,39 +44,51 @@ export function createMockHandlers(ctx: QueryContext, baseUrl: string): RequestH
     handlers.push(
       http.get(collectionUrl, async ({ request }) => {
         if (isBypassed()) return passthrough();
+        const startedAt = Date.now();
+        let response: Response;
         try {
           await simulateRuntime(ctx.runtime);
           const url = new URL(request.url);
           const { data, meta } = await listRecords(entity, url.searchParams, ctx);
-          return buildListResponse(data, meta, ctx.pagination.strategy !== false && ctx.pagination.envelope);
+          response = buildListResponse(data, meta, ctx.pagination.strategy !== false && ctx.pagination.envelope);
         } catch (error) {
-          return errorResponse(error);
+          response = errorResponse(error);
         }
+        recordRequest(ctx, request, response.status, startedAt);
+        return response;
       }),
     );
 
     handlers.push(
-      http.get(itemUrl, async ({ params }) => {
+      http.get(itemUrl, async ({ request, params }) => {
         if (isBypassed()) return passthrough();
+        const startedAt = Date.now();
+        let response: Response;
         try {
           await simulateRuntime(ctx.runtime);
-          return jsonResponse(await getRecordById(entity, String(params.id), ctx));
+          response = jsonResponse(await getRecordById(entity, String(params.id), ctx));
         } catch (error) {
-          return errorResponse(error);
+          response = errorResponse(error);
         }
+        recordRequest(ctx, request, response.status, startedAt);
+        return response;
       }),
     );
 
     handlers.push(
       http.post(collectionUrl, async ({ request }) => {
         if (isBypassed()) return passthrough();
+        const startedAt = Date.now();
+        let response: Response;
         try {
           await simulateRuntime(ctx.runtime);
           const created = await createRecord(entity, await readJsonBody(request), ctx);
-          return jsonResponse(created, { status: 201 });
+          response = jsonResponse(created, { status: 201 });
         } catch (error) {
-          return errorResponse(error);
+          response = errorResponse(error);
         }
+        recordRequest(ctx, request, response.status, startedAt);
+        return response;
       }),
     );
 
@@ -83,27 +96,35 @@ export function createMockHandlers(ctx: QueryContext, baseUrl: string): RequestH
       handlers.push(
         http[method](itemUrl, async ({ request, params }) => {
           if (isBypassed()) return passthrough();
+          const startedAt = Date.now();
+          let response: Response;
           try {
             await simulateRuntime(ctx.runtime);
             const updated = await updateRecord(entity, String(params.id), await readJsonBody(request), ctx);
-            return jsonResponse(updated);
+            response = jsonResponse(updated);
           } catch (error) {
-            return errorResponse(error);
+            response = errorResponse(error);
           }
+          recordRequest(ctx, request, response.status, startedAt);
+          return response;
         }),
       );
     }
 
     handlers.push(
-      http.delete(itemUrl, async ({ params }) => {
+      http.delete(itemUrl, async ({ request, params }) => {
         if (isBypassed()) return passthrough();
+        const startedAt = Date.now();
+        let response: Response;
         try {
           await simulateRuntime(ctx.runtime);
           await deleteRecord(entity, String(params.id), ctx);
-          return new Response(null, { status: 204 });
+          response = new Response(null, { status: 204 });
         } catch (error) {
-          return errorResponse(error);
+          response = errorResponse(error);
         }
+        recordRequest(ctx, request, response.status, startedAt);
+        return response;
       }),
     );
   }

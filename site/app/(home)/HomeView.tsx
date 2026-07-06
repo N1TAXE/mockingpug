@@ -406,6 +406,64 @@ function FrameworkStrip() {
   );
 }
 
+function DevtoolsDemo({ shouldReduce }: { shouldReduce: boolean | null }) {
+  const [masked, setMasked] = useState(false);
+  const fields = { name: 'Elena Ruiz', role: 'ADMIN', email: 'elena.492@gmail.com' };
+  const mask = (value: string) => '*'.repeat(value.length);
+
+  return (
+    <section className={styles.devtools}>
+      <div className={styles['devtools__inner']}>
+        <div className={styles['devtools__layout']}>
+          <Reveal shouldReduce={shouldReduce} className={styles['devtools__copy']}>
+            <div className={styles['devtools__eyebrow']}>&lt;MockDevtools/&gt;</div>
+            <h2 className={styles['devtools__title']}>A handy debugging tool</h2>
+            <p className={styles['devtools__text']}>
+              Devtools helps you visually locate mock data on a page by hiding it with asterisks <code className={styles['devtools__code-inline']}>***</code>. You can easily view each individual mock data model and add response delays or error rates to requests.
+            </p>
+          </Reveal>
+
+          <Reveal shouldReduce={shouldReduce} delay={0.1} className={styles['devtools__card']}>
+            <div className={styles['devtools__row']}>
+              <span className={styles['devtools__row-label']}>NAME</span>
+              <span className={cx(styles['devtools__row-value'], masked && styles['devtools__row-value--masked'])}>
+                {masked ? mask(fields.name) : fields.name}
+              </span>
+            </div>
+            <div className={styles['devtools__row']}>
+              <span className={styles['devtools__row-label']}>ROLE</span>
+              <span className={cx(styles['devtools__row-value'], masked && styles['devtools__row-value--masked'])}>
+                {masked ? mask(fields.role) : fields.role}
+              </span>
+            </div>
+            <div className={styles['devtools__row']}>
+              <span className={styles['devtools__row-label']}>EMAIL</span>
+              <span className={cx(styles['devtools__row-value'], masked && styles['devtools__row-value--masked'])}>
+                {masked ? mask(fields.email) : fields.email}
+              </span>
+            </div>
+            <div className={styles['devtools__row']}>
+              <span className={styles['devtools__row-label']}>Page title (hardcoded)</span>
+              <span className={styles['devtools__row-value']}>User Profile</span>
+            </div>
+            <button
+              type="button"
+              className={styles['devtools__toggle']}
+              onClick={() => setMasked((v) => !v)}
+              aria-pressed={masked}
+            >
+              <span className={cx(styles['devtools__switch'], masked && styles['devtools__switch--on'])}>
+                <span className={cx(styles['devtools__knob'], masked && styles['devtools__knob--on'])} />
+              </span>
+              {masked ? 'showing real values' : 'highlight mock data'}
+            </button>
+          </Reveal>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 const MASCOT_SLIDES = [
   '/assets/img/morty/3.jpg',
   '/assets/img/morty/2.jpg',
@@ -656,6 +714,7 @@ export function HomeView({ githubStars }: { githubStars: number | null }) {
         <HowItWorks shouldReduce={shouldReduce} />
         <Features shouldReduce={shouldReduce} />
         <FrameworkStrip />
+        <DevtoolsDemo shouldReduce={shouldReduce} />
         <MascotSlider shouldReduce={shouldReduce} />
         <FinalCta shouldReduce={shouldReduce} />
       </main>

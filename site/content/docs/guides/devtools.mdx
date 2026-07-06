@@ -101,6 +101,31 @@ for just that entity) and a close button. Multiple entities' windows can be
 open at once; clicking an entity that's already open just brings its
 window to the front instead of opening a duplicate.
 
+The pencil icon in that window's header makes the JSON view editable:
+change any field, click the checkmark to save. Saved edits go through the
+same merge `PUT`/`PATCH` already uses (so partial edits are fine, you don't
+need to retype the whole record), bypassing `runtime.errorRate`/`delay` —
+this is a devtools action on the data, not a request your app is making.
+An edited record survives the same things a manual `PUT` does (schema
+field additions, `amount` shrinking with `_seed: false` protection), but
+**not** a later change to that field's generator type — if you need a
+value that's fixed no matter what else changes in the schema, use
+[`fixtures`](/docs/concepts/schema-dsl#fixtures) instead. The cross icon
+next to it discards the edit without saving. Only existing records can be
+edited this way (matched by `.id`); adding or removing array entries in the
+textarea has no effect, use `POST`/`DELETE` (or the reset button) for that.
+
+A "Requests" row (next to "Mock Data") shows the last 50 requests the mock
+actually answered — method, path, status, duration, and time — so you can
+tell whether a `fetch()` call reached the mock and what it got back without
+switching to the browser's Network tab. It polls once a second while open
+and has its own "Clear request log" button. Answered requests are recorded
+into `ctx.requestLog` (a ring buffer capped at 50 entries, oldest dropped
+first) right before the response goes out, so a synthetic
+`runtime.errorRate` failure still shows up with its real status. The
+devtools sub-API's own calls are never logged, only requests your app
+actually makes.
+
 It renders nothing but the toggle button by default; the panel only
 appears once opened.
 
@@ -136,11 +161,18 @@ a context directly:
   restart.
 - `GET {baseUrl}/__mockingpug/records/:entity`: up to 10 current records,
   for the "Mock Data" preview window.
+- `PUT {baseUrl}/__mockingpug/records/:entity/:id`: applies an edit made in
+  that window, through the same merge `updateRecord()` a real `PUT`/`PATCH`
+  uses, bypassing `runtime.errorRate`/`delay`.
 - `POST {baseUrl}/__mockingpug/reset/:entity`: deletes and regenerates
   just that entity.
+- `GET {baseUrl}/__mockingpug/requests`: the last 50 answered requests,
+  most-recent-first, for the "Requests" view.
+- `POST {baseUrl}/__mockingpug/requests/clear`: empties the request log.
 
-Same panel and same "Mock Data" list page/draggable floating record
-windows as the React version. There's no mock-network toggle or
+Same panel, same "Mock Data" list page/draggable floating record windows,
+same editable JSON viewer, and the same request log as the React version.
+There's no mock-network toggle or
 per-entity bypass switch built into this panel: both are React/MSW-specific
 concepts, and a Route Handler *is* the real
 server, so there's nothing to switch off or bypass at the panel level.

@@ -64,6 +64,33 @@ export function ChevronIcon() {
   );
 }
 
+export function EditIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M16.474 5.408a2.109 2.109 0 1 1 2.981 2.981L7.593 20.25H4.75v-2.844L16.474 5.408Z"
+        stroke="#23272F"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function CheckIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M11.4142 1.58579C11.8047 1.97631 11.8047 2.60948 11.4142 3L4.70711 9.70711C4.31658 10.0976 3.68342 10.0976 3.29289 9.70711L0.585786 7C0.195262 6.60948 0.195262 5.97631 0.585786 5.58579C0.97631 5.19526 1.60948 5.19526 2 5.58579L4 7.58579L10 1.58579C10.3905 1.19526 11.0237 1.19526 11.4142 1.58579Z"
+        fill="#1d9e4b"
+      />
+    </svg>
+  );
+}
+
 export function RefreshIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">

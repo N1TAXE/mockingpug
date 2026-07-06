@@ -78,6 +78,52 @@ describe('devtools sub-API (`{baseUrl}/__mockingpug/*`)', () => {
     expect(failing.status).toBe(500);
   });
 
+  it('PUT __mockingpug/records/:entity/:id updates a record, bypassing runtime.errorRate/delay', async () => {
+    const ctx = await makeContext(3);
+    ctx.runtime = { errorRate: 1, delay: 0 };
+    const handlers = createNextHandlers(ctx);
+    const stored = await ctx.store.load('user');
+    const id = String(stored!.records[0]!.id);
+
+    const res = await handlers.PUT(
+      new Request(`http://localhost/api/__mockingpug/records/user/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name: 'Edited By Devtools' }),
+      }),
+      plainParams(['__mockingpug', 'records', 'user', id]),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { record: { name: string } };
+    expect(body.record.name).toBe('Edited By Devtools');
+
+    const after = await ctx.store.load('user');
+    expect(after!.records.find((r) => String(r.id) === id)?.name).toBe('Edited By Devtools');
+  });
+
+  it('PUT __mockingpug/records/:entity/:id returns a clean 404 for an unknown id', async () => {
+    const ctx = await makeContext(1);
+    const handlers = createNextHandlers(ctx);
+    const res = await handlers.PUT(
+      new Request('http://localhost/api/__mockingpug/records/user/999', {
+        method: 'PUT',
+        body: JSON.stringify({ name: 'X' }),
+      }),
+      plainParams(['__mockingpug', 'records', 'user', '999']),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('PUT to a real entity path (no devtools segment) is unaffected by the devtools route', async () => {
+    const ctx = await makeContext(2);
+    const handlers = createNextHandlers(ctx);
+    const res = await handlers.PUT(
+      new Request('http://localhost/api/user/1', { method: 'PUT', body: JSON.stringify({ name: 'Real Update' }) }),
+      plainParams(['user', '1']),
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { name: string }).toMatchObject({ name: 'Real Update' });
+  });
+
   it('POST __mockingpug/reset/:entity wipes and regenerates one entity', async () => {
     const ctx = await makeContext(3);
     const handlers = createNextHandlers(ctx);
@@ -105,5 +151,52 @@ describe('devtools sub-API (`{baseUrl}/__mockingpug/*`)', () => {
       plainParams(['__mockingpug', 'nope']),
     );
     expect(res.status).toBe(404);
+  });
+
+  it('GET __mockingpug/requests lists the recorded request log, most-recent-first', async () => {
+    const { RequestLog } = await import('../../src/query/index.js');
+    const ctx = await makeContext(1);
+    ctx.requestLog = new RequestLog();
+    const handlers = createNextHandlers(ctx);
+
+    await handlers.GET(new Request('http://localhost/api/user'), plainParams(['user']));
+    await handlers.GET(new Request('http://localhost/api/user/999'), plainParams(['user', '999']));
+
+    const res = await handlers.GET(
+      new Request('http://localhost/api/__mockingpug/requests'),
+      plainParams(['__mockingpug', 'requests']),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { requests: Array<{ method: string; path: string; status: number }> };
+    expect(body.requests).toHaveLength(2);
+    expect(body.requests[0]).toMatchObject({ method: 'GET', path: '/api/user/999', status: 404 });
+  });
+
+  it('GET __mockingpug/requests returns an empty array when ctx.requestLog is unset', async () => {
+    const ctx = await makeContext(1);
+    const handlers = createNextHandlers(ctx);
+    const res = await handlers.GET(
+      new Request('http://localhost/api/__mockingpug/requests'),
+      plainParams(['__mockingpug', 'requests']),
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { requests: unknown[] }).toEqual({ requests: [] });
+  });
+
+  it('POST __mockingpug/requests/clear empties the request log', async () => {
+    const { RequestLog } = await import('../../src/query/index.js');
+    const ctx = await makeContext(1);
+    ctx.requestLog = new RequestLog();
+    const handlers = createNextHandlers(ctx);
+
+    await handlers.GET(new Request('http://localhost/api/user'), plainParams(['user']));
+    expect(ctx.requestLog.list()).toHaveLength(1);
+
+    const res = await handlers.POST(
+      new Request('http://localhost/api/__mockingpug/requests/clear', { method: 'POST' }),
+      plainParams(['__mockingpug', 'requests', 'clear']),
+    );
+    expect(res.status).toBe(200);
+    expect(ctx.requestLog.list()).toHaveLength(0);
   });
 });

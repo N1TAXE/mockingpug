@@ -4,7 +4,7 @@ import { loadConfig } from '../cli/mockConfig.js';
 import { loadProject } from '../cli/schemaLoader.js';
 import { generateAll } from '../generator/index.js';
 import { FileStoreAdapter, MemoryStoreAdapter, type StoreAdapter } from '../store/index.js';
-import type { QueryContext } from '../query/index.js';
+import { RequestLog, type QueryContext } from '../query/index.js';
 
 export interface MockContext {
   ctx: QueryContext;
@@ -46,6 +46,7 @@ export async function createMockContext(projectDir: string): Promise<MockContext
     seed: config.seed,
     customDictionaries: project.customDictionaries,
     runtime: config.runtime,
+    requestLog: new RequestLog(),
   };
 
   return { ctx, baseUrl: config.baseUrl, dir: join(projectDir, config.dir) };

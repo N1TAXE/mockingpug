@@ -1,5 +1,5 @@
 import { generateAll } from '../generator/index.js';
-import { jsonResponse, readJsonBody, type QueryContext } from '../query/index.js';
+import { jsonResponse, readJsonBody, updateRecord, type QueryContext } from '../query/index.js';
 import { DEVTOOLS_SEGMENT } from './devtoolsPath.js';
 
 export { DEVTOOLS_SEGMENT };
@@ -35,7 +35,7 @@ export async function handleDevtoolsRequest(
   request: Request,
   ctx: QueryContext,
 ): Promise<Response> {
-  const [action, entity] = segments;
+  const [action, entity, id] = segments;
 
   if (!action && method === 'GET') {
     return jsonResponse({ entities: await entityCounts(ctx), runtime: runtimeSnapshot(ctx) });
@@ -50,9 +50,19 @@ export async function handleDevtoolsRequest(
     return jsonResponse(runtimeSnapshot(ctx));
   }
 
-  if (action === 'records' && entity && method === 'GET') {
+  if (action === 'records' && entity && !id && method === 'GET') {
     const stored = await ctx.store.load(entity);
     return jsonResponse({ records: stored?.records.slice(0, 10) ?? [] });
+  }
+
+  // Applies an edit made in a DataWindow's JSON viewer. Deliberately its own
+  // devtools route, not a call to the entity's real PUT/PATCH endpoint: this
+  // bypasses runtime.errorRate/delay, since it's a devtools-internal action,
+  // not a request the app under test is making.
+  if (action === 'records' && entity && id && method === 'PUT') {
+    const body = await readJsonBody(request);
+    const updated = await updateRecord(entity, id, body, ctx);
+    return jsonResponse({ record: updated });
   }
 
   if (action === 'reset' && entity && method === 'POST') {
@@ -60,6 +70,15 @@ export async function handleDevtoolsRequest(
     await generateAll(ctx.schemas, ctx.store, { seed: ctx.seed, customDictionaries: ctx.customDictionaries });
     const stored = await ctx.store.load(entity);
     return jsonResponse({ records: stored?.records.slice(0, 10) ?? [] });
+  }
+
+  if (action === 'requests' && !entity && method === 'GET') {
+    return jsonResponse({ requests: ctx.requestLog?.list() ?? [] });
+  }
+
+  if (action === 'requests' && entity === 'clear' && method === 'POST') {
+    ctx.requestLog?.clear();
+    return jsonResponse({ requests: [] });
   }
 
   return jsonResponse({ error: { message: 'not found' } }, { status: 404 });

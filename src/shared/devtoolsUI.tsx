@@ -1,5 +1,6 @@
-import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { BackIcon, ChevronIcon, CrossIcon, DirIcon, LogoIcon, RefreshIcon } from './devtoolsIcons.js';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import type { RequestLogEntry } from '../query/index.js';
+import { BackIcon, CheckIcon, ChevronIcon, CrossIcon, DirIcon, EditIcon, LogoIcon, RefreshIcon } from './devtoolsIcons.js';
 
 const FONT_UI = "'Nunito', system-ui, sans-serif";
 const FONT_CODE = "'JetBrains Mono', ui-monospace, monospace";
@@ -234,6 +235,8 @@ interface PanelHeaderProps {
   closeLabel?: string;
   backLabel?: string;
   resetLabel?: string;
+  /** Extra buttons rendered before reset/back/close, for header actions this component doesn't know about generically (e.g. `DataWindow`'s edit/save/cancel). */
+  extraActions?: ReactNode;
   drag?: {
     onPointerDown: (e: React.PointerEvent) => void;
     onPointerMove: (e: React.PointerEvent) => void;
@@ -241,7 +244,7 @@ interface PanelHeaderProps {
   };
 }
 
-function PanelHeader({ title, icon, onClose, onBack, onReset, closeLabel, backLabel, resetLabel, drag }: PanelHeaderProps) {
+function PanelHeader({ title, icon, onClose, onBack, onReset, closeLabel, backLabel, resetLabel, extraActions, drag }: PanelHeaderProps) {
   return (
     <div
       style={{
@@ -286,14 +289,13 @@ function PanelHeader({ title, icon, onClose, onBack, onReset, closeLabel, backLa
             lineHeight: '16px',
             color: TEXT,
             whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
           }}
         >
           {title}
         </span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flex: 'none' }}>
+        {extraActions}
         {onReset && (
           <IconButton onClick={onReset} title={resetLabel ?? 'Reset'}>
             <RefreshIcon />
@@ -371,6 +373,17 @@ export interface DevtoolsPanelProps {
   onRuntimeChange: (patch: { delay?: number; errorRate?: number }) => void;
   onFetchRecords: (entity: string) => Promise<unknown[]>;
   onResetEntity: (entity: string) => Promise<unknown[]>;
+  /**
+   * Applies an edit made in a `DataWindow`'s JSON viewer to one record,
+   * merged the same way a real `PUT`/`PATCH` would (via `safeMerge`), but
+   * bypassing `runtime.errorRate`/`delay`: this is a devtools-internal
+   * action, not a request the app under test is making.
+   */
+  onUpdateRecord: (entity: string, id: string, patch: Record<string, unknown>) => Promise<unknown>;
+  /** Reads the current request log (most-recent-first), for the "Requests" view. */
+  onFetchRequestLog: () => Promise<RequestLogEntry[]>;
+  /** Clears the request log. Optional: omit to hide the clear button. */
+  onClearRequestLog?: () => Promise<void> | void;
   /** Called every time the panel transitions from closed to open, so the caller can refresh `entities`/`runtime`. */
   onOpen?: () => void;
   /** React/MSW-only: worker on/off. Omit entirely for transports (like Next.js) with nothing to intercept. */
@@ -394,6 +407,65 @@ function randomWindowPosition(width: number, height: number): { x: number; y: nu
   return { x: 24 + Math.random() * Math.max(1, maxX - 24), y: 24 + Math.random() * Math.max(1, maxY - 24) };
 }
 
+const JSON_SYNTAX_COLORS = {
+  key: '#0451a5',
+  string: '#a31515',
+  number: '#098658',
+  keyword: '#0000ff', // true / false / null
+};
+
+interface JsonToken {
+  text: string;
+  color?: string;
+}
+
+// Matches a quoted string (optionally followed by its `:` , making it a key),
+// or a bare `true`/`false`/`null`/number token. Everything between matches
+// (braces, brackets, commas, whitespace) is plain, uncolored text.
+const JSON_TOKEN_REGEX = /("(?:\\u[0-9a-fA-F]{4}|\\[^u]|[^\\"])*"(?:\s*:)?|\btrue\b|\bfalse\b|\bnull\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
+
+/** Splits `text` (expected to be `JSON.stringify(..., null, 2)` output) into colored/plain tokens for a lightweight, dependency-free syntax highlight. */
+function tokenizeJson(text: string): JsonToken[] {
+  const tokens: JsonToken[] = [];
+  let lastIndex = 0;
+  for (const match of text.matchAll(JSON_TOKEN_REGEX)) {
+    const index = match.index ?? 0;
+    if (index > lastIndex) tokens.push({ text: text.slice(lastIndex, index) });
+    const value = match[0]!;
+    if (value.startsWith('"')) {
+      const split = /^(.*")(\s*:)?$/.exec(value)!;
+      const stringPart = split[1]!;
+      const colonPart = split[2];
+      tokens.push({ text: stringPart, color: colonPart ? JSON_SYNTAX_COLORS.key : JSON_SYNTAX_COLORS.string });
+      if (colonPart) tokens.push({ text: colonPart });
+    } else if (value === 'true' || value === 'false' || value === 'null') {
+      tokens.push({ text: value, color: JSON_SYNTAX_COLORS.keyword });
+    } else {
+      tokens.push({ text: value, color: JSON_SYNTAX_COLORS.number });
+    }
+    lastIndex = index + value.length;
+  }
+  if (lastIndex < text.length) tokens.push({ text: text.slice(lastIndex) });
+  return tokens;
+}
+
+/** Renders `JSON.stringify(...)` output with IDE-like syntax colors, memoized per exact text so re-renders while idle (e.g. the drag-position `MouseMove` handler) don't re-tokenize on every frame. */
+function HighlightedJson({ text }: { text: string }) {
+  const tokens = useMemo(() => tokenizeJson(text), [text]);
+  return (
+    <>
+      {tokens.map((token, i) => (token.color ? <span key={i} style={{ color: token.color }}>{token.text}</span> : token.text))}
+    </>
+  );
+}
+
+/** Extracts `.id` from a parsed JSON value as a string, or `undefined` if it's not a plain object with one. */
+function recordId(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const id = (value as Record<string, unknown>).id;
+  return id === undefined ? undefined : String(id);
+}
+
 function DataWindow({
   win,
   zIndex,
@@ -401,6 +473,7 @@ function DataWindow({
   onClose,
   onFetchRecords,
   onResetEntity,
+  onUpdateRecord,
 }: {
   win: WindowState;
   zIndex: number;
@@ -408,16 +481,29 @@ function DataWindow({
   onClose: () => void;
   onFetchRecords: (entity: string) => Promise<unknown[]>;
   onResetEntity: (entity: string) => Promise<unknown[]>;
+  onUpdateRecord: (entity: string, id: string, patch: Record<string, unknown>) => Promise<unknown>;
 }) {
   const [pos, setPos] = useState({ x: win.x, y: win.y });
   const [records, setRecords] = useState<unknown[] | null>(null);
+  const [editText, setEditText] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
   const loadedRef = useRef(false);
+  const highlightRef = useRef<HTMLPreElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   if (!loadedRef.current) {
     loadedRef.current = true;
     void onFetchRecords(win.entity).then(setRecords);
   }
+
+  // Focuses the textarea the moment it mounts, so the pencil-icon click both
+  // enters edit mode and puts the caret somewhere useful in one action.
+  const editing = editText !== null;
+  useEffect(() => {
+    if (editing) textareaRef.current?.focus();
+  }, [editing]);
 
   function onPointerDown(e: React.PointerEvent) {
     onFocus();
@@ -437,6 +523,58 @@ function DataWindow({
     setRecords(fresh);
   }
 
+  function startEdit() {
+    setEditText(JSON.stringify(records, null, 2));
+    setError(null);
+  }
+
+  function cancelEdit() {
+    setEditText(null);
+    setError(null);
+  }
+
+  /**
+   * Diffs the edited JSON against the last-loaded `records` by `.id`, and
+   * `PATCH`es only the records that actually changed. Records with no
+   * matching `id` in the original set (added or renamed by hand in the
+   * textarea) are silently skipped: this editor edits existing records in
+   * place, it doesn't support creating/deleting through the JSON view.
+   */
+  async function saveEdit() {
+    if (editText === null) return;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(editText);
+    } catch {
+      setError('Invalid JSON.');
+      return;
+    }
+    if (!Array.isArray(parsed)) {
+      setError('Must be a JSON array of records.');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      const originalById = new Map((records ?? []).map((r) => [recordId(r), r]));
+      for (const record of parsed) {
+        const id = recordId(record);
+        if (id === undefined) continue;
+        const original = originalById.get(id);
+        if (original === undefined) continue;
+        if (JSON.stringify(original) === JSON.stringify(record)) continue;
+        await onUpdateRecord(win.entity, id, record as Record<string, unknown>);
+      }
+      setRecords(await onFetchRecords(win.entity));
+      setEditText(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div
       onMouseDown={onFocus}
@@ -450,6 +588,14 @@ function DataWindow({
         flexDirection: 'column',
         width: 620,
         maxWidth: '92vw',
+        // A fixed height (not "shrink/grow to fit content") is deliberate:
+        // a `<textarea>` doesn't naturally size itself to its value the way
+        // a `<pre>` sizes to its text, so switching between the read-only
+        // viewer and the editor with a content-driven height collapsed the
+        // whole window down to just its header. Fixed height sidesteps that
+        // class of bug entirely and keeps the window the same size in both
+        // modes; there's no resize handle on this window anyway.
+        height: 420,
         maxHeight: '80vh',
         border: `1px solid ${BORDER}`,
         borderRadius: 12,
@@ -462,31 +608,176 @@ function DataWindow({
       <PanelHeader
         title={win.entity}
         icon="dir"
-        onReset={() => void handleReset()}
+        extraActions={
+          editing ? (
+            <>
+              <IconButton onClick={cancelEdit} title={`Cancel editing ${win.entity}`}>
+                <CrossIcon />
+              </IconButton>
+              <IconButton onClick={() => void saveEdit()} title={`Save ${win.entity} changes`}>
+                <CheckIcon />
+              </IconButton>
+            </>
+          ) : (
+            <IconButton onClick={startEdit} title={`Edit ${win.entity} records`}>
+              <EditIcon />
+            </IconButton>
+          )
+        }
+        onReset={editing || records === null ? undefined : () => void handleReset()}
         resetLabel={`Reset ${win.entity}`}
         onClose={onClose}
         closeLabel={`Close ${win.entity} window`}
         drag={{ onPointerDown, onPointerMove, onPointerUp }}
       />
-      <pre
-        style={{
-          margin: 0,
-          width: '100%',
-          flex: '1 1 auto',
-          overflow: 'auto',
-          padding: 16,
-          boxSizing: 'border-box',
-          fontFamily: FONT_CODE,
-          fontSize: 14,
-          lineHeight: '20px',
-          fontWeight: 700,
-          color: TEXT,
-          background: '#fff',
-        }}
-      >
-        {records === null ? 'loading…' : JSON.stringify(records, null, 2)}
-      </pre>
+      <div style={{ position: 'relative', width: '100%', flex: '1 1 auto', minHeight: 0, overflow: 'hidden' }}>
+        {editing ? (
+          <>
+            {/* Purely visual: sits behind the textarea, mirrors its exact box model/font metrics so the
+                colored text lines up with the transparent-but-caret-visible textarea on top of it. */}
+            <pre
+              ref={highlightRef}
+              aria-hidden="true"
+              style={{
+                margin: 0,
+                position: 'absolute',
+                inset: 0,
+                padding: 16,
+                boxSizing: 'border-box',
+                fontFamily: FONT_CODE,
+                fontSize: 14,
+                lineHeight: '20px',
+                fontWeight: 700,
+                color: TEXT,
+                background: '#fff',
+                overflow: 'auto',
+                whiteSpace: 'pre',
+                pointerEvents: 'none',
+              }}
+            >
+              <HighlightedJson text={editText} />
+            </pre>
+            <textarea
+              ref={textareaRef}
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              onScroll={(e) => {
+                if (highlightRef.current) {
+                  highlightRef.current.scrollTop = e.currentTarget.scrollTop;
+                  highlightRef.current.scrollLeft = e.currentTarget.scrollLeft;
+                }
+              }}
+              disabled={saving}
+              spellCheck={false}
+              wrap="off"
+              aria-label={`Edit ${win.entity} records as JSON`}
+              style={{
+                margin: 0,
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                padding: 16,
+                boxSizing: 'border-box',
+                fontFamily: FONT_CODE,
+                fontSize: 14,
+                lineHeight: '20px',
+                fontWeight: 700,
+                color: 'transparent',
+                caretColor: TEXT,
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                resize: 'none',
+                whiteSpace: 'pre',
+                overflow: 'auto',
+              }}
+            />
+          </>
+        ) : (
+          <pre
+            style={{
+              margin: 0,
+              position: 'absolute',
+              inset: 0,
+              padding: 16,
+              boxSizing: 'border-box',
+              fontFamily: FONT_CODE,
+              fontSize: 14,
+              lineHeight: '20px',
+              fontWeight: 700,
+              color: TEXT,
+              background: '#fff',
+              overflow: 'auto',
+            }}
+          >
+            {records === null ? 'loading…' : <HighlightedJson text={JSON.stringify(records, null, 2)} />}
+          </pre>
+        )}
+      </div>
+      {error && (
+        <div
+          style={{
+            padding: '8px 16px',
+            fontFamily: FONT_UI,
+            fontSize: 12,
+            fontWeight: 600,
+            color: '#c0392b',
+            borderTop: `1px solid ${BORDER}`,
+            flex: 'none',
+          }}
+        >
+          {error}
+        </div>
+      )}
     </div>
+  );
+}
+
+const METHOD_COLORS: Record<string, string> = {
+  GET: '#0451a5',
+  POST: '#098658',
+  PUT: '#a06600',
+  PATCH: '#a06600',
+  DELETE: '#c0392b',
+};
+
+/** One row in the "Requests" view: method, path, status (colored by 2xx/4xx/5xx), duration, and wall-clock time. */
+function RequestRow({ entry }: { entry: RequestLogEntry }) {
+  const statusColor = entry.status >= 500 ? '#c0392b' : entry.status >= 400 ? '#a06600' : '#1d9e4b';
+  return (
+    <Row hoverable={false}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, width: '100%' }}>
+        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
+          <span
+            style={{
+              ...rowLabelStyle,
+              color: METHOD_COLORS[entry.method] ?? TEXT,
+              flex: 'none',
+            }}
+          >
+            {entry.method}
+          </span>
+          <span
+            style={{
+              ...rowLabelStyle,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              flex: '1 1 auto',
+              minWidth: 0,
+            }}
+            title={entry.path}
+          >
+            {entry.path}
+          </span>
+          <span style={{ ...rowLabelStyle, color: statusColor, flex: 'none' }}>{entry.status}</span>
+        </div>
+        <span style={{ ...fadedStyle, fontSize: 11 }}>
+          {entry.durationMs}ms · {new Date(entry.timestamp).toLocaleTimeString()}
+        </span>
+      </div>
+    </Row>
   );
 }
 
@@ -497,18 +788,45 @@ export function DevtoolsPanel({
   onRuntimeChange,
   onFetchRecords,
   onResetEntity,
+  onUpdateRecord,
+  onFetchRequestLog,
+  onClearRequestLog,
   onOpen,
   mockNetwork,
   bypass,
 }: DevtoolsPanelProps) {
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<'main' | 'list'>('main');
+  const [view, setView] = useState<'main' | 'list' | 'requests'>('main');
   const [windows, setWindows] = useState<WindowState[]>([]);
   const [order, setOrder] = useState<string[]>([]);
+  const [requests, setRequests] = useState<RequestLogEntry[]>([]);
 
   function openPanel() {
     setOpen(true);
     onOpen?.();
+  }
+
+  // Polls the request log at 1s while the "Requests" view is open, since
+  // (unlike the entity list, which only changes on user action) new requests
+  // can arrive continuously from whatever the app under test is doing.
+  useEffect(() => {
+    if (view !== 'requests') return;
+    let cancelled = false;
+    async function poll() {
+      const list = await onFetchRequestLog();
+      if (!cancelled) setRequests(list);
+    }
+    void poll();
+    const interval = setInterval(() => void poll(), 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [view, onFetchRequestLog]);
+
+  async function clearRequests() {
+    await onClearRequestLog?.();
+    setRequests(await onFetchRequestLog());
   }
 
   function focusWindow(id: string) {
@@ -577,6 +895,15 @@ export function DevtoolsPanel({
                 </Row>
               </button>
 
+              <button type="button" onClick={() => setView('requests')} style={unstyledButton}>
+                <Row hoverable>
+                  <span style={rowLabelStyle}>Requests</span>
+                  <span style={{ display: 'flex' }}>
+                    <ChevronIcon />
+                  </span>
+                </Row>
+              </button>
+
               {mockNetwork && (
                 <Row>
                   <span style={rowLabelStyle}>Mock network</span>
@@ -619,7 +946,7 @@ export function DevtoolsPanel({
                 />
               </Row>
             </>
-          ) : (
+          ) : view === 'list' ? (
             <>
               <PanelHeader
                 title="Mock Data"
@@ -695,6 +1022,26 @@ export function DevtoolsPanel({
                 />
               </div>
             </>
+          ) : (
+            <>
+              <PanelHeader
+                title="Requests"
+                icon="dir"
+                onBack={() => setView('main')}
+                backLabel="Back to settings"
+                onReset={onClearRequestLog ? () => void clearRequests() : undefined}
+                resetLabel="Clear request log"
+              />
+              <div style={{ maxHeight: 269, overflowY: 'auto' }}>
+                {requests.length === 0 ? (
+                  <Row hoverable={false}>
+                    <span style={fadedStyle}>No requests yet.</span>
+                  </Row>
+                ) : (
+                  requests.map((entry, i) => <RequestRow key={`${entry.timestamp}-${i}`} entry={entry} />)
+                )}
+              </div>
+            </>
           )}
         </div>
       )}
@@ -708,6 +1055,7 @@ export function DevtoolsPanel({
           onClose={() => closeWindow(win.id)}
           onFetchRecords={onFetchRecords}
           onResetEntity={onResetEntity}
+          onUpdateRecord={onUpdateRecord}
         />
       ))}
     </>

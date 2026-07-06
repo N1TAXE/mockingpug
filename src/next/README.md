@@ -125,6 +125,20 @@ explicitly if `mock.config.js` sets a different one. It gives you:
   opens its stored records in a separate floating window, draggable by its
   header, with its own reset button (wipes and regenerates just that
   entity). Multiple entities' windows can be open at once.
+- That window's JSON view is editable: the pencil icon turns it into a
+  textarea, the checkmark saves. Saved edits go through
+  `PUT {baseUrl}/__mockingpug/records/:entity/:id` — the same merge
+  `updateRecord()` a real `PUT`/`PATCH` uses, bypassing
+  `runtime.errorRate`/`delay` (this is a devtools action on the data, not
+  a request your app is making). Only existing records can be edited this
+  way (matched by `.id`); adding/removing array entries in the textarea has
+  no effect.
+- A "Requests" view listing the last 50 requests the mock actually
+  answered (method, path, status, duration, time), via
+  `GET {baseUrl}/__mockingpug/requests`, polled once a second while open.
+  `POST {baseUrl}/__mockingpug/requests/clear` empties it. The devtools
+  sub-API's own calls are never logged.
+
 There's no "mock network" toggle or per-entity `bypass` checkbox built
 into this panel: both are React/MSW-specific concepts that don't apply to
 a Route Handler, which *is* the real server. Use the `rewrites()` recipe

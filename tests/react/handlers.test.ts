@@ -353,4 +353,33 @@ describe('createMockHandlers : end-to-end over msw/node + real fetch', () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it('records an answered request into ctx.requestLog, most-recent-first', async () => {
+    const { RequestLog } = await import('../../src/query/index.js');
+    const ctx = await makeContext(3, 0);
+    ctx.requestLog = new RequestLog();
+    server = setupServer(...createMockHandlers(ctx, '/api'));
+    server.listen({ onUnhandledRequest: 'error' });
+
+    await fetch('http://localhost:3000/api/user?page=1');
+    await fetch('http://localhost:3000/api/user/999'); // 404
+
+    const entries = ctx.requestLog.list();
+    expect(entries).toHaveLength(2);
+    // Most recent first: the 404 for /user/999 was the second call.
+    expect(entries[0]).toMatchObject({ method: 'GET', path: '/api/user/999', status: 404 });
+    expect(entries[1]).toMatchObject({ method: 'GET', path: '/api/user?page=1', status: 200 });
+    expect(entries[0]!.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('does not log a bypassed (passthrough) request', async () => {
+    const { RequestLog } = await import('../../src/query/index.js');
+    const ctx = await makeContext(1, 0);
+    ctx.requestLog = new RequestLog();
+    ctx.schemas.user!.bypass = true;
+    const handlers = createMockHandlers(ctx, '/api');
+
+    await resolveAgainstHandlers(handlers, new Request('http://localhost:3000/api/user'));
+    expect(ctx.requestLog.list()).toHaveLength(0);
+  });
 });

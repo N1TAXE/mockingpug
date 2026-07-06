@@ -7,6 +7,7 @@ import {
   jsonResponse,
   listRecords,
   readJsonBody,
+  recordRequest,
   simulateRuntime,
   updateRecord,
   type QueryContext,
@@ -49,14 +50,26 @@ function notFound(): Response {
  */
 export function createNextHandlers(ctx: QueryContext): NextRouteHandlers {
   async function update(request: Request, routeCtx: NextRouteContext): Promise<Response> {
-    const [entity, id] = await resolveSegments(routeCtx);
+    const segments = await resolveSegments(routeCtx);
+    if (segments[0] === DEVTOOLS_SEGMENT) {
+      try {
+        return await handleDevtoolsRequest(segments.slice(1), request.method, request, ctx);
+      } catch (error) {
+        return errorResponse(error);
+      }
+    }
+    const [entity, id] = segments;
     if (!entity || id === undefined) return notFound();
+    const startedAt = Date.now();
+    let response: Response;
     try {
       await simulateRuntime(ctx.runtime);
-      return jsonResponse(await updateRecord(entity, id, await readJsonBody(request), ctx));
+      response = jsonResponse(await updateRecord(entity, id, await readJsonBody(request), ctx));
     } catch (error) {
-      return errorResponse(error);
+      response = errorResponse(error);
     }
+    recordRequest(ctx, request, response.status, startedAt);
+    return response;
   }
 
   return {
@@ -71,17 +84,22 @@ export function createNextHandlers(ctx: QueryContext): NextRouteHandlers {
       }
       const [entity, id] = segments;
       if (!entity) return notFound();
+      const startedAt = Date.now();
+      let response: Response;
       try {
         await simulateRuntime(ctx.runtime);
         if (id !== undefined) {
-          return jsonResponse(await getRecordById(entity, id, ctx));
+          response = jsonResponse(await getRecordById(entity, id, ctx));
+        } else {
+          const url = new URL(request.url);
+          const { data, meta } = await listRecords(entity, url.searchParams, ctx);
+          response = buildListResponse(data, meta, ctx.pagination.strategy !== false && ctx.pagination.envelope);
         }
-        const url = new URL(request.url);
-        const { data, meta } = await listRecords(entity, url.searchParams, ctx);
-        return buildListResponse(data, meta, ctx.pagination.strategy !== false && ctx.pagination.envelope);
       } catch (error) {
-        return errorResponse(error);
+        response = errorResponse(error);
       }
+      recordRequest(ctx, request, response.status, startedAt);
+      return response;
     },
 
     async POST(request, routeCtx) {
@@ -95,28 +113,44 @@ export function createNextHandlers(ctx: QueryContext): NextRouteHandlers {
       }
       const [entity] = segments;
       if (!entity) return notFound();
+      const startedAt = Date.now();
+      let response: Response;
       try {
         await simulateRuntime(ctx.runtime);
         const created = await createRecord(entity, await readJsonBody(request), ctx);
-        return jsonResponse(created, { status: 201 });
+        response = jsonResponse(created, { status: 201 });
       } catch (error) {
-        return errorResponse(error);
+        response = errorResponse(error);
       }
+      recordRequest(ctx, request, response.status, startedAt);
+      return response;
     },
 
     PUT: update,
     PATCH: update,
 
-    async DELETE(_request, routeCtx) {
-      const [entity, id] = await resolveSegments(routeCtx);
+    async DELETE(request, routeCtx) {
+      const segments = await resolveSegments(routeCtx);
+      if (segments[0] === DEVTOOLS_SEGMENT) {
+        try {
+          return await handleDevtoolsRequest(segments.slice(1), 'DELETE', request, ctx);
+        } catch (error) {
+          return errorResponse(error);
+        }
+      }
+      const [entity, id] = segments;
       if (!entity || id === undefined) return notFound();
+      const startedAt = Date.now();
+      let response: Response;
       try {
         await simulateRuntime(ctx.runtime);
         await deleteRecord(entity, id, ctx);
-        return new Response(null, { status: 204 });
+        response = new Response(null, { status: 204 });
       } catch (error) {
-        return errorResponse(error);
+        response = errorResponse(error);
       }
+      recordRequest(ctx, request, response.status, startedAt);
+      return response;
     },
   };
 }

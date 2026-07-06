@@ -185,4 +185,37 @@ describe('createNextHandlers', () => {
     expect(res.status).toBe(200);
     expect(Date.now() - start).toBeGreaterThanOrEqual(55);
   });
+
+  it('records answered requests into ctx.requestLog, most-recent-first', async () => {
+    const { RequestLog } = await import('../../src/query/index.js');
+    const ctx = await makeContext(2, 0);
+    ctx.requestLog = new RequestLog();
+    const handlers = createNextHandlers(ctx);
+
+    await handlers.GET(new Request('http://localhost/api/user?page=1'), plainParams(['user']));
+    await handlers.GET(new Request('http://localhost/api/user/999'), plainParams(['user', '999']));
+
+    const entries = ctx.requestLog.list();
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toMatchObject({ method: 'GET', path: '/api/user/999', status: 404 });
+    expect(entries[1]).toMatchObject({ method: 'GET', path: '/api/user?page=1', status: 200 });
+  });
+
+  it('records POST/PUT/DELETE requests too, but never the devtools sub-API itself', async () => {
+    const { RequestLog } = await import('../../src/query/index.js');
+    const ctx = await makeContext(1, 0);
+    ctx.requestLog = new RequestLog();
+    const handlers = createNextHandlers(ctx);
+
+    await handlers.POST(new Request('http://localhost/api/user', { method: 'POST', body: '{}' }), plainParams(['user']));
+    await handlers.PUT(
+      new Request('http://localhost/api/user/1', { method: 'PUT', body: '{}' }),
+      plainParams(['user', '1']),
+    );
+    await handlers.DELETE(new Request('http://localhost/api/user/1', { method: 'DELETE' }), plainParams(['user', '1']));
+    await handlers.GET(new Request('http://localhost/api/__mockingpug'), plainParams(['__mockingpug']));
+
+    const methods = ctx.requestLog.list().map((e) => e.method);
+    expect(methods).toEqual(['DELETE', 'PUT', 'POST']);
+  });
 });
