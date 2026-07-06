@@ -8,7 +8,7 @@ import {
   listRecords,
   readJsonBody,
   recordRequest,
-  simulateRuntime,
+  simulateRuntimeForEntity,
   updateRecord,
   type QueryContext,
 } from '../query/index.js';
@@ -63,7 +63,7 @@ export function createNextHandlers(ctx: QueryContext): NextRouteHandlers {
     const startedAt = Date.now();
     let response: Response;
     try {
-      await simulateRuntime(ctx.runtime);
+      await simulateRuntimeForEntity(ctx, entity);
       response = jsonResponse(await updateRecord(entity, id, await readJsonBody(request), ctx));
     } catch (error) {
       response = errorResponse(error);
@@ -87,7 +87,7 @@ export function createNextHandlers(ctx: QueryContext): NextRouteHandlers {
       const startedAt = Date.now();
       let response: Response;
       try {
-        await simulateRuntime(ctx.runtime);
+        await simulateRuntimeForEntity(ctx, entity);
         if (id !== undefined) {
           response = jsonResponse(await getRecordById(entity, id, ctx));
         } else {
@@ -116,7 +116,7 @@ export function createNextHandlers(ctx: QueryContext): NextRouteHandlers {
       const startedAt = Date.now();
       let response: Response;
       try {
-        await simulateRuntime(ctx.runtime);
+        await simulateRuntimeForEntity(ctx, entity);
         const created = await createRecord(entity, await readJsonBody(request), ctx);
         response = jsonResponse(created, { status: 201 });
       } catch (error) {
@@ -143,7 +143,7 @@ export function createNextHandlers(ctx: QueryContext): NextRouteHandlers {
       const startedAt = Date.now();
       let response: Response;
       try {
-        await simulateRuntime(ctx.runtime);
+        await simulateRuntimeForEntity(ctx, entity);
         await deleteRecord(entity, id, ctx);
         response = new Response(null, { status: 204 });
       } catch (error) {

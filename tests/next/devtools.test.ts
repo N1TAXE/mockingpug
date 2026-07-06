@@ -199,4 +199,62 @@ describe('devtools sub-API (`{baseUrl}/__mockingpug/*`)', () => {
     expect(res.status).toBe(200);
     expect(ctx.requestLog.list()).toHaveLength(0);
   });
+
+  it('GET __mockingpug/override/:entity returns {} when nothing is armed', async () => {
+    const ctx = await makeContext(1);
+    const handlers = createNextHandlers(ctx);
+    const res = await handlers.GET(
+      new Request('http://localhost/api/__mockingpug/override/user'),
+      plainParams(['__mockingpug', 'override', 'user']),
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { override: unknown }).toEqual({ override: {} });
+  });
+
+  it('POST __mockingpug/override/:entity arms the override, visible to a later GET peek and to real requests', async () => {
+    const { OneShotOverrides } = await import('../../src/query/index.js');
+    const ctx = await makeContext(1);
+    ctx.oneShotOverrides = new OneShotOverrides();
+    const handlers = createNextHandlers(ctx);
+
+    const postRes = await handlers.POST(
+      new Request('http://localhost/api/__mockingpug/override/user', {
+        method: 'POST',
+        body: JSON.stringify({ failNext: true }),
+      }),
+      plainParams(['__mockingpug', 'override', 'user']),
+    );
+    expect(postRes.status).toBe(200);
+    expect((await postRes.json()) as { override: unknown }).toEqual({ override: { failNext: true } });
+
+    const peekRes = await handlers.GET(
+      new Request('http://localhost/api/__mockingpug/override/user'),
+      plainParams(['__mockingpug', 'override', 'user']),
+    );
+    expect((await peekRes.json()) as { override: unknown }).toEqual({ override: { failNext: true } });
+
+    const userRes = await handlers.GET(new Request('http://localhost/api/user'), plainParams(['user']));
+    expect(userRes.status).toBe(500);
+  });
+
+  it('devtools override calls are never written to ctx.requestLog', async () => {
+    const { RequestLog } = await import('../../src/query/index.js');
+    const ctx = await makeContext(1);
+    ctx.requestLog = new RequestLog();
+    const handlers = createNextHandlers(ctx);
+
+    await handlers.GET(
+      new Request('http://localhost/api/__mockingpug/override/user'),
+      plainParams(['__mockingpug', 'override', 'user']),
+    );
+    await handlers.POST(
+      new Request('http://localhost/api/__mockingpug/override/user', {
+        method: 'POST',
+        body: JSON.stringify({ delayNext: 0 }),
+      }),
+      plainParams(['__mockingpug', 'override', 'user']),
+    );
+
+    expect(ctx.requestLog.list()).toHaveLength(0);
+  });
 });

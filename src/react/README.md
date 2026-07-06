@@ -218,9 +218,13 @@ reads/writes: mock/off toggle, live `runtime.delay`/`runtime.errorRate`
 editing, a per-entity record viewer (editable — the pencil icon turns the
 JSON view into a textarea, saved edits go through the same merge
 `PUT`/`PATCH` already uses) with a reset button, per-entity bypass
-checkboxes, and a "Requests" view listing the last 50 requests the mock
-actually answered (method, path, status, duration, time) so you don't have
-to switch to the Network tab to see whether a `fetch()` reached the mock:
+checkboxes, a "Fail next request"/"Delay next" one-shot override per entity
+(arms a single fail-or-delay for that entity's very next request, then
+disarms itself, so you can test one error/loading state on demand without
+touching `runtime.errorRate`/`delay` globally), and a "Requests" view
+listing the last 50 requests the mock actually answered (method, path,
+status, duration, time) so you don't have to switch to the Network tab to
+see whether a `fetch()` reached the mock:
 
 ```tsx
 // src/mocks/browser.tsx

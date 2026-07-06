@@ -382,4 +382,50 @@ describe('createMockHandlers : end-to-end over msw/node + real fetch', () => {
     await resolveAgainstHandlers(handlers, new Request('http://localhost:3000/api/user'));
     expect(ctx.requestLog.list()).toHaveLength(0);
   });
+
+  it('a "fail next" one-shot override forces a 500 on the very next request, then falls back to normal', async () => {
+    const { OneShotOverrides } = await import('../../src/query/index.js');
+    const ctx = await makeContext(3, 0);
+    ctx.oneShotOverrides = new OneShotOverrides();
+    ctx.oneShotOverrides.set('user', { failNext: true });
+    server = setupServer(...createMockHandlers(ctx, '/api'));
+    server.listen({ onUnhandledRequest: 'error' });
+
+    const first = await fetch('http://localhost:3000/api/user');
+    expect(first.status).toBe(500);
+
+    const second = await fetch('http://localhost:3000/api/user');
+    expect(second.status).toBe(200);
+  });
+
+  it('a "delay next" one-shot override delays only the next request for the armed entity', async () => {
+    const { OneShotOverrides } = await import('../../src/query/index.js');
+    const ctx = await makeContext(3, 0);
+    ctx.oneShotOverrides = new OneShotOverrides();
+    ctx.oneShotOverrides.set('user', { delayNext: 30 });
+    server = setupServer(...createMockHandlers(ctx, '/api'));
+    server.listen({ onUnhandledRequest: 'error' });
+
+    const startedAt = Date.now();
+    const res = await fetch('http://localhost:3000/api/user');
+    expect(res.status).toBe(200);
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(25);
+
+    expect(ctx.oneShotOverrides.peek('user')).toBeUndefined();
+  });
+
+  it('a one-shot override on one entity does not affect requests to another entity', async () => {
+    const { OneShotOverrides } = await import('../../src/query/index.js');
+    const ctx = await makeContext(3, 3);
+    ctx.oneShotOverrides = new OneShotOverrides();
+    ctx.oneShotOverrides.set('user', { failNext: true });
+    server = setupServer(...createMockHandlers(ctx, '/api'));
+    server.listen({ onUnhandledRequest: 'error' });
+
+    const blogpostRes = await fetch('http://localhost:3000/api/blogpost');
+    expect(blogpostRes.status).toBe(200);
+
+    const userRes = await fetch('http://localhost:3000/api/user');
+    expect(userRes.status).toBe(500);
+  });
 });

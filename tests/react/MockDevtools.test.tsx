@@ -308,4 +308,33 @@ describe('MockDevtools', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear request log' }));
     await waitFor(() => expect(screen.getByText('No requests yet.')).toBeTruthy());
   });
+
+  it('the "Fail next request" switch arms and disarms a one-shot override for the open entity', async () => {
+    const ctx = await renderDevtools();
+    openPanel();
+    await openList();
+    fireEvent.click(screen.getByRole('button', { name: 'Open user records' }));
+
+    const failSwitch = await screen.findByRole('switch', { name: 'Fail next user request' });
+    await waitFor(() => expect(ctx.oneShotOverrides?.peek('user')).toBeUndefined());
+
+    fireEvent.click(failSwitch);
+    await waitFor(() => expect(ctx.oneShotOverrides?.peek('user')).toMatchObject({ failNext: true }));
+
+    fireEvent.click(failSwitch);
+    await waitFor(() => expect(ctx.oneShotOverrides?.peek('user')).toMatchObject({ failNext: false }));
+  });
+
+  it('"Arm" on "Delay next" sets a one-shot delay override for the open entity', async () => {
+    const ctx = await renderDevtools();
+    openPanel();
+    await openList();
+    fireEvent.click(screen.getByRole('button', { name: 'Open user records' }));
+
+    const delayInput = await screen.findByLabelText('Delay next user request (ms)');
+    fireEvent.change(delayInput, { target: { value: '250' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Arm' }));
+
+    await waitFor(() => expect(ctx.oneShotOverrides?.peek('user')).toMatchObject({ delayNext: 250 }));
+  });
 });

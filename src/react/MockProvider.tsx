@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { RuntimeConfig } from '../cli/mockConfig.js';
-import { DEFAULT_RUNTIME, RequestLog, type QueryContext } from '../query/index.js';
+import { DEFAULT_RUNTIME, OneShotOverrides, RequestLog, type QueryContext } from '../query/index.js';
 import { bypass as bypassEntity, isRuntimeBypassed, unbypass as unbypassEntity } from './bypassState.js';
 
 export type MockMode = 'mock' | 'off';
@@ -73,6 +73,13 @@ export function MockProvider({
   if (!requestLogRef.current) {
     requestLogRef.current = ctx.requestLog ?? new RequestLog();
     ctx.requestLog = requestLogRef.current;
+  }
+
+  // Same synchronous ref-guard as above, for the one-shot per-entity fail/delay overrides.
+  const oneShotOverridesRef = useRef<OneShotOverrides | null>(null);
+  if (!oneShotOverridesRef.current) {
+    oneShotOverridesRef.current = ctx.oneShotOverrides ?? new OneShotOverrides();
+    ctx.oneShotOverrides = oneShotOverridesRef.current;
   }
 
   useEffect(() => {

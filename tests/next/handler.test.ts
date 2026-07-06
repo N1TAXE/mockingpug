@@ -218,4 +218,47 @@ describe('createNextHandlers', () => {
     const methods = ctx.requestLog.list().map((e) => e.method);
     expect(methods).toEqual(['DELETE', 'PUT', 'POST']);
   });
+
+  it('a "fail next" one-shot override forces a 500 on the very next request, then falls back to normal', async () => {
+    const { OneShotOverrides } = await import('../../src/query/index.js');
+    const ctx = await makeContext(3, 0);
+    ctx.oneShotOverrides = new OneShotOverrides();
+    ctx.oneShotOverrides.set('user', { failNext: true });
+    const handlers = createNextHandlers(ctx);
+
+    const first = await handlers.GET(new Request('http://localhost/api/user'), plainParams(['user']));
+    expect(first.status).toBe(500);
+
+    const second = await handlers.GET(new Request('http://localhost/api/user'), plainParams(['user']));
+    expect(second.status).toBe(200);
+  });
+
+  it('a "delay next" one-shot override delays only the next request and is then consumed', async () => {
+    const { OneShotOverrides } = await import('../../src/query/index.js');
+    const ctx = await makeContext(3, 0);
+    ctx.oneShotOverrides = new OneShotOverrides();
+    ctx.oneShotOverrides.set('user', { delayNext: 30 });
+    const handlers = createNextHandlers(ctx);
+
+    const start = Date.now();
+    const res = await handlers.GET(new Request('http://localhost/api/user'), plainParams(['user']));
+    expect(res.status).toBe(200);
+    expect(Date.now() - start).toBeGreaterThanOrEqual(25);
+
+    expect(ctx.oneShotOverrides.peek('user')).toBeUndefined();
+  });
+
+  it('a one-shot override on one entity does not affect requests to another entity', async () => {
+    const { OneShotOverrides } = await import('../../src/query/index.js');
+    const ctx = await makeContext(3, 3);
+    ctx.oneShotOverrides = new OneShotOverrides();
+    ctx.oneShotOverrides.set('user', { failNext: true });
+    const handlers = createNextHandlers(ctx);
+
+    const blogpostRes = await handlers.GET(new Request('http://localhost/api/blogpost'), plainParams(['blogpost']));
+    expect(blogpostRes.status).toBe(200);
+
+    const userRes = await handlers.GET(new Request('http://localhost/api/user'), plainParams(['user']));
+    expect(userRes.status).toBe(500);
+  });
 });

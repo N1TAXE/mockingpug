@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { RequestLogEntry } from '../query/index.js';
+import type { OneShotOverrideEntry, RequestLogEntry } from '../query/index.js';
 import { DevtoolsPanel } from '../shared/devtoolsUI.js';
 import { DEVTOOLS_SEGMENT } from './devtoolsPath.js';
 
@@ -93,6 +93,20 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
     await fetch(`${apiBase}/requests/clear`, { method: 'POST' });
   }
 
+  async function armOneShotOverride(entity: string, patch: OneShotOverrideEntry): Promise<void> {
+    await fetch(`${apiBase}/override/${entity}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+  }
+
+  async function peekOneShotOverride(entity: string): Promise<OneShotOverrideEntry | undefined> {
+    const res = await fetch(`${apiBase}/override/${entity}`);
+    const { override } = (await res.json()) as { override: OneShotOverrideEntry };
+    return override;
+  }
+
   return (
     <DevtoolsPanel
       title="mockingpug (next)"
@@ -104,6 +118,8 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
       onUpdateRecord={updateRecord}
       onFetchRequestLog={fetchRequestLog}
       onClearRequestLog={clearRequestLog}
+      onArmOneShotOverride={armOneShotOverride}
+      onPeekOneShotOverride={peekOneShotOverride}
       onOpen={() => void refresh()}
     />
   );

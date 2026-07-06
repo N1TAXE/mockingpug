@@ -1,5 +1,5 @@
 import { generateAll } from '../generator/index.js';
-import { jsonResponse, readJsonBody, updateRecord, type QueryContext } from '../query/index.js';
+import { jsonResponse, readJsonBody, updateRecord, type OneShotOverrideEntry, type QueryContext } from '../query/index.js';
 import { DEVTOOLS_SEGMENT } from './devtoolsPath.js';
 
 export { DEVTOOLS_SEGMENT };
@@ -79,6 +79,19 @@ export async function handleDevtoolsRequest(
   if (action === 'requests' && entity === 'clear' && method === 'POST') {
     ctx.requestLog?.clear();
     return jsonResponse({ requests: [] });
+  }
+
+  // Arms a one-shot fail/delay override for `entity`'s very next request
+  // (see `src/query/oneShotOverride.ts`); reading it back doesn't consume it,
+  // only an actual request through `simulateRuntimeForEntity()` does.
+  if (action === 'override' && entity && method === 'GET') {
+    return jsonResponse({ override: ctx.oneShotOverrides?.peek(entity) ?? {} });
+  }
+
+  if (action === 'override' && entity && method === 'POST') {
+    const body = (await readJsonBody(request)) as OneShotOverrideEntry;
+    ctx.oneShotOverrides?.set(entity, body);
+    return jsonResponse({ override: ctx.oneShotOverrides?.peek(entity) ?? {} });
   }
 
   return jsonResponse({ error: { message: 'not found' } }, { status: 404 });

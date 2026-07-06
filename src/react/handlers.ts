@@ -9,7 +9,7 @@ import {
   listRecords,
   readJsonBody,
   recordRequest,
-  simulateRuntime,
+  simulateRuntimeForEntity,
   updateRecord,
   type QueryContext,
 } from '../query/index.js';
@@ -47,7 +47,7 @@ export function createMockHandlers(ctx: QueryContext, baseUrl: string): RequestH
         const startedAt = Date.now();
         let response: Response;
         try {
-          await simulateRuntime(ctx.runtime);
+          await simulateRuntimeForEntity(ctx, entity);
           const url = new URL(request.url);
           const { data, meta } = await listRecords(entity, url.searchParams, ctx);
           response = buildListResponse(data, meta, ctx.pagination.strategy !== false && ctx.pagination.envelope);
@@ -65,7 +65,7 @@ export function createMockHandlers(ctx: QueryContext, baseUrl: string): RequestH
         const startedAt = Date.now();
         let response: Response;
         try {
-          await simulateRuntime(ctx.runtime);
+          await simulateRuntimeForEntity(ctx, entity);
           response = jsonResponse(await getRecordById(entity, String(params.id), ctx));
         } catch (error) {
           response = errorResponse(error);
@@ -81,7 +81,7 @@ export function createMockHandlers(ctx: QueryContext, baseUrl: string): RequestH
         const startedAt = Date.now();
         let response: Response;
         try {
-          await simulateRuntime(ctx.runtime);
+          await simulateRuntimeForEntity(ctx, entity);
           const created = await createRecord(entity, await readJsonBody(request), ctx);
           response = jsonResponse(created, { status: 201 });
         } catch (error) {
@@ -99,7 +99,7 @@ export function createMockHandlers(ctx: QueryContext, baseUrl: string): RequestH
           const startedAt = Date.now();
           let response: Response;
           try {
-            await simulateRuntime(ctx.runtime);
+            await simulateRuntimeForEntity(ctx, entity);
             const updated = await updateRecord(entity, String(params.id), await readJsonBody(request), ctx);
             response = jsonResponse(updated);
           } catch (error) {
@@ -117,7 +117,7 @@ export function createMockHandlers(ctx: QueryContext, baseUrl: string): RequestH
         const startedAt = Date.now();
         let response: Response;
         try {
-          await simulateRuntime(ctx.runtime);
+          await simulateRuntimeForEntity(ctx, entity);
           await deleteRecord(entity, String(params.id), ctx);
           response = new Response(null, { status: 204 });
         } catch (error) {

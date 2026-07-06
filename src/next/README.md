@@ -138,6 +138,11 @@ explicitly if `mock.config.js` sets a different one. It gives you:
   `GET {baseUrl}/__mockingpug/requests`, polled once a second while open.
   `POST {baseUrl}/__mockingpug/requests/clear` empties it. The devtools
   sub-API's own calls are never logged.
+- A "Fail next request"/"Delay next" one-shot override per entity, via
+  `GET`/`POST {baseUrl}/__mockingpug/override/:entity`: arms a single
+  fail-or-delay for that entity's very next request only, then disarms
+  itself, so you can test one error/loading state on demand without
+  touching `runtime.errorRate`/`delay` globally.
 
 There's no "mock network" toggle or per-entity `bypass` checkbox built
 into this panel: both are React/MSW-specific concepts that don't apply to

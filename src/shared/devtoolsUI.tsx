@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import type { RequestLogEntry } from '../query/index.js';
+import type { OneShotOverrideEntry, RequestLogEntry } from '../query/index.js';
 import { BackIcon, CheckIcon, ChevronIcon, CrossIcon, DirIcon, EditIcon, LogoIcon, RefreshIcon } from './devtoolsIcons.js';
 
 const FONT_UI = "'Nunito', system-ui, sans-serif";
@@ -36,6 +36,20 @@ const numberInputStyle: CSSProperties = {
   fontSize: 14,
   color: TEXT,
   padding: 0,
+};
+
+const smallButtonStyle: CSSProperties = {
+  boxSizing: 'border-box',
+  flex: 'none',
+  padding: '4px 10px',
+  fontFamily: FONT_UI,
+  fontWeight: 600,
+  fontSize: 12,
+  color: TEXT,
+  background: '#F6F6F6',
+  border: `1px solid ${BORDER}`,
+  borderRadius: 6,
+  cursor: 'pointer',
 };
 
 /**
@@ -384,6 +398,17 @@ export interface DevtoolsPanelProps {
   onFetchRequestLog: () => Promise<RequestLogEntry[]>;
   /** Clears the request log. Optional: omit to hide the clear button. */
   onClearRequestLog?: () => Promise<void> | void;
+  /**
+   * Arms a one-shot fail/delay override for `entity`'s very next request,
+   * fully replacing `runtime.errorRate`/`delay` for that one request (not
+   * layered on top of them) and consumed the moment it fires. A scalpel
+   * next to the global settings above, which can be too blunt for testing
+   * one specific interaction (see the `errorRate: 1` warning elsewhere in
+   * the docs).
+   */
+  onArmOneShotOverride: (entity: string, patch: OneShotOverrideEntry) => Promise<void> | void;
+  /** Reads the currently-armed override for `entity` without consuming it, so a re-opened `DataWindow` can reflect what's actually armed. */
+  onPeekOneShotOverride: (entity: string) => Promise<OneShotOverrideEntry | undefined>;
   /** Called every time the panel transitions from closed to open, so the caller can refresh `entities`/`runtime`. */
   onOpen?: () => void;
   /** React/MSW-only: worker on/off. Omit entirely for transports (like Next.js) with nothing to intercept. */
@@ -474,6 +499,8 @@ function DataWindow({
   onFetchRecords,
   onResetEntity,
   onUpdateRecord,
+  onArmOneShotOverride,
+  onPeekOneShotOverride,
 }: {
   win: WindowState;
   zIndex: number;
@@ -482,12 +509,16 @@ function DataWindow({
   onFetchRecords: (entity: string) => Promise<unknown[]>;
   onResetEntity: (entity: string) => Promise<unknown[]>;
   onUpdateRecord: (entity: string, id: string, patch: Record<string, unknown>) => Promise<unknown>;
+  onArmOneShotOverride: (entity: string, patch: OneShotOverrideEntry) => Promise<void> | void;
+  onPeekOneShotOverride: (entity: string) => Promise<OneShotOverrideEntry | undefined>;
 }) {
   const [pos, setPos] = useState({ x: win.x, y: win.y });
   const [records, setRecords] = useState<unknown[] | null>(null);
   const [editText, setEditText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [failArmed, setFailArmed] = useState(false);
+  const [delayDraft, setDelayDraft] = useState('');
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
   const loadedRef = useRef(false);
   const highlightRef = useRef<HTMLPreElement>(null);
@@ -496,6 +527,32 @@ function DataWindow({
   if (!loadedRef.current) {
     loadedRef.current = true;
     void onFetchRecords(win.entity).then(setRecords);
+  }
+
+  // Reflects whatever's already armed (e.g. from a previous session with
+  // this same window, or armed some other way) instead of always assuming
+  // "nothing armed" on mount.
+  useEffect(() => {
+    let cancelled = false;
+    void onPeekOneShotOverride(win.entity).then((entry) => {
+      if (!cancelled) setFailArmed(Boolean(entry?.failNext));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [win.entity, onPeekOneShotOverride]);
+
+  async function toggleFailNext() {
+    const next = !failArmed;
+    setFailArmed(next);
+    await onArmOneShotOverride(win.entity, { failNext: next });
+  }
+
+  async function armDelay() {
+    const ms = Number(delayDraft);
+    if (!Number.isFinite(ms) || ms <= 0) return;
+    await onArmOneShotOverride(win.entity, { delayNext: ms });
+    setDelayDraft('');
   }
 
   // Focuses the textarea the moment it mounts, so the pencil-icon click both
@@ -630,6 +687,39 @@ function DataWindow({
         closeLabel={`Close ${win.entity} window`}
         drag={{ onPointerDown, onPointerMove, onPointerUp }}
       />
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 16,
+          padding: '8px 16px',
+          borderBottom: `1px solid ${BORDER}`,
+          flex: 'none',
+        }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Switch small label={`Fail next ${win.entity} request`} checked={failArmed} onChange={() => void toggleFailNext()} />
+          <span style={rowLabelStyle}>Fail next request</span>
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={rowLabelStyle}>Delay next</span>
+          <input
+            type="number"
+            min={0}
+            aria-label={`Delay next ${win.entity} request (ms)`}
+            value={delayDraft}
+            onChange={(e) => setDelayDraft(e.target.value)}
+            className="mp-number-input"
+            style={numberInputStyle}
+          />
+          <span style={fadedStyle}>ms</span>
+          <button type="button" onClick={() => void armDelay()} style={smallButtonStyle}>
+            Arm
+          </button>
+        </span>
+      </div>
       <div style={{ position: 'relative', width: '100%', flex: '1 1 auto', minHeight: 0, overflow: 'hidden' }}>
         {editing ? (
           <>
@@ -791,6 +881,8 @@ export function DevtoolsPanel({
   onUpdateRecord,
   onFetchRequestLog,
   onClearRequestLog,
+  onArmOneShotOverride,
+  onPeekOneShotOverride,
   onOpen,
   mockNetwork,
   bypass,
@@ -1056,6 +1148,8 @@ export function DevtoolsPanel({
           onFetchRecords={onFetchRecords}
           onResetEntity={onResetEntity}
           onUpdateRecord={onUpdateRecord}
+          onArmOneShotOverride={onArmOneShotOverride}
+          onPeekOneShotOverride={onPeekOneShotOverride}
         />
       ))}
     </>

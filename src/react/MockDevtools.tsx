@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { generateAll } from '../generator/index.js';
-import { updateRecord, type RequestLogEntry } from '../query/index.js';
+import { updateRecord, type OneShotOverrideEntry, type RequestLogEntry } from '../query/index.js';
 import { DevtoolsPanel } from '../shared/devtoolsUI.js';
 import { useMockContext } from './MockProvider.js';
 
@@ -50,6 +50,14 @@ export function MockDevtools() {
     ctx.requestLog?.clear();
   }
 
+  async function armOneShotOverride(entity: string, patch: OneShotOverrideEntry): Promise<void> {
+    ctx.oneShotOverrides?.set(entity, patch);
+  }
+
+  async function peekOneShotOverride(entity: string): Promise<OneShotOverrideEntry | undefined> {
+    return ctx.oneShotOverrides?.peek(entity);
+  }
+
   return (
     <DevtoolsPanel
       title="mockingpug"
@@ -61,6 +69,8 @@ export function MockDevtools() {
       onUpdateRecord={updateRecordInPanel}
       onFetchRequestLog={fetchRequestLog}
       onClearRequestLog={clearRequestLog}
+      onArmOneShotOverride={armOneShotOverride}
+      onPeekOneShotOverride={peekOneShotOverride}
       onOpen={() => void refreshCounts()}
       mockNetwork={{ enabled: mode === 'mock', onToggle: (next) => setMode(next ? 'mock' : 'off') }}
       bypass={{

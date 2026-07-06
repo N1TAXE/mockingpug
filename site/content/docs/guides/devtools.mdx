@@ -115,6 +115,19 @@ next to it discards the edit without saving. Only existing records can be
 edited this way (matched by `.id`); adding or removing array entries in the
 textarea has no effect, use `POST`/`DELETE` (or the reset button) for that.
 
+Each entity's record window also has a "Fail next request" switch and a
+"Delay next" input + "Arm" button, right below its header. These arm a
+**one-shot** override for that entity: the very next request to it either
+throws (surfacing as a synthetic 500, same as `runtime.errorRate` would)
+or waits the given number of milliseconds before answering, and then the
+override disarms itself, so a normal `runtime.errorRate`/`delay` (or no
+runtime simulation at all) resumes on the request after that. This is for
+testing a specific error/loading state on demand (e.g. "what does my UI do
+if *this one* save request fails?") without dialing up `errorRate`
+globally and risking it firing on an unrelated request. The switch reflects
+whatever's actually armed on the server (it's read back via a "peek" call
+when the window opens), not just local UI state.
+
 A "Requests" row (next to "Mock Data") shows the last 50 requests the mock
 actually answered — method, path, status, duration, and time — so you can
 tell whether a `fetch()` call reached the mock and what it got back without
@@ -169,9 +182,14 @@ a context directly:
 - `GET {baseUrl}/__mockingpug/requests`: the last 50 answered requests,
   most-recent-first, for the "Requests" view.
 - `POST {baseUrl}/__mockingpug/requests/clear`: empties the request log.
+- `GET {baseUrl}/__mockingpug/override/:entity`: the one-shot fail/delay
+  override currently armed for that entity, if any (without consuming it).
+- `POST {baseUrl}/__mockingpug/override/:entity`: arms a one-shot
+  `failNext`/`delayNext` override for that entity's very next request.
 
 Same panel, same "Mock Data" list page/draggable floating record windows,
-same editable JSON viewer, and the same request log as the React version.
+same editable JSON viewer, same request log, and the same one-shot
+fail/delay override controls as the React version.
 There's no mock-network toggle or
 per-entity bypass switch built into this panel: both are React/MSW-specific
 concepts, and a Route Handler *is* the real
