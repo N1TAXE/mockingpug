@@ -322,7 +322,7 @@ function Features({ shouldReduce }: { shouldReduce: boolean | null }) {
     },
     {
       flag: '--rest',
-      text: 'Pagination (page / offset / cursor), full CRUD, and consistent error shapes, generated per entity instead of hand-wired.',
+      text: 'Pagination (page / offset / cursor), field filtering, substring search, sorting, full CRUD, and consistent error shapes, generated per entity instead of hand-wired.',
     },
     {
       flag: '--chaos',

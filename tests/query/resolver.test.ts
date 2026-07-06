@@ -94,6 +94,131 @@ describe('listRecords', () => {
     const result = await listRecords('user', new URLSearchParams(), ctx);
     expect(result.data[0]!.posts).toBeUndefined();
   });
+
+  it('filters by an exact field match on a plain query param', async () => {
+    const ctx = await makeContext(25, 0);
+    const result = await listRecords('user', new URLSearchParams('id=2'), ctx);
+    expect(result.data.map((r) => r.id)).toEqual([2]);
+    expect(result.meta).toMatchObject({ total: 1 });
+  });
+
+  it('filters with a comma-separated value as an OR/in match', async () => {
+    const ctx = await makeContext(25, 0);
+    const result = await listRecords('user', new URLSearchParams('id=2,4,6'), ctx);
+    expect(result.data.map((r) => r.id).sort()).toEqual([2, 4, 6]);
+    expect(result.meta).toMatchObject({ total: 3 });
+  });
+
+  it('unions repeated values for the same filter param', async () => {
+    const ctx = await makeContext(25, 0);
+    const result = await listRecords('user', new URLSearchParams('id=2,4&id=4,6'), ctx);
+    expect(result.data.map((r) => r.id).sort()).toEqual([2, 4, 6]);
+  });
+
+  it('ANDs two distinct filter params together', async () => {
+    const schemas: SchemaBundle = {
+      product: {
+        name: 'product',
+        file: 'mock/api/product/schema.json',
+        amount: 20,
+        data: {
+          id: increment,
+          categoryId: { kind: 'custom', name: 'categoryId' },
+          inStock: { kind: 'custom', name: 'inStock' },
+        },
+      },
+    };
+    const store = new MemoryStoreAdapter();
+    await generateAll(schemas, store, {
+      seed: 'and-filter-test',
+      customDictionaries: {
+        categoryId: [{ value: '1' }, { value: '2' }, { value: '3' }],
+        inStock: [{ value: 'true' }, { value: 'false' }],
+      },
+    });
+    const ctx: QueryContext = { schemas, store, pagination: DEFAULT_CONFIG.pagination, seed: 'and-filter-test' };
+
+    const all = await listRecords('product', new URLSearchParams('limit=1000'), ctx);
+    const expectedCount = all.data.filter((r) => r.categoryId === '2' && r.inStock === 'true').length;
+
+    const result = await listRecords('product', new URLSearchParams('categoryId=2&inStock=true'), ctx);
+    expect(result.data).toHaveLength(expectedCount);
+    for (const record of result.data) {
+      expect(record.categoryId).toBe('2');
+      expect(record.inStock).toBe('true');
+    }
+  });
+
+  it('returns no records when a filter value matches nothing', async () => {
+    const ctx = await makeContext(5, 0);
+    const result = await listRecords('user', new URLSearchParams('id=999'), ctx);
+    expect(result.data).toEqual([]);
+    expect(result.meta).toMatchObject({ total: 0 });
+  });
+
+  it('searches (?q=) case-insensitively across every string field by default', async () => {
+    const schemas: SchemaBundle = {
+      product: {
+        name: 'product',
+        file: 'mock/api/product/schema.json',
+        amount: 30,
+        data: {
+          id: increment,
+          title: { kind: 'custom', name: 'title' },
+        },
+      },
+    };
+    const store = new MemoryStoreAdapter();
+    await generateAll(schemas, store, {
+      seed: 'search-test',
+      customDictionaries: {
+        title: [{ value: 'Wireless Mouse' }, { value: 'Mechanical Keyboard' }, { value: 'USB-C Hub' }],
+      },
+    });
+    const ctx: QueryContext = { schemas, store, pagination: DEFAULT_CONFIG.pagination, seed: 'search-test' };
+
+    const all = await listRecords('product', new URLSearchParams('limit=1000'), ctx);
+    const expectedCount = all.data.filter((r) => (r.title as string).toLowerCase().includes('keyboard')).length;
+    expect(expectedCount).toBeGreaterThan(0);
+
+    const result = await listRecords('product', new URLSearchParams('q=KEYBOARD'), ctx);
+    expect(result.data).toHaveLength(expectedCount);
+    for (const record of result.data) {
+      expect((record.title as string).toLowerCase()).toContain('keyboard');
+    }
+  });
+
+  it('restricts search to searchFields when given', async () => {
+    const ctx = await makeContext(10, 0);
+    // No user field's value contains this literal string, so an unrestricted
+    // search matches nothing, confirming searchFields further narrows rather
+    // than broadens the match set.
+    const result = await listRecords('user', new URLSearchParams('q=@gmail.com&searchFields=name'), ctx);
+    expect(result.data).toEqual([]);
+  });
+
+  it('sorts ascending by default and descending with an explicit direction', async () => {
+    const ctx = await makeContext(5, 0);
+    const asc = await listRecords('user', new URLSearchParams('sort=id'), ctx);
+    expect(asc.data.map((r) => r.id)).toEqual([1, 2, 3, 4, 5]);
+
+    const desc = await listRecords('user', new URLSearchParams('sort=id:desc'), ctx);
+    expect(desc.data.map((r) => r.id)).toEqual([5, 4, 3, 2, 1]);
+  });
+
+  it('combines filter, sort, and pagination in one request', async () => {
+    const ctx = await makeContext(25, 0);
+    const result = await listRecords('user', new URLSearchParams('id=2,4,6,8&sort=id:desc&limit=2'), ctx);
+    expect(result.data.map((r) => r.id)).toEqual([8, 6]);
+    expect(result.meta).toMatchObject({ total: 4, limit: 2 });
+  });
+
+  it('does not treat pagination or sort param names as filters', async () => {
+    const ctx = await makeContext(25, 0);
+    const result = await listRecords('user', new URLSearchParams('page=1&limit=5&sort=id'), ctx);
+    expect(result.data).toHaveLength(5);
+    expect(result.meta).toMatchObject({ total: 25 });
+  });
 });
 
 describe('getRecordById', () => {

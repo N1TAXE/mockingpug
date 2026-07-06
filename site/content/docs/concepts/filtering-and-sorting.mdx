@@ -1,0 +1,90 @@
+---
+title: Filtering, Sorting & Search
+description: Query-string filtering by field, substring search, and sort order, on GET list endpoints
+---
+
+`GET` list endpoints support filtering, substring search, and sorting by
+any schema field, with no config needed. All three run before pagination,
+so `meta.total` (or `X-Total-Count`) always reflects the filtered/searched
+count, not the whole collection. Every transport (`react`, `next`) shares
+the same implementation.
+
+## Filtering
+
+Any query param whose name isn't a pagination param, `sort`, `q`, or
+`searchFields` is treated as an exact-match filter on that field:
+
+```
+GET /api/product?categoryId=3
+```
+
+keeps only records where `categoryId` stringifies to `"3"`.
+
+A comma-separated value is an OR/`in` match on that field:
+
+```
+GET /api/product?categoryId=1,2,3
+```
+
+Two distinct filter params are ANDed together:
+
+```
+GET /api/product?categoryId=3&inStock=true
+```
+
+returns products in category `3` that are also in stock. Repeating the
+same param name unions its values with the earlier ones, the same as
+writing them comma-separated in one param.
+
+Filtering compares values as strings (query params always arrive as
+strings), so it works the same whether the underlying field is a
+number, a string, or a custom-dictionary value.
+
+## Search
+
+`?q=term` does a case-insensitive substring match across every
+string-valued field on the record:
+
+```
+GET /api/product?q=keyboard
+```
+
+Restrict the search to specific fields with `searchFields`:
+
+```
+GET /api/product?q=keyboard&searchFields=title,description
+```
+
+Search combines with filtering (both must match) and runs before sort
+and pagination, same as filtering.
+
+## Sorting
+
+`?sort=field` sorts ascending by that field; append `:desc` for
+descending:
+
+```
+GET /api/product?sort=price:desc
+```
+
+Comma-separate multiple fields for a tie-break order, evaluated left to
+right:
+
+```
+GET /api/product?sort=price:asc,name:asc
+```
+
+Numbers sort numerically; anything else is compared as a string.
+
+## Combining with pagination
+
+Filter, search, sort, and pagination compose in one request:
+
+```
+GET /api/product?categoryId=3&q=wireless&sort=price:desc&limit=10
+```
+
+filters to category `3`, keeps only titles/fields containing "wireless",
+sorts by price descending, then returns the first page of 10.
+`meta.total` is the count after filtering and search, before the page is
+sliced off.

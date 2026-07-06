@@ -1,4 +1,4 @@
 {
   "title": "Concepts",
-  "pages": ["index", "schema-dsl", "relations-and-generation", "reconciliation-and-storage", "pagination"]
+  "pages": ["index", "schema-dsl", "relations-and-generation", "reconciliation-and-storage", "filtering-and-sorting", "pagination"]
 }

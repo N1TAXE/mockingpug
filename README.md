@@ -35,8 +35,9 @@ from a real Next.js App Router Route Handler.
 Hand-written fixture arrays and ad-hoc `faker.js` calls work fine for a
 handful of records, but stop scaling once you need cross-entity relations
 that stay consistent, deterministic reruns, incremental regeneration when a
-schema changes, or a real REST surface (pagination, full CRUD) without
-hand-writing a handler per entity.
+schema changes, or a real REST surface (pagination, field filtering,
+substring search, sorting, full CRUD) without hand-writing a handler per
+entity.
 
 ## What's in this package
 

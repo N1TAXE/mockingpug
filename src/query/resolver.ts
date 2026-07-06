@@ -18,7 +18,14 @@ import {
   type SchemaBundle,
 } from '../generator/index.js';
 import type { PaginationConfig, RuntimeConfig } from '../cli/mockConfig.js';
+import { filterRecords } from './filter.js';
 import { paginate, type PaginatedResult } from './pagination.js';
+import { searchRecords } from './search.js';
+import { sortRecords } from './sort.js';
+
+const SORT_PARAM = 'sort';
+const SEARCH_PARAM = 'q';
+const SEARCH_FIELDS_PARAM = 'searchFields';
 
 export interface QueryContext {
   schemas: SchemaBundle;
@@ -89,7 +96,18 @@ export async function listRecords(
   getEntitySchema(entity, ctx);
   const stored = await ctx.store.load(entity);
   const records = (stored?.records ?? []) as StoredRecord[];
-  const { data, meta } = paginate(records, searchParams, ctx.pagination);
+
+  const reservedParams = new Set([
+    ...Object.values(ctx.pagination.params),
+    SORT_PARAM,
+    SEARCH_PARAM,
+    SEARCH_FIELDS_PARAM,
+  ]);
+  const filtered = filterRecords(records, searchParams, reservedParams);
+  const searched = searchRecords(filtered, searchParams, SEARCH_PARAM, SEARCH_FIELDS_PARAM);
+  const sorted = sortRecords(searched, searchParams, SORT_PARAM);
+
+  const { data, meta } = paginate(sorted, searchParams, ctx.pagination);
   const resolved = await Promise.all(data.map((record) => attachBareRelations(entity, record, ctx)));
   return { data: resolved, meta };
 }

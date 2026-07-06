@@ -46,9 +46,9 @@ need:
 - **Incremental changes**: add a field to a schema and only *that* field
   gets (re)generated across existing records; the rest of the dataset (and
   any manual `POST`/`PUT` mutations made while testing) survives.
-- **A real REST surface**: pagination, `GET`/`POST`/`PUT`/`PATCH`/`DELETE`,
-  search, without writing a Route Handler or an MSW handler by hand for
-  every entity.
+- **A real REST surface**: pagination, field filtering, substring search,
+  and sorting, `GET`/`POST`/`PUT`/`PATCH`/`DELETE`, without writing a Route Handler or
+  an MSW handler by hand for every entity.
 
 mockingpug's `core` module handles the first two (schema parsing, seeded
 generation, dependency resolution); `store` handles the third
