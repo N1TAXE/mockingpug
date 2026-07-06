@@ -11,6 +11,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "cnfast": "^0.0.8",
     "embla-carousel-react": "^8.6.0",
     "fumadocs-core": "16.10.7",
