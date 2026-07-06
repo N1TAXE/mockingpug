@@ -5,6 +5,8 @@ import type { FieldSpec } from '../core/index.js';
 export interface EntityMeta {
   amount: number;
   fieldsHash: Record<string, string>;
+  /** Hash of the entity's `fixtures` array; changes if and only if fixtures are added, removed, or edited. */
+  fixturesHash: string;
 }
 
 /** Deterministic, order-independent serialization of a field spec. */
@@ -26,10 +28,15 @@ export function computeFieldFingerprint(spec: FieldSpec): string {
 }
 
 /** Full meta for an entity, ready to compare against a previously stored snapshot. */
-export function computeEntityMeta(amount: number, fields: Record<string, FieldSpec>): EntityMeta {
+export function computeEntityMeta(
+  amount: number,
+  fields: Record<string, FieldSpec>,
+  fixtures?: readonly Record<string, unknown>[],
+): EntityMeta {
   const fieldsHash: Record<string, string> = {};
   for (const [name, spec] of Object.entries(fields)) {
     fieldsHash[name] = computeFieldFingerprint(spec);
   }
-  return { amount, fieldsHash };
+  const fixturesHash = hashString(stableStringify(fixtures ?? [])).toString(16);
+  return { amount, fieldsHash, fixturesHash };
 }

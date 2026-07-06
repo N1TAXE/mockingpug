@@ -77,6 +77,55 @@ describe('parseFieldType', () => {
     });
   });
 
+  it('parses slugify[field,separator]', () => {
+    expect(parseFieldType('slugify[title,-]')).toEqual({
+      kind: 'slugify',
+      field: 'title',
+      separator: '-',
+    });
+  });
+
+  it('parses slugify with an empty separator', () => {
+    expect(parseFieldType('slugify[title,]')).toEqual({
+      kind: 'slugify',
+      field: 'title',
+      separator: '',
+    });
+  });
+
+  it('trims whitespace around slugify parts', () => {
+    expect(parseFieldType('slugify[ title , _ ]')).toEqual({
+      kind: 'slugify',
+      field: 'title',
+      separator: '_',
+    });
+  });
+
+  it('throws SchemaError MP-SCHEMA-015 when slugify has the wrong number of parts', () => {
+    try {
+      parseFieldType('slugify[title]');
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(SchemaError);
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-015');
+    }
+    try {
+      parseFieldType('slugify[title,-,extra]');
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-015');
+    }
+  });
+
+  it('throws SchemaError MP-SCHEMA-015 when slugify has an empty field name', () => {
+    try {
+      parseFieldType('slugify[,-]');
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-015');
+    }
+  });
+
   it('resolves a bare word to a custom type when it is registered', () => {
     expect(parseFieldType('role', { knownCustomTypes: ['role'] })).toEqual({
       kind: 'custom',

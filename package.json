@@ -54,8 +54,8 @@
     }
   },
   "bin": {
-    "mpug": "./dist/cli/bin.js",
-    "mockingpug": "./dist/cli/bin.js"
+    "mpug": "dist/cli/bin.js",
+    "mockingpug": "dist/cli/bin.js"
   },
   "files": [
     "dist"

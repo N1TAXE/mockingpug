@@ -13,6 +13,7 @@ import {
 //.
 import { computeEntityMeta } from '../store';
 import { findOrphanEntities, isNoopPlan, planReconciliation } from '../store';
+import { safeMerge } from '../store/safeMerge.js';
 import type { StoreAdapter, StoredRecord } from '../store';
 import {
   buildCustomResolver,
@@ -75,6 +76,26 @@ function trimRecords(records: StoredRecord[], removeCount: number): StoredRecord
   return kept;
 }
 
+const FIXTURE_INTERNAL_KEYS = ['_seed', '_index'] as const;
+
+/**
+ * Overlays `fixtures` positionally onto `records` (index 0 onto record 0,
+ * and so on) after every other reconciliation step, so a fixture's declared
+ * fields always win regardless of what generation or backfill just did to
+ * that slot. Fields a fixture doesn't mention are left as whatever the
+ * generator produced. Runs unconditionally (it's idempotent and cheap); the
+ * caller only needs `fixturesChanged` to decide whether to skip this
+ * entity's reconciliation pass entirely.
+ */
+function applyFixtures(records: StoredRecord[], fixtures: readonly Record<string, unknown>[] | undefined): void {
+  if (!fixtures || fixtures.length === 0) return;
+  for (let i = 0; i < fixtures.length && i < records.length; i++) {
+    const patch = { ...fixtures[i] };
+    for (const key of FIXTURE_INTERNAL_KEYS) delete patch[key];
+    records[i] = { ...safeMerge(records[i]!, patch), _seed: false, _index: records[i]!._index };
+  }
+}
+
 /**
  * Runs schema-parsing -> dependency graph -> reconciliation -> generation
  * for an entire project in one pass, persisting the result through `store`.
@@ -99,7 +120,7 @@ export async function generateAll(
   for (const entity of order) {
     const schema = schemas[entity]!;
     const previous = await store.load(entity);
-    const currentMeta = computeEntityMeta(schema.amount, schema.data);
+    const currentMeta = computeEntityMeta(schema.amount, schema.data, schema.fixtures);
     const plan = planReconciliation(previous?.meta, currentMeta);
 
     if (!plan.isNewEntity && isNoopPlan(plan)) {
@@ -136,6 +157,7 @@ export async function generateAll(
           increments,
           resolveCustom,
           resolveTargetRecords,
+          record,
         );
       }
     }
@@ -156,6 +178,8 @@ export async function generateAll(
         );
       }
     }
+
+    applyFixtures(records, schema.fixtures);
 
     generatedRecords.set(entity, records);
     await store.save(entity, { meta: currentMeta, records });

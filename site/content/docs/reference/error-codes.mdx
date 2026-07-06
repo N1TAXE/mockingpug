@@ -30,6 +30,11 @@ Thrown while parsing `mock/api/**/schema.json` / `mock/data/*.json`.
 | `MP-SCHEMA-010` | A custom dictionary file's content isn't a JSON array. |
 | `MP-SCHEMA-011` | Two schema files resolve to the same entity name (folder name collision). |
 | `MP-SCHEMA-012` | `"bypass"` is present but not a boolean. |
+| `MP-SCHEMA-013` | `"fixtures"` is present but isn't an array of objects. |
+| `MP-SCHEMA-014` | `"fixtures"` has more entries than `"amount"`. |
+| `MP-SCHEMA-015` | `"slugify[...]"` isn't exactly two comma-separated parts (a field name and a separator). |
+| `MP-SCHEMA-016` | A `"slugify[field,...]"` references a field that doesn't exist on the same entity. |
+| `MP-SCHEMA-017` | A `"slugify[field,...]"` references a field declared at the same position or later in `data` (including a self-reference). |
 
 ## `MP-DEP-*`: cross-entity reference graph
 
@@ -51,6 +56,8 @@ generation happens).
 | `MP-GEN-001` | A `crossRef` field reached the low-level value generator directly instead of going through the dependency-graph resolver. An internal invariant violation, not a user-facing scenario. |
 | `MP-GEN-002` / `MP-GEN-003` | A custom dictionary is empty, or every entry has already hit its `max` cap and there's nothing left to pick from. |
 | `MP-GEN-004` / `MP-GEN-005` | A field-level reference (`data.user.id`) couldn't resolve because the target entity has zero generated records, or the referenced field doesn't exist on it. |
+| `MP-GEN-006` | A `slugify` field reached the low-level value generator directly instead of going through `recordGenerator.ts`. An internal invariant violation, not a user-facing scenario. |
+| `MP-GEN-007` | A `slugify` field's source field is missing or not a string on the record being generated (shouldn't happen for a schema that passed `MP-SCHEMA-016`/`017` validation). |
 
 ## `MP-STORE-*`: persistent store failures
 

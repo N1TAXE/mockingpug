@@ -11,7 +11,8 @@ export type FieldSpec =
   | { kind: 'enumInline'; values: string[] }
   | { kind: 'array'; item: FieldSpec; count: number }
   | { kind: 'custom'; name: string }
-  | { kind: 'crossRef'; entity: string; field?: string };
+  | { kind: 'crossRef'; entity: string; field?: string }
+  | { kind: 'slugify'; field: string; separator: string };
 
 /** One entry of a custom dictionary file under `mock/data/*.json`. */
 export interface CustomDictionaryEntry {
@@ -30,6 +31,17 @@ export interface EntitySchema {
   file: string;
   amount: number;
   data: Record<string, FieldSpec>;
+  /**
+   * Exact, caller-provided records applied positionally: `fixtures[0]`
+   * always becomes record index 0, `fixtures[1]` index 1, and so on, on
+   * every generation pass, regardless of seed. A fixture only needs to
+   * specify the fields that must stay fixed (a curated `name`/`slug` pair,
+   * say); every other field on that record is still schema-generated. Use
+   * this for entities where specific rows are load-bearing (referenced by
+   * slug elsewhere in an app) rather than incidental mock data. Must not be
+   * longer than `amount`.
+   */
+  fixtures?: Array<Record<string, unknown>>;
   /**
    * Schema-level opt-out of mocking this entity: a transport
    * handler for a bypassed entity calls MSW's `passthrough()`/`next/next`

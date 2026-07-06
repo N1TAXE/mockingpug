@@ -53,6 +53,8 @@ function fieldType(
       return spec.values.map((v) => JSON.stringify(v)).join(' | ');
     case 'array':
       return `Array<${fieldType(spec.item, schemas, customDictionaries, visiting)}>`;
+    case 'slugify':
+      return 'string';
     case 'custom':
       return customDictionaryType(customDictionaries?.[spec.name]);
     case 'crossRef': {

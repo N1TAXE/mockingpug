@@ -54,4 +54,28 @@ describe('computeEntityMeta', () => {
     expect(meta.amount).toBe(1000);
     expect(Object.keys(meta.fieldsHash)).toEqual(['id', 'email']);
   });
+
+  it('produces the same fixturesHash for no fixtures and an explicit empty array', () => {
+    const withoutFixtures = computeEntityMeta(5, { id: { kind: 'uuid' } });
+    const withEmptyFixtures = computeEntityMeta(5, { id: { kind: 'uuid' } }, []);
+    expect(withoutFixtures.fixturesHash).toBe(withEmptyFixtures.fixturesHash);
+  });
+
+  it('differs when fixtures are added', () => {
+    const withoutFixtures = computeEntityMeta(5, { id: { kind: 'uuid' } });
+    const withFixtures = computeEntityMeta(5, { id: { kind: 'uuid' } }, [{ slug: 'vk' }]);
+    expect(withoutFixtures.fixturesHash).not.toBe(withFixtures.fixturesHash);
+  });
+
+  it('differs when a fixture value is edited', () => {
+    const a = computeEntityMeta(5, { id: { kind: 'uuid' } }, [{ slug: 'vk' }]);
+    const b = computeEntityMeta(5, { id: { kind: 'uuid' } }, [{ slug: 'vkontakte' }]);
+    expect(a.fixturesHash).not.toBe(b.fixturesHash);
+  });
+
+  it('is independent of key order within a fixture', () => {
+    const a = computeEntityMeta(5, { id: { kind: 'uuid' } }, [{ name: 'VKontakte', slug: 'vk' }]);
+    const b = computeEntityMeta(5, { id: { kind: 'uuid' } }, [{ slug: 'vk', name: 'VKontakte' }]);
+    expect(a.fixturesHash).toBe(b.fixturesHash);
+  });
 });

@@ -9,6 +9,7 @@ Each entity is one JSON file, conventionally at `mock/api/<entity>/schema.json`:
 {
   "amount": 1000,
   "data": { "fieldName": "<DSL string>" },
+  "fixtures": [{ "fieldName": "an exact literal value" }],
   "bypass": false
 }
 ```
@@ -16,6 +17,8 @@ Each entity is one JSON file, conventionally at `mock/api/<entity>/schema.json`:
 - **`amount`**: how many records to generate for this entity. Required,
   non-negative.
 - **`data`**: one DSL string per field. Required.
+- **`fixtures`** *(optional)*: exact, literal records applied positionally,
+  for rows that need to stay fixed. See [Fixtures](#fixtures) below.
 - **`bypass`** *(optional, `mockingpug/react` only)*: `true` makes every
   request for this entity fall through to the real network instead of
   being mocked. See [React guide § bypass](/docs/guides/react#bypass).
@@ -78,6 +81,72 @@ is looked up in `mock/data/<name>.json`, a JSON array of weighted entries:
 - **`chance`** *(optional)*: relative weight in `[0, 1]` among the entries
   that still have room under their `max`. Entries with no `chance` share
   the remaining probability mass evenly.
+
+## Fixtures
+
+Every scalar and dictionary type above picks a value randomly (seed-stable,
+but still randomly assigned per record). That's the wrong tool when
+specific rows are load-bearing: a category tree where `slug: "fb"` is
+hardcoded into icon paths, cross-links, and navigation elsewhere in an
+app, for instance. Regenerating that as random data would scramble the
+names/slugs every time, breaking anything that matched on them by string.
+
+`fixtures` fixes that: an array of literal record patches, applied
+**positionally**. `fixtures[0]` always becomes record index 0,
+`fixtures[1]` index 1, and so on, on every `mpug generate` run, regardless
+of seed:
+
+```json title="mock/api/category/schema.json"
+{
+  "amount": 200,
+  "data": { "id": "uuid", "name": "lorem", "slug": "lorem", "icon": "lorem" },
+  "fixtures": [
+    { "name": "Facebook", "slug": "fb" },
+    { "name": "Steam", "slug": "steam-keys" }
+  ]
+}
+```
+
+A fixture only needs to list the fields that must stay fixed. Every field
+it doesn't mention (`id`, `icon` above) is still schema-generated
+normally. Records beyond `fixtures.length` (here, indices 2 through 199)
+are entirely schema-generated, same as without `fixtures` at all.
+
+Fixture values always win: even if `slug`'s generator type changes later,
+or an unrelated field on the schema changes, `fixtures[0].slug` still
+comes out as `"fb"` on the next generate. `amount` must be at least
+`fixtures.length` (`mpug doctor`/parsing rejects it otherwise, `MP-SCHEMA-014`).
+
+## Slugify
+
+`slugify[<field>,<separator>]` derives a field from another field **on the
+same record**: it reads that field's already-generated value, transliterates
+any Cyrillic characters and Latin diacritics to plain ASCII, lowercases it,
+and collapses everything that isn't `a-z0-9` into `<separator>`:
+
+```json
+{
+  "amount": 1000,
+  "data": {
+    "id": "uuid",
+    "title": "lorem.32",
+    "slug": "slugify[title,-]"
+  }
+}
+```
+
+`"Привет, Мир!"` → `"privet-mir"`. An empty separator (`slugify[title,]`)
+concatenates words instead of separating them.
+
+The source field (`title` above) must be declared **earlier** in `data`:
+generation follows declaration order, so a `slugify` field can only read a
+value that was already produced. A missing/unknown source field fails at
+parse time (`MP-SCHEMA-016`); a source field declared after the `slugify`
+field, or a self-reference, also fails at parse time (`MP-SCHEMA-017`).
+
+Unlike a [fixture](#fixtures), a `slugify` field is still generated fresh
+from its source on every reconciliation that touches it (field added, or the
+source field's own type changes) — it derives a value, it doesn't fix one.
 
 ## Cross-entity relations
 

@@ -33,6 +33,28 @@ describe('parseEntitySchema : the real mock/ example (user)', () => {
     const schema = parseEntitySchema('user', 'x', { amount: 1, data: { id: 'uuid' } });
     expect(schema.bypass).toBeUndefined();
   });
+
+  it('parses "fixtures" as an array of literal record patches', () => {
+    const schema = parseEntitySchema('category', 'x', {
+      amount: 5,
+      data: { id: 'uuid', name: 'lorem', slug: 'lorem' },
+      fixtures: [{ name: 'VKontakte', slug: 'vk' }, { name: 'Steam', slug: 'steam-keys' }],
+    });
+    expect(schema.fixtures).toEqual([{ name: 'VKontakte', slug: 'vk' }, { name: 'Steam', slug: 'steam-keys' }]);
+  });
+
+  it('omits "fixtures" from the result when not specified', () => {
+    const schema = parseEntitySchema('user', 'x', { amount: 1, data: { id: 'uuid' } });
+    expect(schema.fixtures).toBeUndefined();
+  });
+
+  it('parses "slugify[field,separator]" referencing an earlier field', () => {
+    const schema = parseEntitySchema('article', 'x', {
+      amount: 5,
+      data: { id: 'uuid', title: 'lorem.32', slug: 'slugify[title,-]' },
+    });
+    expect(schema.data.slug).toEqual({ kind: 'slugify', field: 'title', separator: '-' });
+  });
 });
 
 describe('parseEntitySchema : validation', () => {
@@ -85,6 +107,73 @@ describe('parseEntitySchema : validation', () => {
       expect.unreachable();
     } catch (error) {
       expect((error as SchemaError).code).toBe('MP-SCHEMA-012');
+    }
+  });
+
+  it('throws SchemaError when "fixtures" is not an array', () => {
+    try {
+      parseEntitySchema('category', 'x', { amount: 5, data: {}, fixtures: 'nope' });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-013');
+    }
+  });
+
+  it('throws SchemaError when a "fixtures" entry is not an object', () => {
+    try {
+      parseEntitySchema('category', 'x', { amount: 5, data: {}, fixtures: [{ slug: 'vk' }, 'nope'] });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-013');
+    }
+  });
+
+  it('throws SchemaError when "fixtures" is longer than "amount"', () => {
+    try {
+      parseEntitySchema('category', 'x', {
+        amount: 1,
+        data: {},
+        fixtures: [{ slug: 'vk' }, { slug: 'steam-keys' }],
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-014');
+    }
+  });
+
+  it('throws SchemaError MP-SCHEMA-016 when slugify references an unknown field', () => {
+    try {
+      parseEntitySchema('article', 'x', {
+        amount: 5,
+        data: { id: 'uuid', slug: 'slugify[title,-]' },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-016');
+    }
+  });
+
+  it('throws SchemaError MP-SCHEMA-017 when slugify references a field declared later', () => {
+    try {
+      parseEntitySchema('article', 'x', {
+        amount: 5,
+        data: { slug: 'slugify[title,-]', title: 'lorem.32' },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-017');
+    }
+  });
+
+  it('throws SchemaError MP-SCHEMA-017 on a slugify self-reference', () => {
+    try {
+      parseEntitySchema('article', 'x', {
+        amount: 5,
+        data: { slug: 'slugify[slug,-]' },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-017');
     }
   });
 });

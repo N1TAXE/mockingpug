@@ -19,6 +19,7 @@ const KNOWN_BASE_TYPES = [
   'enum',
   'array',
   'data',
+  'slugify',
 ] as const;
 
 export interface ParseFieldTypeOptions {
@@ -58,6 +59,27 @@ export function parseFieldType(raw: string, options: ParseFieldTypeOptions = {})
   if (arrayMatch) {
     const item = parseFieldType(arrayMatch[1]!, options);
     return { kind: 'array', item, count: Number(arrayMatch[2]) };
+  }
+
+  // slugify[<field>,<separator>]: transliterates + slugifies another field
+  // on the same record. Unlike enum[...]'s comma-separated list of
+  // equally-typed values, this is exactly two positional parameters.
+  const slugifyMatch = /^slugify\[(.+)]$/.exec(value);
+  if (slugifyMatch) {
+    const parts = slugifyMatch[1]!.split(',');
+    const field = parts[0]?.trim();
+    const separator = parts[1]?.trim();
+    if (parts.length !== 2 || !field) {
+      throw new SchemaError(
+        'MP-SCHEMA-015',
+        `"slugify[...]" must have exactly two comma-separated parts, a source field name and a separator, got "${value}"`,
+        {
+          location: options.file ? { file: options.file, path: options.fieldPath } : undefined,
+          hint: 'e.g. "slugify[title,-]"',
+        },
+      );
+    }
+    return { kind: 'slugify', field, separator: separator ?? '' };
   }
 
   if (value === 'uuid') {

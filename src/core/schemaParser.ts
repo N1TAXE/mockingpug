@@ -23,7 +23,12 @@ export function parseEntitySchema(
     });
   }
 
-  const { amount, data, bypass } = raw as { amount?: unknown; data?: unknown; bypass?: unknown };
+  const { amount, data, bypass, fixtures } = raw as {
+    amount?: unknown;
+    data?: unknown;
+    bypass?: unknown;
+    fixtures?: unknown;
+  };
 
   if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) {
     throw new SchemaError('MP-SCHEMA-007', `"amount" must be a non-negative number in schema file for "${entityName}"`, {
@@ -40,8 +45,23 @@ export function parseEntitySchema(
       location: { file, path: 'bypass' },
     });
   }
+  if (fixtures !== undefined) {
+    if (!Array.isArray(fixtures) || fixtures.some((f) => typeof f !== 'object' || f === null || Array.isArray(f))) {
+      throw new SchemaError('MP-SCHEMA-013', `"fixtures" must be an array of objects in schema file for "${entityName}"`, {
+        location: { file, path: 'fixtures' },
+      });
+    }
+    if (fixtures.length > amount) {
+      throw new SchemaError(
+        'MP-SCHEMA-014',
+        `"fixtures" has ${fixtures.length} entries but "amount" is ${amount} in schema file for "${entityName}": amount must be at least as large as fixtures.length`,
+        { location: { file, path: 'fixtures' } },
+      );
+    }
+  }
 
   const fields: Record<string, FieldSpec> = {};
+  const fieldOrder = Object.keys(data as Record<string, unknown>);
   for (const [fieldName, rawType] of Object.entries(data as Record<string, unknown>)) {
     if (typeof rawType !== 'string') {
       throw new SchemaError(
@@ -53,5 +73,31 @@ export function parseEntitySchema(
     fields[fieldName] = parseFieldType(rawType, { knownCustomTypes, file, fieldPath: `data.${fieldName}` });
   }
 
-  return { name: entityName, file, amount, data: fields, ...(bypass !== undefined ? { bypass } : {}) };
+  for (const [fieldName, spec] of Object.entries(fields)) {
+    if (spec.kind !== 'slugify') continue;
+    const sourceIndex = fieldOrder.indexOf(spec.field);
+    if (sourceIndex === -1) {
+      throw new SchemaError(
+        'MP-SCHEMA-016',
+        `field "${fieldName}" in "${entityName}" is "slugify[${spec.field},${spec.separator}]", but "${entityName}" has no field named "${spec.field}"`,
+        { location: { file, path: `data.${fieldName}` } },
+      );
+    }
+    if (sourceIndex >= fieldOrder.indexOf(fieldName)) {
+      throw new SchemaError(
+        'MP-SCHEMA-017',
+        `field "${fieldName}" in "${entityName}" is "slugify[${spec.field},${spec.separator}]", but "${spec.field}" must be declared earlier in "data" so it's generated first`,
+        { location: { file, path: `data.${fieldName}` } },
+      );
+    }
+  }
+
+  return {
+    name: entityName,
+    file,
+    amount,
+    data: fields,
+    ...(fixtures !== undefined ? { fixtures: fixtures as Array<Record<string, unknown>> } : {}),
+    ...(bypass !== undefined ? { bypass } : {}),
+  };
 }

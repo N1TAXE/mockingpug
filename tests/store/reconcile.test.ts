@@ -71,6 +71,32 @@ describe('planReconciliation : reconciliation scenarios', () => {
     expect(plan.removedFields).toEqual([]);
   });
 
+  it('9. fixtures added => fixturesChanged true, not a no-op', () => {
+    const schema = { id: idIncrement };
+    const previous = computeEntityMeta(5, schema);
+    const current = computeEntityMeta(5, schema, [{ slug: 'vk' }]);
+    const plan = planReconciliation(previous, current);
+    expect(plan.fixturesChanged).toBe(true);
+    expect(isNoopPlan(plan)).toBe(false);
+  });
+
+  it('10. fixtures unchanged (including "no fixtures" on both sides) => fixturesChanged false', () => {
+    const schema = { id: idIncrement };
+    const previous = computeEntityMeta(5, schema, [{ slug: 'vk' }]);
+    const current = computeEntityMeta(5, schema, [{ slug: 'vk' }]);
+    const plan = planReconciliation(previous, current);
+    expect(plan.fixturesChanged).toBe(false);
+    expect(isNoopPlan(plan)).toBe(true);
+  });
+
+  it('11. a fixture value edited => fixturesChanged true even though field specs and amount are the same', () => {
+    const schema = { id: idIncrement };
+    const previous = computeEntityMeta(5, schema, [{ slug: 'vk' }]);
+    const current = computeEntityMeta(5, schema, [{ slug: 'vkontakte' }]);
+    const plan = planReconciliation(previous, current);
+    expect(plan.fixturesChanged).toBe(true);
+  });
+
   it('combines multiple simultaneous changes correctly (amount + add + remove + change)', () => {
     const previous = computeEntityMeta(1000, { id: idIncrement, email: emailGmail, legacy: nameField });
     const current = computeEntityMeta(1500, { id: idIncrement, email: emailCompany, bio: nameField });

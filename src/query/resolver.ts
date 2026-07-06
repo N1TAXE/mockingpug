@@ -133,7 +133,7 @@ export async function createRecord(entity: string, body: unknown, ctx: QueryCont
   const schema = getEntitySchema(entity, ctx);
   const stored = await ctx.store.load(entity);
   const records = (stored?.records ?? []) as StoredRecord[];
-  const meta = stored?.meta ?? computeEntityMeta(schema.amount, schema.data);
+  const meta = stored?.meta ?? computeEntityMeta(schema.amount, schema.data, schema.fixtures);
 
   const increments = new IncrementCounters();
   seedIncrementCounters(entity, schema.data, records, increments);

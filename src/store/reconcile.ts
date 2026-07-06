@@ -19,6 +19,8 @@ export interface ReconciliationPlan {
   changedFields: string[];
   /** Fields whose spec is byte-for-byte the same: leave untouched. */
   unchangedFields: string[];
+  /** `fixtures` array was added, removed, or edited: reapply it positionally. */
+  fixturesChanged: boolean;
 }
 
 export function planReconciliation(
@@ -35,6 +37,10 @@ export function planReconciliation(
       removedFields: [],
       changedFields: [],
       unchangedFields: [],
+      // No previous snapshot to compare against; the generator applies the
+      // fixture overlay unconditionally on a first pass regardless of this
+      // flag, so `true` here just means "don't treat this as a no-op."
+      fixturesChanged: true,
     };
   }
 
@@ -64,6 +70,7 @@ export function planReconciliation(
     removedFields,
     changedFields,
     unchangedFields,
+    fixturesChanged: previous.fixturesHash !== current.fixturesHash,
   };
 }
 
@@ -74,7 +81,8 @@ export function isNoopPlan(plan: ReconciliationPlan): boolean {
     plan.amountDelta === 0 &&
     plan.addedFields.length === 0 &&
     plan.removedFields.length === 0 &&
-    plan.changedFields.length === 0
+    plan.changedFields.length === 0 &&
+    !plan.fixturesChanged
   );
 }
 

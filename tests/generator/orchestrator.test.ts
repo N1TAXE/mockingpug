@@ -253,6 +253,168 @@ describe('generateAll : reconciliation', () => {
   });
 });
 
+describe('generateAll : fixtures', () => {
+  function categorySchemas(amount: number, fixtures?: Array<Record<string, unknown>>): SchemaBundle {
+    return {
+      category: {
+        name: 'category',
+        file: 'mock/api/category/schema.json',
+        amount,
+        data: { id: increment, name: lorem, slug: lorem },
+        ...(fixtures ? { fixtures } : {}),
+      },
+    };
+  }
+
+  const curated = [
+    { name: 'VKontakte', slug: 'vk' },
+    { name: 'Steam', slug: 'steam-keys' },
+  ];
+
+  it('applies fixtures positionally, leaving unlisted fields schema-generated', async () => {
+    const store = new MemoryStoreAdapter();
+    await generateAll(categorySchemas(5, curated), store, { seed: 's' });
+    const records = (await store.load('category'))!.records;
+
+    expect(records).toHaveLength(5);
+    expect(records[0]).toMatchObject({ name: 'VKontakte', slug: 'vk' });
+    expect(records[1]).toMatchObject({ name: 'Steam', slug: 'steam-keys' });
+    expect(records[0]!.id).toBe(1);
+    // Records beyond the fixture list are fully schema-generated.
+    for (let i = 2; i < 5; i++) {
+      expect(records[i]!.name).toBeTypeOf('string');
+      expect(curated.some((f) => f.slug === records[i]!.slug)).toBe(false);
+    }
+  });
+
+  it('marks fixture-covered records as _seed: false', async () => {
+    const store = new MemoryStoreAdapter();
+    await generateAll(categorySchemas(5, curated), store, { seed: 's' });
+    const records = (await store.load('category'))!.records;
+    expect(records[0]!._seed).toBe(false);
+    expect(records[1]!._seed).toBe(false);
+  });
+
+  it('fixture values survive a later, unrelated field-type change (the curated-catalog regression)', async () => {
+    const store = new MemoryStoreAdapter();
+    const base = categorySchemas(5, curated);
+    await generateAll(base, store, { seed: 's' });
+
+    // Changing "id" from increment to uuid is unrelated to "name"/"slug",
+    // but the old bug regenerated every field on every record regardless.
+    const changed: SchemaBundle = {
+      category: { ...base.category!, data: { ...base.category!.data, id: { kind: 'uuid' } } },
+    };
+    await generateAll(changed, store, { seed: 's' });
+    const records = (await store.load('category'))!.records;
+
+    expect(records[0]).toMatchObject({ name: 'VKontakte', slug: 'vk' });
+    expect(records[1]).toMatchObject({ name: 'Steam', slug: 'steam-keys' });
+  });
+
+  it('a fixture wins even when the schema field it overrides also changes type', async () => {
+    const store = new MemoryStoreAdapter();
+    const base = categorySchemas(5, curated);
+    await generateAll(base, store, { seed: 's' });
+
+    // "slug" itself changes generator type; the fixture's literal slug must
+    // still win over whatever the new generator would have produced.
+    const changed: SchemaBundle = {
+      category: { ...base.category!, data: { ...base.category!.data, slug: { kind: 'uuid' } } },
+    };
+    await generateAll(changed, store, { seed: 's' });
+    const records = (await store.load('category'))!.records;
+
+    expect(records[0]!.slug).toBe('vk');
+    expect(records[1]!.slug).toBe('steam-keys');
+    // Non-fixture records DO pick up the new generator type.
+    expect(records[2]!.slug).not.toBe(records[2]!.name);
+  });
+
+  it('editing the fixtures array itself is picked up on the next generate', async () => {
+    const store = new MemoryStoreAdapter();
+    await generateAll(categorySchemas(5, curated), store, { seed: 's' });
+
+    const relabeled = categorySchemas(5, [{ name: 'VK', slug: 'vk' }, { name: 'Steam', slug: 'steam-keys' }]);
+    await generateAll(relabeled, store, { seed: 's' });
+    const records = (await store.load('category'))!.records;
+
+    expect(records[0]!.name).toBe('VK');
+  });
+
+  it('is a no-op when neither the schema nor the fixtures changed', async () => {
+    const store = new MemoryStoreAdapter();
+    const schemas = categorySchemas(5, curated);
+    await generateAll(schemas, store, { seed: 's' });
+    const before = await store.load('category');
+
+    const summary = await generateAll(schemas, store, { seed: 's' });
+    const after = await store.load('category');
+
+    expect(summary.entities[0]).toMatchObject({ skipped: true });
+    expect(after).toEqual(before);
+  });
+
+  it('amount growth beyond fixtures.length still generates the extra records normally', async () => {
+    const store = new MemoryStoreAdapter();
+    await generateAll(categorySchemas(2, curated), store, { seed: 's' });
+    await generateAll(categorySchemas(6, curated), store, { seed: 's' });
+    const records = (await store.load('category'))!.records;
+
+    expect(records).toHaveLength(6);
+    expect(records[0]).toMatchObject({ name: 'VKontakte', slug: 'vk' });
+    expect(records[1]).toMatchObject({ name: 'Steam', slug: 'steam-keys' });
+  });
+});
+
+/** article: title generated first, slug derived from it via slugify. */
+function articleSchemas(amount: number): SchemaBundle {
+  return {
+    article: {
+      name: 'article',
+      file: 'mock/api/article/schema.json',
+      amount,
+      data: {
+        id: { kind: 'uuid' },
+        title: lorem,
+        slug: { kind: 'slugify', field: 'title', separator: '-' },
+      },
+    },
+  };
+}
+
+describe('generateAll : slugify', () => {
+  it('derives the field from the already-generated sibling field', async () => {
+    const store = new MemoryStoreAdapter();
+    await generateAll(articleSchemas(20), store, { seed: 's' });
+    const records = (await store.load('article'))!.records;
+
+    for (const record of records) {
+      expect(record.slug).toBe(String(record.title).toLowerCase().trim().replace(/\s+/g, '-'));
+    }
+  });
+
+  it('regenerates the slug when only the slugify field is added later', async () => {
+    const store = new MemoryStoreAdapter();
+    const withoutSlug: SchemaBundle = {
+      article: {
+        name: 'article',
+        file: 'mock/api/article/schema.json',
+        amount: 5,
+        data: { id: { kind: 'uuid' }, title: lorem },
+      },
+    };
+    await generateAll(withoutSlug, store, { seed: 's' });
+    const before = (await store.load('article'))!.records;
+
+    await generateAll(articleSchemas(5), store, { seed: 's' });
+    const after = (await store.load('article'))!.records;
+
+    expect(after[0]!.title).toBe(before[0]!.title);
+    expect(after[0]!.slug).toBe(String(after[0]!.title).toLowerCase().trim().replace(/\s+/g, '-'));
+  });
+});
+
 describe('generateAll : end-to-end with the real FileStoreAdapter', () => {
   let dir: string;
 

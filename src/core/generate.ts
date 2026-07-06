@@ -147,6 +147,13 @@ export function generateValue(spec: FieldSpec, rng: Rng, ctx: GenerateContext): 
         { hint: 'resolve crossRef fields through the dependency-graph module, not generate.ts' },
       );
 
+    case 'slugify':
+      throw new GenerationError(
+        'MP-GEN-006',
+        `"slugify[${spec.field},${spec.separator}]" cannot be resolved by generateValue() directly`,
+        { hint: 'resolve slugify fields in recordGenerator.ts, where the sibling record is available' },
+      );
+
     /* v8 ignore next 4 -- exhaustiveness guard, unreachable for any valid FieldSpec */
     default: {
       const exhaustive: never = spec;

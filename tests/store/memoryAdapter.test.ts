@@ -3,7 +3,7 @@ import { MemoryStoreAdapter } from '../../src/store/memoryAdapter.js';
 import type { StoredEntity } from '../../src/store/adapter.js';
 
 const sample: StoredEntity = {
-  meta: { amount: 2, fieldsHash: { id: 'abc' } },
+  meta: { amount: 2, fieldsHash: { id: 'abc' }, fixturesHash: '0' },
   records: [{ id: 1, _seed: true }, { id: 2, _seed: true }],
 };
 

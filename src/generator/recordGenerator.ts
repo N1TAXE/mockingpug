@@ -1,6 +1,7 @@
 import {
   createRng,
   CustomDictionaryPicker,
+  GenerationError,
   generateValue,
   IncrementCounters,
   resolveFieldRef,
@@ -8,6 +9,7 @@ import {
   type FieldSpec,
   type Rng,
 } from '../core';
+import { slugify } from '../core/slugify.js';
 // Direct file import, not the `store/index.js` barrel: see orchestrator.ts for why.
 import type { StoredRecord } from '../store';
 
@@ -58,11 +60,25 @@ export async function generateFieldValue(
   increments: IncrementCounters,
   resolveCustom: CustomResolver,
   resolveTargetRecords: TargetRecordsResolver,
+  /** Sibling fields already generated on this same record, needed by `slugify`. */
+  partialRecord?: Readonly<Record<string, unknown>>,
 ): Promise<unknown> {
   const rng = createRng(seed, entity, index, fieldName);
   if (spec.kind === 'crossRef' && spec.field !== undefined) {
     const target = await resolveTargetRecords(spec.entity);
     return resolveFieldRef(spec.entity, spec.field, target, rng);
+  }
+  if (spec.kind === 'slugify') {
+    const sourceValue = partialRecord?.[spec.field];
+    if (typeof sourceValue !== 'string') {
+      throw new GenerationError(
+        'MP-GEN-007',
+        `cannot resolve "${entity}.${fieldName}" ("slugify[${spec.field},${spec.separator}]"): ` +
+          `field "${spec.field}" is missing or not a string on this record`,
+        { hint: `make sure "${spec.field}" is declared earlier in "${entity}"'s schema data block` },
+      );
+    }
+    return slugify(sourceValue, spec.separator);
   }
   return generateValue(spec, rng, {
     resolveCustom,
@@ -93,6 +109,7 @@ export async function generateFullRecord(
       increments,
       resolveCustom,
       resolveTargetRecords,
+      record,
     );
   }
   return record;
