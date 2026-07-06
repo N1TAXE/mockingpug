@@ -184,6 +184,19 @@ React/MSW-specific, and a Route Handler *is* the real server, so there's
 nothing to switch off or bypass (see the [Next.js guide](/docs/guides/nextjs)
 for routing a specific path around the mock entirely instead).
 
+<Callout type="warn" title="errorRate: 1 can hide the panel itself">
+`ctx.runtime.errorRate` lives on the server process, not in the browser. If
+you set it to `1` and the page that renders `<MockDevtools>` does any
+server-side data fetching without an error boundary around it, that whole
+route fails to render, so the panel never mounts, there's nothing left in
+the UI to dial `errorRate` back down. Just restart the dev server (or
+redeploy): `ctx.runtime` is in-memory only, so the fresh process reloads
+`errorRate: 0` (or your `mock.config.js` default) from scratch, nothing is
+persisted or corrupted. See [`mock.config.js` reference →
+`runtime.errorRate`](/docs/reference/mock-config#runtimeerrorrate--runtimedelay)
+for more.
+</Callout>
+
 ## Reference
 
 Full prop/context shapes are in `mockingpug/react`'s type exports:

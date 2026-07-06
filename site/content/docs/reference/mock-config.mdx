@@ -99,3 +99,15 @@ Synthetic latency/failure injection, applied identically by
 
 Both default to `0` (disabled). Edit them live without a restart via
 [`<MockDevtools>`](/docs/guides/devtools) if you're using it.
+
+`errorRate` lives on the server process (`ctx.runtime`), not in the
+browser, so setting it to `1` in `mockingpug/next`'s `<MockDevtools>` can
+lock you out of the very page that renders the panel: if the page does any
+server-side data fetching and your app has no error boundary around it, the
+whole route fails to render, `<MockDevtools>` never mounts, and there's no
+UI left to dial `errorRate` back down. If this happens, just **restart the
+dev server** (or redeploy) — `ctx.runtime` is in-memory only, so the next
+process start reloads `errorRate: 0` (or whatever `mock.config.js` sets)
+from scratch; nothing is corrupted or persisted. This doesn't affect
+`mockingpug/react`: the panel lives entirely client-side there, so it keeps
+rendering regardless of `errorRate`.
