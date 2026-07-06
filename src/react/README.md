@@ -215,8 +215,8 @@ If you'd rather not hand-write the `setupWorker()`/`worker.start()`
 boilerplate above, `<MockProvider>` wraps it in a component and exposes a
 small context (`useMockContext()`) that a floating `<MockDevtools>` panel
 reads/writes: mock/off toggle, live `runtime.delay`/`runtime.errorRate`
-editing, a per-entity record viewer with a reset button, per-entity bypass
-checkboxes, and a "highlight mock data" mask (see below):
+editing, a per-entity record viewer with a reset button, and per-entity
+bypass checkboxes:
 
 ```tsx
 // src/mocks/browser.tsx
@@ -249,16 +249,6 @@ devtools users edit delay/errorRate: no restart needed, the change takes
 effect on the very next request. Both components are gated behind the same
 dev-only dynamic `import()` as `startMocking()` itself. Never import them
 at the top level of a file that ships to production.
-
-### Highlighting mock data on the page
-
-`<MockDevtools>`'s "highlight mock data" checkbox replaces every generated
-value currently rendered on the page with a `***` string of the same
-length, so hardcoded strings in your markup (button labels, static
-headings) stay untouched: if the text didn't change, it isn't mock data.
-Useful for spotting values that were supposed to come from the mock but are
-actually hardcoded. It's a DOM-only operation (via `TreeWalker` +
-`MutationObserver`); the real JSON response is never altered.
 
 ## Switching mock ↔ real API
 

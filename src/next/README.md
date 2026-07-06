@@ -125,11 +125,6 @@ explicitly if `mock.config.js` sets a different one. It gives you:
   opens its stored records in a separate floating window, draggable by its
   header, with its own reset button (wipes and regenerates just that
   entity). Multiple entities' windows can be open at once.
-- The same "highlight mock data" masking as `mockingpug/react`'s: masks
-  every value that actually came from a generated record with `***` of the
-  same length, so a hardcoded string sitting next to real mock data stands
-  out.
-
 There's no "mock network" toggle or per-entity `bypass` checkbox built
 into this panel: both are React/MSW-specific concepts that don't apply to
 a Route Handler, which *is* the real server. Use the `rewrites()` recipe

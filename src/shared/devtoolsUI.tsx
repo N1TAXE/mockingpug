@@ -1,5 +1,4 @@
 import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { applyMask, collectValues, MASK_IGNORE_ATTR, restoreMask } from './mask.js';
 import { BackIcon, ChevronIcon, CrossIcon, DirIcon, LogoIcon, RefreshIcon } from './devtoolsIcons.js';
 
 const FONT_UI = "'Nunito', system-ui, sans-serif";
@@ -323,7 +322,6 @@ function FloatingToggle({ open, onClick }: { open: boolean; onClick: () => void 
       onClick={onClick}
       aria-label={open ? 'Hide mockingpug devtools' : 'Open mockingpug devtools'}
       className="mp-icon-btn"
-      {...{ [MASK_IGNORE_ATTR]: '' }}
       style={{
         boxSizing: 'border-box',
         position: 'fixed',
@@ -373,7 +371,6 @@ export interface DevtoolsPanelProps {
   onRuntimeChange: (patch: { delay?: number; errorRate?: number }) => void;
   onFetchRecords: (entity: string) => Promise<unknown[]>;
   onResetEntity: (entity: string) => Promise<unknown[]>;
-  onCollectAllValues: () => Promise<Set<string>>;
   /** Called every time the panel transitions from closed to open, so the caller can refresh `entities`/`runtime`. */
   onOpen?: () => void;
   /** React/MSW-only: worker on/off. Omit entirely for transports (like Next.js) with nothing to intercept. */
@@ -443,7 +440,6 @@ function DataWindow({
   return (
     <div
       onMouseDown={onFocus}
-      {...{ [MASK_IGNORE_ATTR]: '' }}
       style={{
         boxSizing: 'border-box',
         position: 'fixed',
@@ -501,40 +497,18 @@ export function DevtoolsPanel({
   onRuntimeChange,
   onFetchRecords,
   onResetEntity,
-  onCollectAllValues,
   onOpen,
   mockNetwork,
   bypass,
 }: DevtoolsPanelProps) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<'main' | 'list'>('main');
-  const [masked, setMasked] = useState(false);
   const [windows, setWindows] = useState<WindowState[]>([]);
   const [order, setOrder] = useState<string[]>([]);
-
-  const originalTextRef = useRef(new WeakMap<Text, string>());
-  const maskedNodesRef = useRef(new Set<Text>());
-  const observerRef = useRef<MutationObserver | null>(null);
 
   function openPanel() {
     setOpen(true);
     onOpen?.();
-  }
-
-  async function toggleMask() {
-    if (masked) {
-      restoreMask(originalTextRef.current, maskedNodesRef.current);
-      observerRef.current?.disconnect();
-      observerRef.current = null;
-      setMasked(false);
-      return;
-    }
-    const values = await onCollectAllValues();
-    applyMask(values, originalTextRef.current, maskedNodesRef.current);
-    const observer = new MutationObserver(() => applyMask(values, originalTextRef.current, maskedNodesRef.current));
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-    observerRef.current = observer;
-    setMasked(true);
   }
 
   function focusWindow(id: string) {
@@ -570,7 +544,6 @@ export function DevtoolsPanel({
       <FloatingToggle open={open} onClick={() => (open ? setOpen(false) : openPanel())} />
       {open && (
         <div
-          {...{ [MASK_IGNORE_ATTR]: '' }}
           style={{
             boxSizing: 'border-box',
             position: 'fixed',
@@ -614,11 +587,6 @@ export function DevtoolsPanel({
                   />
                 </Row>
               )}
-
-              <Row>
-                <span style={rowLabelStyle}>Highlight mock data</span>
-                <Switch label="Highlight mock data" checked={masked} onChange={() => void toggleMask()} />
-              </Row>
 
               <Row>
                 <span style={rowLabelStyle}>Delay</span>

@@ -1,6 +1,6 @@
 ---
 title: MockProvider & MockDevtools
-description: Optional React components for worker lifecycle, live runtime editing, and mock-data highlighting
+description: Optional React components for worker lifecycle and live runtime editing
 ---
 
 `mockingpug/react` exports two optional components on top of
@@ -88,7 +88,6 @@ A floating collapsed button that expands into a settings panel with:
 - Mock network toggle: same as `mode`/`setMode` above.
 - Live `delay`/`errorRate` inputs: edits `ctx.runtime` through the
   provider.
-- A "Highlight mock data" toggle (see below).
 - A "Mock Data" row that navigates to a second page listing every entity,
   its record count, and a per-entity bypass switch (the runtime half of
   [bypass](/docs/guides/react#per-entity-bypass)), plus a "reset all"
@@ -103,43 +102,7 @@ open at once; clicking an entity that's already open just brings its
 window to the front instead of opening a duplicate.
 
 It renders nothing but the toggle button by default; the panel only
-appears once opened, and unmounts cleanly (undoing any active mask,
-disconnecting its `MutationObserver`) when removed from the tree.
-
-## Highlighting mock data on the page
-
-The idea: replace every value that actually came from a generated record
-with a `***` string of the same length, everywhere it's currently
-rendered on the page. A value that *doesn't* change when you toggle
-this on is, by definition, not mock data (a hardcoded label, a static
-heading, etc).
-
-How it works, concretely:
-
-1. On toggle, it reads every currently-stored record across every entity
-   directly from `ctx.store` (not from network responses, this catches
-   data that hasn't been fetched by the current page yet, too) and
-   flattens every string/number leaf value (at least 3 characters long)
-   into a lookup set.
-2. It walks every text node under `document.body`
-   (`document.createTreeWalker(..., NodeFilter.SHOW_TEXT)`). Any node
-   whose text exactly matches, or contains as a substring, one of those
-   known values gets its entire text content replaced with
-   `'*'.repeat(originalLength)`.
-3. The devtools panel's own DOM (the floating toggle, the settings/list
-   panel, every open data window) is excluded from the walk, so masking is
-   never applied to the raw record values `<MockDevtools>` itself displays,
-   like the JSON viewer in an open data window: only your app's rendered
-   content gets masked.
-4. The original text is remembered (so untoggling restores it exactly),
-   and a `MutationObserver` re-applies the mask to any newly-inserted
-   content while the toggle stays on (e.g. loading the next page of a
-   paginated list).
-5. Untoggling restores every masked node's original text and disconnects
-   the observer.
-
-This is a pure DOM-level operation: the actual JSON response your app's
-`fetch()` calls receive is never altered.
+appears once opened.
 
 ## `<MockDevtools>` for Next.js
 
@@ -171,16 +134,15 @@ a context directly:
   mutating the same `ctx.runtime` object reference `createNextHandlers()`
   reads from, so the change applies to the very next request with no
   restart.
-- `GET {baseUrl}/__mockingpug/records/:entity`: up to 10 current records.
+- `GET {baseUrl}/__mockingpug/records/:entity`: up to 10 current records,
+  for the "Mock Data" preview window.
 - `POST {baseUrl}/__mockingpug/reset/:entity`: deletes and regenerates
   just that entity.
 
-Same panel, same "Mock Data" list page, same draggable floating record
-windows, and the same "highlight mock data" masking as the React version
-(collects known generated values over `fetch()` instead of reading
-`ctx.store` directly, then does the identical DOM `TreeWalker` pass). There's
-no mock-network toggle or per-entity bypass switch built into this panel:
-both are React/MSW-specific concepts, and a Route Handler *is* the real
+Same panel and same "Mock Data" list page/draggable floating record
+windows as the React version. There's no mock-network toggle or
+per-entity bypass switch built into this panel: both are React/MSW-specific
+concepts, and a Route Handler *is* the real
 server, so there's nothing to switch off or bypass at the panel level.
 See the [Next.js guide](/docs/guides/nextjs) for two separate opt-in
 recipes: `createProxyHandler()` (per-request mock/real decision in the

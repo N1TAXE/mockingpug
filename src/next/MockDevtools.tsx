@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { collectValues } from '../shared/mask.js';
 import { DevtoolsPanel } from '../shared/devtoolsUI.js';
 import { DEVTOOLS_SEGMENT } from './devtoolsPath.js';
 
@@ -28,10 +27,10 @@ interface Snapshot {
 
 /**
  * `<MockDevtools>` for the Next.js Route Handler transport: same floating
- * panel and "highlight mock data" masking as `mockingpug/react`'s, but talks
- * to the devtools sub-API under `{baseUrl}/__mockingpug/*` over `fetch()`
- * instead of a React context, since a Route Handler runs server-side and
- * there's no client-side store to read directly.
+ * panel as `mockingpug/react`'s, but talks to the devtools sub-API under
+ * `{baseUrl}/__mockingpug/*` over `fetch()` instead of a React context,
+ * since a Route Handler runs server-side and there's no client-side store
+ * to read directly.
  *
  * No "mock network" toggle and no per-entity bypass here, both are
  * React/MSW-specific concepts that don't apply to a Route Handler, which
@@ -60,15 +59,6 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
     return records;
   }
 
-  async function collectAllValues(): Promise<Set<string>> {
-    const values = new Set<string>();
-    for (const entity of Object.keys(snapshot.entities)) {
-      const records = await fetchRecords(entity);
-      for (const record of records) collectValues(record, values);
-    }
-    return values;
-  }
-
   async function updateRuntime(patch: { delay?: number; errorRate?: number }) {
     const res = await fetch(`${apiBase}/runtime`, {
       method: 'POST',
@@ -87,7 +77,6 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
       onRuntimeChange={(patch) => void updateRuntime(patch)}
       onFetchRecords={fetchRecords}
       onResetEntity={resetEntity}
-      onCollectAllValues={collectAllValues}
       onOpen={() => void refresh()}
     />
   );

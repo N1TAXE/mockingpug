@@ -1,16 +1,15 @@
 import { useState } from 'react';
 import { generateAll } from '../generator/index.js';
-import { collectValues } from '../shared/mask.js';
 import { DevtoolsPanel } from '../shared/devtoolsUI.js';
 import { useMockContext } from './MockProvider.js';
 
 /**
  * Floating dev-only panel: mock/off toggle, live `delay`/`errorRate`
- * editing, a "Mock Data" list of every entity (record count + per-entity
- * bypass), and the mock-data masking toggle. Clicking an entity opens its
- * records in a separate, draggable floating window. Meant to be rendered
- * only behind the same dev-only import gate as `startMocking()` itself (see
- * `react/README.md`); never shipped to production.
+ * editing, and a "Mock Data" list of every entity (record count + per-entity
+ * bypass). Clicking an entity opens its records in a separate, draggable
+ * floating window. Meant to be rendered only behind the same dev-only import
+ * gate as `startMocking()` itself (see `react/README.md`); never shipped to
+ * production.
  */
 export function MockDevtools() {
   const { mode, setMode, ctx, runtime, setRuntime, bypass, unbypass, isBypassed } = useMockContext();
@@ -38,15 +37,6 @@ export function MockDevtools() {
     return stored?.records.slice(0, 10) ?? [];
   }
 
-  async function collectAllValues(): Promise<Set<string>> {
-    const values = new Set<string>();
-    for (const entity of Object.keys(ctx.schemas)) {
-      const stored = await ctx.store.load(entity);
-      for (const record of stored?.records ?? []) collectValues(record, values);
-    }
-    return values;
-  }
-
   return (
     <DevtoolsPanel
       title="mockingpug"
@@ -55,7 +45,6 @@ export function MockDevtools() {
       onRuntimeChange={setRuntime}
       onFetchRecords={fetchRecords}
       onResetEntity={resetEntity}
-      onCollectAllValues={collectAllValues}
       onOpen={() => void refreshCounts()}
       mockNetwork={{ enabled: mode === 'mock', onToggle: (next) => setMode(next ? 'mock' : 'off') }}
       bypass={{
