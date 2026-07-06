@@ -3,6 +3,8 @@
 [![CI](https://github.com/N1TAXE/mockingpug/actions/workflows/ci.yml/badge.svg)](https://github.com/N1TAXE/mockingpug/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+**[Website & documentation](https://mockingpug.vercel.app/)**
+
 Declarative, JSON-schema-driven mock data generation and REST-like API
 mocking for React/Next.js. No separate mock server process, no hand-written
 fixture arrays, no imperative factory functions to maintain.
@@ -57,10 +59,11 @@ npm install -D mockingpug
 npx mpug init
 ```
 
-See the full documentation under [`site/content/docs`](site/content/docs)
-for the schema DSL, framework guides (React, Next.js, Vite), the CLI
-reference, and the security/performance notes. Runnable starters for every
-supported transport live under [`examples/`](examples).
+See the full documentation at **[mockingpug.vercel.app](https://mockingpug.vercel.app/)**
+(source under [`site/content/docs`](site/content/docs)) for the schema DSL,
+framework guides (React, Next.js, Vite), the CLI reference, and the
+security/performance notes. Runnable starters for every supported transport
+live under [`examples/`](examples).
 
 ## Development
 

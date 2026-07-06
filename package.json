@@ -23,7 +23,7 @@
     "type": "git",
     "url": "git+https://github.com/N1TAXE/mockingpug.git"
   },
-  "homepage": "https://github.com/N1TAXE/mockingpug",
+  "homepage": "https://mockingpug.vercel.app/",
   "bugs": {
     "url": "https://github.com/N1TAXE/mockingpug/issues"
   },
