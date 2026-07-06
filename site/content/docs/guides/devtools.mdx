@@ -179,10 +179,14 @@ Same panel, same "Mock Data" list page, same draggable floating record
 windows, and the same "highlight mock data" masking as the React version
 (collects known generated values over `fetch()` instead of reading
 `ctx.store` directly, then does the identical DOM `TreeWalker` pass). There's
-no mock-network toggle or per-entity bypass switch here: both are
-React/MSW-specific, and a Route Handler *is* the real server, so there's
-nothing to switch off or bypass (see the [Next.js guide](/docs/guides/nextjs)
-for routing a specific path around the mock entirely instead).
+no mock-network toggle or per-entity bypass switch built into this panel:
+both are React/MSW-specific concepts, and a Route Handler *is* the real
+server, so there's nothing to switch off or bypass at the panel level.
+See the [Next.js guide](/docs/guides/nextjs) for two separate opt-in
+recipes: `createProxyHandler()` (per-request mock/real decision in the
+Route Handler itself) and `createLiveToggleMiddleware()` (a cookie-driven
+toggle you wire up with your own UI and `middleware.ts`, no rebuild
+needed).
 
 <Callout type="warn" title="errorRate: 1 can hide the panel itself">
 `ctx.runtime.errorRate` lives on the server process, not in the browser. If

@@ -130,10 +130,11 @@ explicitly if `mock.config.js` sets a different one. It gives you:
   same length, so a hardcoded string sitting next to real mock data stands
   out.
 
-There's no "mock network" toggle or per-entity `bypass` checkbox here:
-both are React/MSW-specific concepts that don't apply to a Route Handler,
-which *is* the real server. Use the `rewrites()` recipe below to route a
-specific path around the mock entirely.
+There's no "mock network" toggle or per-entity `bypass` checkbox built
+into this panel: both are React/MSW-specific concepts that don't apply to
+a Route Handler, which *is* the real server. Use the `rewrites()` recipe
+below to route a specific path around the mock entirely at build time, or
+Recipe B/C further down for a per-request or cookie-driven alternative.
 
 ## Switching mock ↔ real API
 
@@ -169,6 +170,68 @@ export const GET = async (request: Request, routeCtx: NextRouteContext) => {
 `mockingpug` does not exclude this route from your production build for
 you; that's your bundler/deploy config's job (e.g. not shipping the file,
 or an environment check like above).
+
+## Recipe B: one Route Handler, decided at request time
+
+`rewrites()` above is a build-time decision. `createProxyHandler()` wraps
+`createNextHandlers()` with an opt-in forwarding proxy that decides
+mock-vs-real **per request** instead, so a single deployed Route Handler
+can serve both:
+
+```ts
+// app/api/[[...mock]]/route.ts
+import { createProxyHandler, getMockContext, type NextRouteContext } from 'mockingpug/next';
+
+const handlersPromise = getMockContext(process.cwd()).then(({ ctx }) =>
+  createProxyHandler({ ctx, target: process.env.REAL_API_URL! }),
+);
+
+export const GET = async (request: Request, routeCtx: NextRouteContext) => (await handlersPromise).GET(request, routeCtx);
+export const POST = async (request: Request, routeCtx: NextRouteContext) => (await handlersPromise).POST(request, routeCtx);
+export const PUT = async (request: Request, routeCtx: NextRouteContext) => (await handlersPromise).PUT(request, routeCtx);
+export const PATCH = async (request: Request, routeCtx: NextRouteContext) => (await handlersPromise).PATCH(request, routeCtx);
+export const DELETE = async (request: Request, routeCtx: NextRouteContext) => (await handlersPromise).DELETE(request, routeCtx);
+```
+
+`shouldMock(request)` (defaults to `process.env.MOCK_MODE === 'mock'`)
+decides per request; `false` forwards method/query/headers (minus
+hop-by-hop ones)/body to `target` and returns the response as-is. This is
+a **convenience, not a transparent API gateway replacement**: extra hop,
+buffered (non-streaming) body, plain pass-through only — verify auth
+headers/cookies/large payloads against your specific backend before
+relying on it in production.
+
+## Recipe C: cookie-based live toggle, no rebuild
+
+A **runtime, per-request** override on top of either recipe above, useful
+for QA poking a prod-like backend from an already-deployed build without
+touching env vars or redeploying:
+
+```ts
+// middleware.ts
+import { createLiveToggleMiddleware } from 'mockingpug/next';
+
+export const middleware = createLiveToggleMiddleware({ target: process.env.REAL_API_URL! });
+export const config = { matcher: '/api/:path*' };
+```
+
+Runs in `middleware.ts` (not the Route Handler): a rewrite has to happen
+before routing decides anything. Reads a `mockingpug-live` cookie by
+default; `"real"` on a request under `baseUrl` (defaults to `/api`)
+rewrites it to `target`, anything else falls through to the mock
+untouched. Flip it client-side:
+
+```tsx
+import { setLiveToggleCookie, getLiveToggleCookie } from 'mockingpug/next/client';
+
+<button onClick={() => setLiveToggleCookie(!getLiveToggleCookie())}>
+  Toggle real network
+</button>
+```
+
+Plain first-party cookie, no server round-trip. Not wired into
+`<MockDevtools>`'s panel: it needs its own `middleware.ts` to work, so
+it's assembled with your own toggle UI, separate from the panel below.
 
 ## Live schema reloading
 

@@ -5,6 +5,17 @@ import { collectValues } from '../shared/mask.js';
 import { DevtoolsPanel } from '../shared/devtoolsUI.js';
 import { DEVTOOLS_SEGMENT } from './devtoolsPath.js';
 
+// Re-exported here (not from `mockingpug/next`) because it's meant to be
+// called from client-side code: importing it from the server entry would
+// drag that entry's Node-touching module graph (`getMockContext()`'s
+// `node:fs` watcher) into a client component's bundle. See `next/README.md`.
+export {
+  getLiveToggleCookie,
+  setLiveToggleCookie,
+  DEFAULT_LIVE_TOGGLE_COOKIE,
+  type SetLiveToggleCookieOptions,
+} from './liveToggleClient.js';
+
 export interface MockDevtoolsProps {
   /** Must match `mock.config.js`'s `baseUrl`. Defaults to `/api`, same as the transport itself. */
   baseUrl?: string;

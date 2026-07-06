@@ -10,7 +10,7 @@ export default defineConfig({
     'next/MockDevtools': 'src/next/MockDevtools.tsx',
     'vite/index': 'src/vite/index.ts',
   },
-  external: ['vite', 'react', 'react-dom'],
+  external: ['vite', 'react', 'react-dom', 'next'],
   format: ['esm'],
   dts: true,
   clean: true,
