@@ -63,7 +63,11 @@ and unresolvable dependency cycles. If `persist.adapter: 'file'`, it also
 checks for orphaned entities: data left in `.mockingpug/db` whose schema
 no longer exists. It also warns when an entity's `amount` or an
 `array[type].N` exceeds `limits.maxAmount`/`limits.maxArrayDepth`, a
-DoS-guard as much as a perf one.
+DoS-guard as much as a perf one, and warns about any
+[`literal`](/docs/concepts/schema-dsl#literal-records) record that's
+missing a schema field or has the wrong type for one (`literal` bypasses
+generation entirely, so it's never structurally checked the way generated
+records are).
 
 - Exit code `0` if everything's valid (orphans and limit overruns are only
   **warnings**, not failures, by default).

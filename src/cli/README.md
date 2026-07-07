@@ -65,7 +65,10 @@ checks for orphaned entities: data left in `.mockingpug/db` whose schema no
 longer exists. It also warns when an entity's `amount` or an `array[type].N`
 exceeds `mock.config.js`'s `limits.maxAmount`/`limits.maxArrayDepth` (§below),
 a DoS guard as much as a perf one, catching a schema that would generate
-an unreasonably large amount of data before it ever runs.
+an unreasonably large amount of data before it ever runs. It also warns
+about any `literal` record (§ below) missing a schema field, or with a
+value of the wrong type for one — `literal` bypasses generation entirely,
+so it's never structurally checked the way generated records are.
 
 - Exit code `0` if everything's valid (orphans and limit overruns are only
   **warnings**, not failures, by default).

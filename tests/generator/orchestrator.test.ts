@@ -367,6 +367,181 @@ describe('generateAll : fixtures', () => {
   });
 });
 
+describe('generateAll : literal', () => {
+  function categorySchemas(amount: number, literal?: Array<Record<string, unknown>>): SchemaBundle {
+    return {
+      category: {
+        name: 'category',
+        file: 'mock/api/category/schema.json',
+        amount,
+        data: { id: increment, name: lorem, slug: lorem },
+        ...(literal ? { literal } : {}),
+      },
+    };
+  }
+
+  const curated = [
+    { id: 1, name: 'VKontakte', slug: 'vk' },
+    { id: 2, name: 'Steam', slug: 'steam-keys' },
+  ];
+
+  it('places literal records verbatim at the head, leaving the rest schema-generated', async () => {
+    const store = new MemoryStoreAdapter();
+    await generateAll(categorySchemas(5, curated), store, { seed: 's' });
+    const records = (await store.load('category'))!.records;
+
+    expect(records).toHaveLength(5);
+    expect(records[0]).toMatchObject({ id: 1, name: 'VKontakte', slug: 'vk' });
+    expect(records[1]).toMatchObject({ id: 2, name: 'Steam', slug: 'steam-keys' });
+    for (let i = 2; i < 5; i++) {
+      expect(records[i]!.name).toBeTypeOf('string');
+      expect(curated.some((r) => r.slug === records[i]!.slug)).toBe(false);
+    }
+  });
+
+  it('marks literal-covered records as _seed: false', async () => {
+    const store = new MemoryStoreAdapter();
+    await generateAll(categorySchemas(5, curated), store, { seed: 's' });
+    const records = (await store.load('category'))!.records;
+    expect(records[0]!._seed).toBe(false);
+    expect(records[1]!._seed).toBe(false);
+  });
+
+  it("generated records' increment ids don't collide with a literal-assigned id, on the very first pass", async () => {
+    const store = new MemoryStoreAdapter();
+    // Literal record 0 claims id 1, matching what the increment generator
+    // would otherwise hand out first — the generated records must skip past
+    // it immediately, not just on a subsequent pass.
+    await generateAll(categorySchemas(3, [{ id: 1, name: 'Pinned', slug: 'pinned' }]), store, { seed: 's' });
+    const records = (await store.load('category'))!.records;
+
+    expect(records).toHaveLength(3);
+    const ids = records.map((r) => r.id);
+    expect(new Set(ids).size).toBe(3);
+    expect(ids[0]).toBe(1);
+  });
+
+  it('a literal record survives an unrelated field-type change', async () => {
+    const store = new MemoryStoreAdapter();
+    const base = categorySchemas(5, curated);
+    await generateAll(base, store, { seed: 's' });
+
+    const changed: SchemaBundle = {
+      category: { ...base.category!, data: { ...base.category!.data, name: { kind: 'uuid' } } },
+    };
+    await generateAll(changed, store, { seed: 's' });
+    const records = (await store.load('category'))!.records;
+
+    expect(records[0]).toMatchObject({ id: 1, name: 'VKontakte', slug: 'vk' });
+    expect(records[1]).toMatchObject({ id: 2, name: 'Steam', slug: 'steam-keys' });
+    // Non-literal records DO pick up the new generator type.
+    expect(records[2]!.name).not.toBe(records[2]!.slug);
+  });
+
+  it('editing the literal array itself is picked up on the next generate', async () => {
+    const store = new MemoryStoreAdapter();
+    await generateAll(categorySchemas(5, curated), store, { seed: 's' });
+
+    const relabeled = categorySchemas(5, [{ id: 1, name: 'VK', slug: 'vk' }, { id: 2, name: 'Steam', slug: 'steam-keys' }]);
+    await generateAll(relabeled, store, { seed: 's' });
+    const records = (await store.load('category'))!.records;
+
+    expect(records[0]!.name).toBe('VK');
+  });
+
+  it('is a no-op when neither the schema nor literal changed', async () => {
+    const store = new MemoryStoreAdapter();
+    const schemas = categorySchemas(5, curated);
+    await generateAll(schemas, store, { seed: 's' });
+    const before = await store.load('category');
+
+    const summary = await generateAll(schemas, store, { seed: 's' });
+    const after = await store.load('category');
+
+    expect(summary.entities[0]).toMatchObject({ skipped: true });
+    expect(after).toEqual(before);
+  });
+
+  it('amount growth beyond literal.length still generates the extra records normally', async () => {
+    const store = new MemoryStoreAdapter();
+    await generateAll(categorySchemas(2, curated), store, { seed: 's' });
+    await generateAll(categorySchemas(6, curated), store, { seed: 's' });
+    const records = (await store.load('category'))!.records;
+
+    expect(records).toHaveLength(6);
+    expect(records[0]).toMatchObject({ id: 1, name: 'VKontakte', slug: 'vk' });
+    expect(records[1]).toMatchObject({ id: 2, name: 'Steam', slug: 'steam-keys' });
+  });
+
+  it('literal.length shrinking regenerates the newly-uncovered positions instead of leaving stale content', async () => {
+    const store = new MemoryStoreAdapter();
+    await generateAll(categorySchemas(5, curated), store, { seed: 's' });
+
+    // Drop the second curated entry: amount stays 5, literal shrinks to 1.
+    await generateAll(categorySchemas(5, [curated[0]!]), store, { seed: 's' });
+    const records = (await store.load('category'))!.records;
+
+    expect(records).toHaveLength(5);
+    expect(records[0]).toMatchObject({ id: 1, name: 'VKontakte', slug: 'vk' });
+    // Position 1 no longer matches the dropped literal entry.
+    expect(records[1]!.slug).not.toBe('steam-keys');
+  });
+
+  it('crossRef resolution against a literal-covered target record works like any generated one', async () => {
+    const store = new MemoryStoreAdapter();
+    const schemas: SchemaBundle = {
+      category: {
+        name: 'category',
+        file: 'mock/api/category/schema.json',
+        amount: 3,
+        data: { id: increment, name: lorem },
+        literal: [{ id: 1, name: 'Pinned Category' }],
+      },
+      product: {
+        name: 'product',
+        file: 'mock/api/product/schema.json',
+        amount: 3,
+        data: { id: increment, categoryId: { kind: 'crossRef', entity: 'category', field: 'id' } },
+      },
+    };
+    await generateAll(schemas, store, { seed: 's' });
+    const categoryIds = (await store.load('category'))!.records.map((r) => r.id);
+    const products = (await store.load('product'))!.records;
+
+    for (const product of products) {
+      expect(categoryIds).toContain(product.categoryId);
+    }
+  });
+
+  it('rejects literal.length greater than amount at parse time', async () => {
+    const { parseEntitySchema, SchemaError } = await import('../../src/core/index.js');
+    try {
+      parseEntitySchema('category', 'mock/api/category/schema.json', {
+        amount: 1,
+        data: { id: 'number.increment' },
+        literal: [{ id: 1 }, { id: 2 }],
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as InstanceType<typeof SchemaError>).code).toBe('MP-SCHEMA-019');
+    }
+  });
+
+  it('rejects a non-array-of-objects literal at parse time', async () => {
+    const { parseEntitySchema, SchemaError } = await import('../../src/core/index.js');
+    try {
+      parseEntitySchema('category', 'mock/api/category/schema.json', {
+        amount: 5,
+        data: { id: 'number.increment' },
+        literal: 'nope',
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as InstanceType<typeof SchemaError>).code).toBe('MP-SCHEMA-018');
+    }
+  });
+});
+
 /** article: title generated first, slug derived from it via slugify. */
 function articleSchemas(amount: number): SchemaBundle {
   return {

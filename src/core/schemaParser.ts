@@ -23,11 +23,12 @@ export function parseEntitySchema(
     });
   }
 
-  const { amount, data, bypass, fixtures } = raw as {
+  const { amount, data, bypass, fixtures, literal } = raw as {
     amount?: unknown;
     data?: unknown;
     bypass?: unknown;
     fixtures?: unknown;
+    literal?: unknown;
   };
 
   if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) {
@@ -56,6 +57,20 @@ export function parseEntitySchema(
         'MP-SCHEMA-014',
         `"fixtures" has ${fixtures.length} entries but "amount" is ${amount} in schema file for "${entityName}": amount must be at least as large as fixtures.length`,
         { location: { file, path: 'fixtures' } },
+      );
+    }
+  }
+  if (literal !== undefined) {
+    if (!Array.isArray(literal) || literal.some((r) => typeof r !== 'object' || r === null || Array.isArray(r))) {
+      throw new SchemaError('MP-SCHEMA-018', `"literal" must be an array of objects in schema file for "${entityName}"`, {
+        location: { file, path: 'literal' },
+      });
+    }
+    if (literal.length > amount) {
+      throw new SchemaError(
+        'MP-SCHEMA-019',
+        `"literal" has ${literal.length} entries but "amount" is ${amount} in schema file for "${entityName}": amount must be at least as large as literal.length`,
+        { location: { file, path: 'literal' } },
       );
     }
   }
@@ -98,6 +113,7 @@ export function parseEntitySchema(
     amount,
     data: fields,
     ...(fixtures !== undefined ? { fixtures: fixtures as Array<Record<string, unknown>> } : {}),
+    ...(literal !== undefined ? { literal: literal as Array<Record<string, unknown>> } : {}),
     ...(bypass !== undefined ? { bypass } : {}),
   };
 }

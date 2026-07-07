@@ -35,6 +35,8 @@ Thrown while parsing `mock/api/**/schema.json` / `mock/data/*.json`.
 | `MP-SCHEMA-015` | `"slugify[...]"` isn't exactly two comma-separated parts (a field name and a separator). |
 | `MP-SCHEMA-016` | A `"slugify[field,...]"` references a field that doesn't exist on the same entity. |
 | `MP-SCHEMA-017` | A `"slugify[field,...]"` references a field declared at the same position or later in `data` (including a self-reference). |
+| `MP-SCHEMA-018` | `"literal"` is present but isn't an array of objects. |
+| `MP-SCHEMA-019` | `"literal"` has more entries than `"amount"`. |
 
 ## `MP-DEP-*`: cross-entity reference graph
 

@@ -10,6 +10,7 @@ Each entity is one JSON file, conventionally at `mock/api/<entity>/schema.json`:
   "amount": 1000,
   "data": { "fieldName": "<DSL string>" },
   "fixtures": [{ "fieldName": "an exact literal value" }],
+  "literal": [{ "fieldName": "a whole curated record" }],
   "bypass": false
 }
 ```
@@ -17,8 +18,12 @@ Each entity is one JSON file, conventionally at `mock/api/<entity>/schema.json`:
 - **`amount`**: how many records to generate for this entity. Required,
   non-negative.
 - **`data`**: one DSL string per field. Required.
-- **`fixtures`** *(optional)*: exact, literal records applied positionally,
-  for rows that need to stay fixed. See [Fixtures](#fixtures) below.
+- **`fixtures`** *(optional)*: exact, literal *field* values applied
+  positionally as a patch onto an otherwise schema-generated record. See
+  [Fixtures](#fixtures) below.
+- **`literal`** *(optional)*: exact, caller-provided whole *records* placed
+  at the head of the set, bypassing generation entirely. See
+  [Literal records](#literal-records) below.
 - **`bypass`** *(optional, `mockingpug/react` only)*: `true` makes every
   request for this entity fall through to the real network instead of
   being mocked. See [React guide § bypass](/docs/guides/react#bypass).
@@ -127,6 +132,44 @@ Fixture values always win: even if `slug`'s generator type changes later,
 or an unrelated field on the schema changes, `fixtures[0].slug` still
 comes out as `"fb"` on the next generate. `amount` must be at least
 `fixtures.length` (`mpug doctor`/parsing rejects it otherwise, `MP-SCHEMA-014`).
+
+## Literal records
+
+`fixtures` patches individual fields onto an otherwise schema-generated
+record; sometimes the whole record is curated data with no schema-generated
+part at all — a curated catalog tree with exact slugs, or one "sample
+product" with specific real-looking values throughout. `literal` covers
+that: an array of **whole records**, placed verbatim at the head of the
+set, the same positional semantics as `fixtures` (`literal[0]` is always
+record index 0, and so on):
+
+```json title="mock/api/category/schema.json"
+{
+  "amount": 200,
+  "data": { "id": "number.increment", "name": "lorem", "slug": "lorem" },
+  "literal": [
+    { "id": 1, "name": "VKontakte", "slug": "vk" },
+    { "id": 2, "name": "Steam", "slug": "steam-keys" }
+  ]
+}
+```
+
+Unlike a fixture, a literal record is never passed through the generator at
+all — it's inserted exactly as written, so it must carry every field the
+schema declares (`mpug doctor` warns, but doesn't hard-fail, if a literal
+record is missing a field or has the wrong type for it — see
+[Doctor](/docs/guides/cli#doctor)). `id`/increment-style fields set by a
+literal record are respected immediately: the generator seeds its increment
+counters from literal values first, so a schema-generated record never
+collides with a literal-assigned id, even on the very first generate.
+Records beyond `literal.length` are entirely schema-generated, same as
+without `literal` at all, and a literal-covered record is a perfectly
+valid `crossRef` target for other entities, same as a generated one.
+
+`amount` must be at least `literal.length` (`mpug doctor`/parsing rejects it
+otherwise, `MP-SCHEMA-019`). If `literal` shrinks on a later edit, the
+positions that are no longer covered are regenerated fresh rather than
+keeping stale literal content around.
 
 ## Slugify
 

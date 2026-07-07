@@ -7,6 +7,10 @@ export interface EntityMeta {
   fieldsHash: Record<string, string>;
   /** Hash of the entity's `fixtures` array; changes if and only if fixtures are added, removed, or edited. */
   fixturesHash: string;
+  /** Hash of the entity's `literal` array; changes if and only if literal records are added, removed, or edited. */
+  literalHash: string;
+  /** `literal.length` as of this snapshot; the generator needs this on its own (not just the hash) to know which positions to fall back to schema-generated content when `literal` shrinks. */
+  literalCount: number;
 }
 
 /** Deterministic, order-independent serialization of a field spec. */
@@ -32,11 +36,13 @@ export function computeEntityMeta(
   amount: number,
   fields: Record<string, FieldSpec>,
   fixtures?: readonly Record<string, unknown>[],
+  literal?: readonly Record<string, unknown>[],
 ): EntityMeta {
   const fieldsHash: Record<string, string> = {};
   for (const [name, spec] of Object.entries(fields)) {
     fieldsHash[name] = computeFieldFingerprint(spec);
   }
   const fixturesHash = hashString(stableStringify(fixtures ?? [])).toString(16);
-  return { amount, fieldsHash, fixturesHash };
+  const literalHash = hashString(stableStringify(literal ?? [])).toString(16);
+  return { amount, fieldsHash, fixturesHash, literalHash, literalCount: literal?.length ?? 0 };
 }

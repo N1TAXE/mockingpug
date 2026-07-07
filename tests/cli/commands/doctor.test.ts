@@ -135,6 +135,57 @@ describe('doctor', () => {
     expect(result.warnings).toEqual([]);
   });
 
+  it('warns when a literal record is missing a required schema field', async () => {
+    await writeFiles({
+      'mock/api/category/schema.json': JSON.stringify({
+        amount: 3,
+        data: { id: 'number.increment', name: 'lorem.16', slug: 'lorem.16' },
+        literal: [{ id: 1, name: 'VKontakte' }],
+      }),
+    });
+    const result = await doctor(dir);
+    expect(result.ok).toBe(true);
+    expect(result.warnings.some((w) => w.includes('literal[0]') && w.includes('"slug"'))).toBe(true);
+  });
+
+  it('warns when a literal record field has the wrong JS type for its generator kind', async () => {
+    await writeFiles({
+      'mock/api/category/schema.json': JSON.stringify({
+        amount: 3,
+        data: { id: 'number.increment', name: 'lorem.16' },
+        literal: [{ id: 'not-a-number', name: 'VKontakte' }],
+      }),
+    });
+    const result = await doctor(dir);
+    expect(result.ok).toBe(true);
+    expect(result.warnings.some((w) => w.includes('literal[0].id') && w.includes('should be a number'))).toBe(true);
+  });
+
+  it('does not warn about a well-formed literal record', async () => {
+    await writeFiles({
+      'mock/api/category/schema.json': JSON.stringify({
+        amount: 3,
+        data: { id: 'number.increment', name: 'lorem.16' },
+        literal: [{ id: 1, name: 'VKontakte' }],
+      }),
+    });
+    const result = await doctor(dir);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('rejects literal.length greater than amount', async () => {
+    await writeFiles({
+      'mock/api/category/schema.json': JSON.stringify({
+        amount: 1,
+        data: { id: 'number.increment' },
+        literal: [{ id: 1 }, { id: 2 }],
+      }),
+    });
+    const result = await doctor(dir);
+    expect(result.ok).toBe(false);
+    expect(result.messages[0]).toContain('literal');
+  });
+
   describe('--assert-prod-safe', () => {
     it('passes when the build output has no mock markers', async () => {
       await writeFiles(validProject);

@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { topologicalOrder, validateEntitiesExist, type EntitySchema, type FieldSpec } from '../../core/index.js';
 import { findOrphanEntities, FileStoreAdapter } from '../../store/index.js';
-import { toSchemaMap } from '../../generator/index.js';
+import { isStoredField, toSchemaMap } from '../../generator/index.js';
 import { loadConfig, type LimitsConfig } from '../mockConfig.js';
 import { loadProject } from '../schemaLoader.js';
 import { asCommandFailure, fail, ok, type CommandResult } from '../commandResult.js';
@@ -48,6 +48,55 @@ function checkLimits(entities: Record<string, EntitySchema>, limits: LimitsConfi
         }
       });
     }
+  }
+  return warnings;
+}
+
+/** Field kinds whose generated value is always a `string`, used to sanity-check `literal` records. */
+const STRING_KINDS = new Set(['uuid', 'username', 'email', 'hash', 'lorem', 'date', 'enumInline', 'slugify']);
+
+/** The JS type a literal record's field is expected to have, or `undefined` if not statically checkable (`custom`, field-level `crossRef`). */
+function expectedJsType(spec: FieldSpec): 'string' | 'number' | 'boolean' | 'array' | undefined {
+  if (spec.kind === 'number') return 'number';
+  if (spec.kind === 'boolean') return 'boolean';
+  if (spec.kind === 'array') return 'array';
+  if (STRING_KINDS.has(spec.kind)) return 'string';
+  return undefined;
+}
+
+function matchesJsType(value: unknown, type: 'string' | 'number' | 'boolean' | 'array'): boolean {
+  return type === 'array' ? Array.isArray(value) : typeof value === type;
+}
+
+/**
+ * `literal` records bypass the generator entirely (§ schema-dsl.mdx#literal-records),
+ * so they're never checked against the schema's field types the way generated
+ * records structurally are. This is the doctor-time substitute: every
+ * schema field a record is expected to carry (skipping bare/fieldless
+ * `crossRef`, which is never stored) should be present, and where the
+ * field's generator kind implies a fixed JS type, the literal value should
+ * match it.
+ */
+function checkLiteralRecords(entities: Record<string, EntitySchema>): string[] {
+  const warnings: string[] = [];
+  for (const schema of Object.values(entities)) {
+    if (!schema.literal || schema.literal.length === 0) continue;
+    schema.literal.forEach((record, i) => {
+      for (const [fieldName, spec] of Object.entries(schema.data)) {
+        if (!isStoredField(spec)) continue;
+        if (!(fieldName in record)) {
+          warnings.push(`entity "${schema.name}"'s literal[${i}] is missing required field "${fieldName}"`);
+          continue;
+        }
+        const expected = expectedJsType(spec);
+        if (expected !== undefined && !matchesJsType(record[fieldName], expected)) {
+          const actual = Array.isArray(record[fieldName]) ? 'array' : typeof record[fieldName];
+          warnings.push(
+            `entity "${schema.name}"'s literal[${i}].${fieldName} should be a ${expected} (field type "${spec.kind}"), got ${actual}`,
+          );
+        }
+      }
+    });
   }
   return warnings;
 }
@@ -127,7 +176,7 @@ export async function doctor(projectDir: string, options: DoctorOptions = {}): P
   }
 
   const messages = [`${Object.keys(project.entities).length} entities validated OK`];
-  const warnings: string[] = [...checkLimits(project.entities, config.limits)];
+  const warnings: string[] = [...checkLimits(project.entities, config.limits), ...checkLiteralRecords(project.entities)];
 
   if (options.assertProdSafe !== undefined) {
     const leaks = await findProdSafetyLeaks(options.assertProdSafe);

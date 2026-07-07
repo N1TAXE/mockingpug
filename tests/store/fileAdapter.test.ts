@@ -7,7 +7,7 @@ import { StoreError } from '../../src/core/index.js';
 import type { StoredEntity } from '../../src/store/adapter.js';
 
 const sample: StoredEntity = {
-  meta: { amount: 2, fieldsHash: { id: 'abc' }, fixturesHash: '0' },
+  meta: { amount: 2, fieldsHash: { id: 'abc' }, fixturesHash: '0', literalHash: '0', literalCount: 0 },
   records: [{ id: 1, _seed: true }, { id: 2, _seed: true }],
 };
 

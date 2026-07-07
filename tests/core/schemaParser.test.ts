@@ -141,6 +141,46 @@ describe('parseEntitySchema : validation', () => {
     }
   });
 
+  it('throws SchemaError when "literal" is not an array', () => {
+    try {
+      parseEntitySchema('category', 'x', { amount: 5, data: {}, literal: 'nope' });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-018');
+    }
+  });
+
+  it('throws SchemaError when a "literal" entry is not an object', () => {
+    try {
+      parseEntitySchema('category', 'x', { amount: 5, data: {}, literal: [{ id: 1 }, 'nope'] });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-018');
+    }
+  });
+
+  it('throws SchemaError when "literal" is longer than "amount"', () => {
+    try {
+      parseEntitySchema('category', 'x', {
+        amount: 1,
+        data: {},
+        literal: [{ id: 1 }, { id: 2 }],
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-019');
+    }
+  });
+
+  it('parses a valid "literal" array onto the returned schema', () => {
+    const schema = parseEntitySchema('category', 'x', {
+      amount: 5,
+      data: { id: 'number.increment' },
+      literal: [{ id: 1, name: 'VKontakte' }],
+    });
+    expect(schema.literal).toEqual([{ id: 1, name: 'VKontakte' }]);
+  });
+
   it('throws SchemaError MP-SCHEMA-016 when slugify references an unknown field', () => {
     try {
       parseEntitySchema('article', 'x', {

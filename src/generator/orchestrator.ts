@@ -96,6 +96,28 @@ function applyFixtures(records: StoredRecord[], fixtures: readonly Record<string
   }
 }
 
+const LITERAL_INTERNAL_KEYS = ['_seed', '_index'] as const;
+
+/**
+ * Places `literal` records verbatim at the head of `records` (index 0..N-1),
+ * overwriting whatever is there (unlike `applyFixtures`, this is a full
+ * replacement, not a patch) and extending the array if it's currently
+ * shorter than `literal.length`. Called twice per entity per pass: once
+ * before increment-counter seeding, so a literal's manually-set values
+ * (e.g. a `number.increment` id) are respected by records generated in the
+ * very same pass rather than one pass later; and again at the very end,
+ * to restore literal content in case a field-backfill loop touched those
+ * same slots in between.
+ */
+function applyLiteral(records: StoredRecord[], literal: readonly Record<string, unknown>[] | undefined): void {
+  if (!literal || literal.length === 0) return;
+  for (let i = 0; i < literal.length; i++) {
+    const entry = { ...literal[i] };
+    for (const key of LITERAL_INTERNAL_KEYS) delete entry[key];
+    records[i] = { ...entry, _seed: false, _index: i };
+  }
+}
+
 /**
  * Runs schema-parsing -> dependency graph -> reconciliation -> generation
  * for an entire project in one pass, persisting the result through `store`.
@@ -120,7 +142,7 @@ export async function generateAll(
   for (const entity of order) {
     const schema = schemas[entity]!;
     const previous = await store.load(entity);
-    const currentMeta = computeEntityMeta(schema.amount, schema.data, schema.fixtures);
+    const currentMeta = computeEntityMeta(schema.amount, schema.data, schema.fixtures, schema.literal);
     const plan = planReconciliation(previous?.meta, currentMeta);
 
     if (!plan.isNewEntity && isNoopPlan(plan)) {
@@ -134,10 +156,51 @@ export async function generateAll(
     const resolveCustom = buildCustomResolver(customDictionaries);
 
     let records: StoredRecord[] = plan.isNewEntity ? [] : [...previous!.records];
+
+    // Literal records occupy the head of the set. Place them before seeding
+    // increment counters so their manually-set values (e.g. a
+    // `number.increment` id) are already accounted for when generating the
+    // rest of this same pass, not one pass later. `applyLiteral` only
+    // extends the array when it's currently shorter than `literal.length`
+    // (typically just a brand-new entity, or literal growing past the
+    // previous total) — `literalGrowth` captures exactly that extension, so
+    // it can be netted out of the generate/trim count below without
+    // otherwise touching `plan.amountDelta`'s semantics (a pure `amount`
+    // diff, still correct as-is even in the presence of extra manual
+    // records beyond `amount`, per the existing amount-decrease/manual-record
+    // reconciliation test).
+    const lengthBeforeLiteral = records.length;
+    applyLiteral(records, schema.literal);
+    const literalGrowth = records.length - lengthBeforeLiteral;
+
+    // `literal` shrinking (fewer entries than last pass) leaves stale
+    // literal content sitting at the now-uncovered positions — `applyLiteral`
+    // above only ever touches 0..literal.length-1, never rolls a position
+    // back to schema-generated. Regenerate those positions from scratch here
+    // so they rejoin normal generation instead of keeping frozen literal
+    // values forever.
+    const previousLiteralCount = previous?.meta.literalCount ?? 0;
+    const currentLiteralCount = schema.literal?.length ?? 0;
+    if (currentLiteralCount < previousLiteralCount) {
+      for (let i = currentLiteralCount; i < previousLiteralCount && i < records.length; i++) {
+        records[i] = await generateFullRecord(
+          entity,
+          i,
+          schema.data,
+          options.seed,
+          increments,
+          resolveCustom,
+          resolveTargetRecords,
+        );
+      }
+    }
+
     seedIncrementCounters(entity, schema.data, records, increments);
 
-    if (plan.amountDelta < 0) {
-      records = trimRecords(records, -plan.amountDelta);
+    const generateDelta = plan.amountDelta - literalGrowth;
+
+    if (generateDelta < 0) {
+      records = trimRecords(records, -generateDelta);
     }
 
     for (const fieldName of plan.removedFields) {
@@ -162,9 +225,9 @@ export async function generateAll(
       }
     }
 
-    if (plan.amountDelta > 0) {
+    if (generateDelta > 0) {
       const startIndex = records.length;
-      for (let i = 0; i < plan.amountDelta; i++) {
+      for (let i = 0; i < generateDelta; i++) {
         records.push(
           await generateFullRecord(
             entity,
@@ -179,6 +242,10 @@ export async function generateAll(
       }
     }
 
+    // Reapplied: the changed/added-field backfill loop above iterates over
+    // every record unconditionally, including literal-covered slots, and
+    // would otherwise clobber their curated values with generated ones.
+    applyLiteral(records, schema.literal);
     applyFixtures(records, schema.fixtures);
 
     generatedRecords.set(entity, records);

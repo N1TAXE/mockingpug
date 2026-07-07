@@ -21,6 +21,8 @@ export interface ReconciliationPlan {
   unchangedFields: string[];
   /** `fixtures` array was added, removed, or edited: reapply it positionally. */
   fixturesChanged: boolean;
+  /** `literal` array was added, removed, or edited: reapply it positionally. */
+  literalChanged: boolean;
 }
 
 export function planReconciliation(
@@ -38,9 +40,10 @@ export function planReconciliation(
       changedFields: [],
       unchangedFields: [],
       // No previous snapshot to compare against; the generator applies the
-      // fixture overlay unconditionally on a first pass regardless of this
-      // flag, so `true` here just means "don't treat this as a no-op."
+      // fixture/literal overlays unconditionally on a first pass regardless
+      // of this flag, so `true` here just means "don't treat this as a no-op."
       fixturesChanged: true,
+      literalChanged: true,
     };
   }
 
@@ -71,6 +74,7 @@ export function planReconciliation(
     changedFields,
     unchangedFields,
     fixturesChanged: previous.fixturesHash !== current.fixturesHash,
+    literalChanged: previous.literalHash !== current.literalHash,
   };
 }
 
@@ -82,7 +86,8 @@ export function isNoopPlan(plan: ReconciliationPlan): boolean {
     plan.addedFields.length === 0 &&
     plan.removedFields.length === 0 &&
     plan.changedFields.length === 0 &&
-    !plan.fixturesChanged
+    !plan.fixturesChanged &&
+    !plan.literalChanged
   );
 }
 

@@ -46,7 +46,8 @@ plan covering exactly these cases, only doing the work each one requires:
 | Field removed | The key is deleted from every existing record; nothing else regenerated. |
 | Field's generator type changed | Only that field is regenerated on every existing record it applies to (same seed, so still deterministic per record) — except records covered by a [fixture](/docs/concepts/schema-dsl#fixtures), whose fixed fields are reapplied afterward regardless. |
 | `fixtures` added, removed, or edited | Reapplied positionally onto records 0..`fixtures.length - 1` after every other step. |
-| Any combination of the above at once | Applied in this order: shrink → remove fields → change/add fields → grow → reapply fixtures. |
+| `literal` added, removed, or edited | Whole records 0..`literal.length - 1` are replaced verbatim (not patched) with the `literal` entries, both before increment-counter seeding and again after every other step. If `literal` shrank, positions no longer covered are regenerated fresh instead of keeping stale literal content. |
+| Any combination of the above at once | Applied in this order: place literal records → shrink → remove fields → change/add fields → grow → reapply literal records → reapply fixtures. |
 | Schema deleted entirely (entity still in the store) | Reported as an **orphan**: data left behind with no corresponding schema. Not deleted automatically; see `mpug prune` in the [CLI guide](/docs/guides/cli). |
 
 The practical effect: editing one field in a 10,000-record entity
@@ -67,7 +68,8 @@ generator type changes later.
 If you need specific field values to stay fixed no matter what else
 changes in the schema, that's a stronger guarantee than "survives
 trimming", declare them as [`fixtures`](/docs/concepts/schema-dsl#fixtures)
-instead.
+instead — or, if the whole record (not just a few fields) is curated data,
+as [`literal`](/docs/concepts/schema-dsl#literal-records).
 
 ## Safe merging
 

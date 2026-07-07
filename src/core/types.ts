@@ -43,6 +43,15 @@ export interface EntitySchema {
    */
   fixtures?: Array<Record<string, unknown>>;
   /**
+   * Exact, caller-provided full records placed at the head of the set:
+   * `literal[0]` is always record index 0, `literal[1]` index 1, and so on.
+   * Unlike `fixtures` (a partial patch onto an otherwise schema-generated
+   * record), a `literal` entry is the whole record verbatim — it never goes
+   * through `generateFullRecord()`. Records beyond `literal.length` are
+   * schema-generated as usual. Must not be longer than `amount`.
+   */
+  literal?: Array<Record<string, unknown>>;
+  /**
    * Schema-level opt-out of mocking this entity: a transport
    * handler for a bypassed entity calls MSW's `passthrough()`/`next/next`
    * lets the real backend answer instead of the generated mock, useful once
