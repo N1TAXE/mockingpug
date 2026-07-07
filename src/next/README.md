@@ -135,7 +135,10 @@ explicitly if `mock.config.js` sets a different one. It gives you:
   `runtime.errorRate`/`delay` (this is a devtools action on the data, not
   a request your app is making). Only existing records can be edited this
   way (matched by `.id`); adding/removing array entries in the textarea has
-  no effect.
+  no effect. Each record also has its own "Copy as curl" button (only shown
+  when it has a resolvable `.id`), copying a ready-to-run
+  `curl -X GET '...'` for that exact record's URL — built client-side from
+  `window.location.origin` + `baseUrl` + the id, no extra devtools route.
 - A "Requests" view listing the last 50 requests the mock actually
   answered (method, path, status, duration, time), via
   `GET {baseUrl}/__mockingpug/requests`, polled once a second while open.

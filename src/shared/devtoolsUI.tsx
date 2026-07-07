@@ -439,6 +439,12 @@ export interface DevtoolsPanelProps {
    * component treats `entities` as fully controlled, same as `onResetEntity`).
    */
   onImportSnapshot: (snapshot: StoreSnapshot) => Promise<void> | void;
+  /**
+   * Copies a `curl` command for `GET`ting this exact record (by `.id`) to
+   * the clipboard, for manual testing outside the browser (Postman,
+   * terminal) without piecing the URL together by hand.
+   */
+  onCopyRecordCurl: (entity: string, id: string) => Promise<void> | void;
   /** Called every time the panel transitions from closed to open, so the caller can refresh `entities`/`runtime`. */
   onOpen?: () => void;
   /** React/MSW-only: worker on/off. Omit entirely for transports (like Next.js) with nothing to intercept. */
@@ -531,6 +537,7 @@ function DataWindow({
   onUpdateRecord,
   onArmOneShotOverride,
   onPeekOneShotOverride,
+  onCopyRecordCurl,
 }: {
   win: WindowState;
   zIndex: number;
@@ -541,6 +548,7 @@ function DataWindow({
   onUpdateRecord: (entity: string, id: string, patch: Record<string, unknown>) => Promise<unknown>;
   onArmOneShotOverride: (entity: string, patch: OneShotOverrideEntry) => Promise<void> | void;
   onPeekOneShotOverride: (entity: string) => Promise<OneShotOverrideEntry | undefined>;
+  onCopyRecordCurl: (entity: string, id: string) => Promise<void> | void;
 }) {
   const [pos, setPos] = useState({ x: win.x, y: win.y });
   const [records, setRecords] = useState<unknown[] | null>(null);
@@ -814,25 +822,48 @@ function DataWindow({
               }}
             />
           </>
+        ) : records === null ? (
+          <div style={{ margin: 0, padding: 16, fontFamily: FONT_CODE, fontSize: 14, color: TEXT }}>loading…</div>
         ) : (
-          <pre
-            style={{
-              margin: 0,
-              position: 'absolute',
-              inset: 0,
-              padding: 16,
-              boxSizing: 'border-box',
-              fontFamily: FONT_CODE,
-              fontSize: 14,
-              lineHeight: '20px',
-              fontWeight: 700,
-              color: TEXT,
-              background: '#fff',
-              overflow: 'auto',
-            }}
-          >
-            {records === null ? 'loading…' : <HighlightedJson text={JSON.stringify(records, null, 2)} />}
-          </pre>
+          <div style={{ position: 'absolute', inset: 0, overflow: 'auto' }}>
+            {records.map((record, index) => {
+              const id = recordId(record);
+              return (
+                <div
+                  key={id ?? index}
+                  style={{ borderBottom: index < records.length - 1 ? `1px solid ${BORDER}` : 'none' }}
+                >
+                  {id !== undefined && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px 16px 0' }}>
+                      <button
+                        type="button"
+                        onClick={() => void onCopyRecordCurl(win.entity, id)}
+                        aria-label={`Copy curl for ${win.entity} ${id}`}
+                        style={smallButtonStyle}
+                      >
+                        Copy as curl
+                      </button>
+                    </div>
+                  )}
+                  <pre
+                    style={{
+                      margin: 0,
+                      padding: 16,
+                      boxSizing: 'border-box',
+                      fontFamily: FONT_CODE,
+                      fontSize: 14,
+                      lineHeight: '20px',
+                      fontWeight: 700,
+                      color: TEXT,
+                      background: '#fff',
+                    }}
+                  >
+                    <HighlightedJson text={JSON.stringify(record, null, 2)} />
+                  </pre>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
       {error && (
@@ -915,6 +946,7 @@ export function DevtoolsPanel({
   onPeekOneShotOverride,
   onExportSnapshot,
   onImportSnapshot,
+  onCopyRecordCurl,
   onOpen,
   mockNetwork,
   bypass,
@@ -1295,6 +1327,7 @@ export function DevtoolsPanel({
           onUpdateRecord={onUpdateRecord}
           onArmOneShotOverride={onArmOneShotOverride}
           onPeekOneShotOverride={onPeekOneShotOverride}
+          onCopyRecordCurl={onCopyRecordCurl}
         />
       ))}
     </>

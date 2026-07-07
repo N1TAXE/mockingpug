@@ -131,6 +131,13 @@ next to it discards the edit without saving. Only existing records can be
 edited this way (matched by `.id`); adding or removing array entries in the
 textarea has no effect, use `POST`/`DELETE` (or the reset button) for that.
 
+In the read-only view, each record has its own "Copy as curl" button (only
+shown for records with a resolvable `.id`), which copies a ready-to-run
+`curl -X GET '<full URL>'` for that exact record to the clipboard — no
+piecing the URL together by hand to poke it from a terminal or Postman.
+
+
+
 Each entity's record window also has a "Fail next request" switch and a
 "Delay next" input + "Arm" button, right below its header. These arm a
 **one-shot** override for that entity: the very next request to it either
@@ -209,9 +216,12 @@ a context directly:
   updated entity counts.
 
 Same panel, same "Mock Data" list page/draggable floating record windows,
-same editable JSON viewer, same request log, and the same one-shot
-fail/delay override and Export/Import snapshot controls as the React
-version. There's no mock-network toggle or per-entity bypass switch built
+same editable JSON viewer, same request log, same one-shot fail/delay
+override and Export/Import snapshot controls, and the same per-record
+"Copy as curl" button as the React version (`baseUrl` is what it uses to
+build the URL, no extra route needed — it's built client-side from
+`window.location.origin` + `baseUrl` + the record's `.id`). There's no
+mock-network toggle or per-entity bypass switch built
 into this panel: both are React/MSW-specific concepts, and a Route
 Handler *is* the real server, so there's nothing to switch off or bypass
 at the panel level. See the [Next.js guide](/docs/guides/nextjs) for how

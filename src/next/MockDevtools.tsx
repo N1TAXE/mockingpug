@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import type { OneShotOverrideEntry, RequestLogEntry, StoreSnapshot } from '../query/index.js';
+import { buildCurlCommand } from '../shared/curl.js';
+import { copyToClipboard } from '../shared/clipboard.js';
 import { DevtoolsPanel } from '../shared/devtoolsUI.js';
 import { DEVTOOLS_SEGMENT } from './devtoolsPath.js';
 
@@ -123,6 +125,12 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
     setSnapshot((prev) => ({ ...prev, entities }));
   }
 
+  async function copyRecordCurl(entity: string, id: string): Promise<void> {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const url = `${origin}${baseUrl}/${entity}/${id}`;
+    await copyToClipboard(buildCurlCommand('GET', url));
+  }
+
   return (
     <DevtoolsPanel
       title="mockingpug (next)"
@@ -138,6 +146,7 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
       onPeekOneShotOverride={peekOneShotOverride}
       onExportSnapshot={fetchStoreSnapshot}
       onImportSnapshot={importStoreSnapshot}
+      onCopyRecordCurl={copyRecordCurl}
       onOpen={() => void refresh()}
     />
   );

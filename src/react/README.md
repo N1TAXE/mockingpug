@@ -217,7 +217,9 @@ small context (`useMockContext()`) that a floating `<MockDevtools>` panel
 reads/writes: mock/off toggle, live `runtime.delay`/`runtime.errorRate`
 editing, a per-entity record viewer (editable — the pencil icon turns the
 JSON view into a textarea, saved edits go through the same merge
-`PUT`/`PATCH` already uses) with a reset button, per-entity bypass
+`PUT`/`PATCH` already uses; each record also has its own "Copy as curl"
+button, copying a ready-to-run `curl -X GET '...'` for that exact record's
+URL) with a reset button, per-entity bypass
 checkboxes, a "Fail next request"/"Delay next" one-shot override per entity
 (arms a single fail-or-delay for that entity's very next request, then
 disarms itself, so you can test one error/loading state on demand without
@@ -255,6 +257,11 @@ const { ctx, worker } = await createMockingpug();
   <MockDevtools />
 </MockProvider>
 ```
+
+`<MockDevtools>` also takes an optional `baseUrl` prop (defaults to `/api`,
+matching `createMockHandlers(ctx, baseUrl)`'s own default) — it's only
+used to build the URL for the "Copy as curl" button, pass it explicitly if
+you called `createMockHandlers` with a different one.
 
 `<MockProvider>` owns the worker's start/stop lifecycle (mode persisted to
 `localStorage` across reloads) and mutates `ctx.runtime` in place when

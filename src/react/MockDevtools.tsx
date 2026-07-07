@@ -8,8 +8,15 @@ import {
   type RequestLogEntry,
   type StoreSnapshot,
 } from '../query/index.js';
+import { buildCurlCommand } from '../shared/curl.js';
+import { copyToClipboard } from '../shared/clipboard.js';
 import { DevtoolsPanel } from '../shared/devtoolsUI.js';
 import { useMockContext } from './MockProvider.js';
+
+export interface MockDevtoolsProps {
+  /** Must match the `baseUrl` passed to `createMockHandlers(ctx, baseUrl)`. Defaults to `/api`, same as the transport's own default. Only used to build the "Copy as curl" URL. */
+  baseUrl?: string;
+}
 
 /**
  * Floating dev-only panel: mock/off toggle, live `delay`/`errorRate`
@@ -19,7 +26,7 @@ import { useMockContext } from './MockProvider.js';
  * gate as `startMocking()` itself (see `react/README.md`); never shipped to
  * production.
  */
-export function MockDevtools() {
+export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
   const { mode, setMode, ctx, runtime, setRuntime, bypass, unbypass, isBypassed } = useMockContext();
   const [entities, setEntities] = useState<Record<string, number>>({});
 
@@ -74,6 +81,12 @@ export function MockDevtools() {
     await refreshCounts();
   }
 
+  async function copyRecordCurl(entity: string, id: string): Promise<void> {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const url = `${origin}${baseUrl}/${entity}/${id}`;
+    await copyToClipboard(buildCurlCommand('GET', url));
+  }
+
   return (
     <DevtoolsPanel
       title="mockingpug"
@@ -89,6 +102,7 @@ export function MockDevtools() {
       onPeekOneShotOverride={peekOneShotOverride}
       onExportSnapshot={handleExportSnapshot}
       onImportSnapshot={handleImportSnapshot}
+      onCopyRecordCurl={copyRecordCurl}
       onOpen={() => void refreshCounts()}
       mockNetwork={{ enabled: mode === 'mock', onToggle: (next) => setMode(next ? 'mock' : 'off') }}
       bypass={{

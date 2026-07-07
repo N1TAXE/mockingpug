@@ -85,8 +85,12 @@ async function openList() {
  * `<span>` children, so a plain `getByText(regex)` matches both the `<pre>`
  * (whose aggregated `textContent` contains the text) and, often, one of
  * those inner spans too, throwing "multiple elements found". Restricting
- * the match to the `<pre>` element itself (there's exactly one per open
- * `DataWindow`, read-only view or edit-mode overlay) sidesteps that.
+ * the match to a `<pre>` element itself sidesteps that half of the
+ * problem. The other half: the read-only view renders one `<pre>` per
+ * record (not one big array blob), so a bare id like `"1"` can also match
+ * an unrelated record's `_index`/other numeric field — callers matching by
+ * id should search for `"id": <id>` instead of the bare id to stay scoped
+ * to that one record's `<pre>`.
  */
 function preContains(text: string) {
   return screen.getByText((_, element) => element?.tagName === 'PRE' && (element.textContent ?? '').includes(text));
@@ -164,7 +168,7 @@ describe('MockDevtools', () => {
 
     const stored = await ctx.store.load('user');
     await waitFor(() => {
-      expect(preContains(String(stored!.records[0]!.id))).toBeTruthy();
+      expect(preContains(`"id": ${stored!.records[0]!.id}`)).toBeTruthy();
     });
   });
 
@@ -176,7 +180,7 @@ describe('MockDevtools', () => {
 
     const stored = await ctx.store.load('user');
     await waitFor(() => {
-      expect(preContains(String(stored!.records[0]!.id))).toBeTruthy();
+      expect(preContains(`"id": ${stored!.records[0]!.id}`)).toBeTruthy();
     });
   });
 
@@ -188,7 +192,7 @@ describe('MockDevtools', () => {
 
     const stored = await ctx.store.load('user');
     await waitFor(() => {
-      expect(preContains(String(stored!.records[0]!.id))).toBeTruthy();
+      expect(preContains(`"id": ${stored!.records[0]!.id}`)).toBeTruthy();
     });
 
     const closeButton = screen.getByRole('button', { name: 'Close user window' });
@@ -248,7 +252,7 @@ describe('MockDevtools', () => {
 
     const stored = await ctx.store.load('user');
     const firstId = stored!.records[0]!.id;
-    await waitFor(() => expect(preContains(String(firstId))).toBeTruthy());
+    await waitFor(() => expect(preContains(`"id": ${firstId}`)).toBeTruthy());
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit user records' }));
     const textarea = screen.getByLabelText('Edit user records as JSON') as HTMLTextAreaElement;
@@ -274,7 +278,7 @@ describe('MockDevtools', () => {
 
     const stored = await ctx.store.load('user');
     const firstId = stored!.records[0]!.id;
-    await waitFor(() => expect(preContains(String(firstId))).toBeTruthy());
+    await waitFor(() => expect(preContains(`"id": ${firstId}`)).toBeTruthy());
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit user records' }));
     const textarea = screen.getByLabelText('Edit user records as JSON') as HTMLTextAreaElement;
@@ -293,7 +297,7 @@ describe('MockDevtools', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open user records' }));
 
     const stored = await ctx.store.load('user');
-    await waitFor(() => expect(preContains(String(stored!.records[0]!.id))).toBeTruthy());
+    await waitFor(() => expect(preContains(`"id": ${stored!.records[0]!.id}`)).toBeTruthy());
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit user records' }));
     const textarea = screen.getByLabelText('Edit user records as JSON');
@@ -476,5 +480,45 @@ describe('MockDevtools', () => {
 
     await waitFor(() => expect(screen.getByTestId('entity-row-entity25')).toBeTruthy());
     expect(screen.queryByTestId('entity-row-entity0')).toBeNull();
+  });
+
+  it('"Copy as curl" copies a GET curl command for that exact record\'s URL', async () => {
+    const ctx = await renderDevtools();
+    openPanel();
+    await openList();
+    fireEvent.click(screen.getByRole('button', { name: 'Open user records' }));
+
+    const stored = await ctx.store.load('user');
+    const id = stored!.records[0]!.id;
+    await waitFor(() => expect(preContains(`"id": ${id}`)).toBeTruthy());
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+    fireEvent.click(screen.getByRole('button', { name: `Copy curl for user ${id}` }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    const command = writeText.mock.calls[0]![0] as string;
+    expect(command).toMatch(new RegExp(`^curl -X GET '.*/api/user/${id}'$`));
+  });
+
+  it('does not show a "Copy as curl" button for a record with no resolvable id', async () => {
+    const schemasNoId: SchemaBundle = {
+      note: { name: 'note', file: 'x', amount: 1, data: { text: { kind: 'lorem' } } },
+    };
+    const store = new MemoryStoreAdapter();
+    await generateAll(schemasNoId, store, { seed: 'no-id-test' });
+    const ctx: QueryContext = { schemas: schemasNoId, store, pagination: DEFAULT_CONFIG.pagination, seed: 'no-id-test' };
+    render(
+      <MockProvider worker={fakeWorker()} ctx={ctx} storageKey={null}>
+        <MockDevtools />
+      </MockProvider>,
+    );
+    openPanel();
+    await openList();
+    fireEvent.click(screen.getByRole('button', { name: 'Open note records' }));
+
+    await waitFor(() => expect(preContains('text')).toBeTruthy());
+    expect(screen.queryByRole('button', { name: /Copy curl for note/ })).toBeNull();
   });
 });
