@@ -223,8 +223,10 @@ checkboxes, a "Fail next request"/"Delay next" one-shot override per entity
 disarms itself, so you can test one error/loading state on demand without
 touching `runtime.errorRate`/`delay` globally), "Export"/"Import" buttons
 in the "Mock Data" list (download the whole store as one JSON file, or
-restore it from one — handy for sharing an exact repro of a bug), and a
-"Requests" view listing the last 50 requests the mock actually answered
+restore it from one — handy for sharing an exact repro of a bug), a text
+filter and windowed rendering on that same list (so dozens/hundreds of
+entities stay responsive to filter and scroll), and a "Requests" view
+listing the last 50 requests the mock actually answered
 (method, path, status, duration, time) so you don't have to switch to the
 Network tab to
 see whether a `fetch()` reached the mock:

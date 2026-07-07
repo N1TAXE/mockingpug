@@ -1179,6 +1179,7 @@ export function DevtoolsPanel({
                   return (
                     <div
                       ref={entityListRef}
+                      data-testid="entity-list-scroll"
                       style={{ maxHeight: ENTITY_LIST_HEIGHT, overflowY: 'auto' }}
                       onScroll={(e) => setEntityScrollTop(e.currentTarget.scrollTop)}
                     >

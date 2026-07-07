@@ -28,6 +28,34 @@ async function makeCtx(): Promise<QueryContext> {
   return { schemas, store, pagination: DEFAULT_CONFIG.pagination, seed: 'devtools-test' };
 }
 
+const filterableSchemas: SchemaBundle = {
+  user: { name: 'user', file: 'x', amount: 1, data: { id: { kind: 'number', mode: 'increment' } } },
+  blogpost: { name: 'blogpost', file: 'x', amount: 1, data: { id: { kind: 'number', mode: 'increment' } } },
+  category: { name: 'category', file: 'x', amount: 1, data: { id: { kind: 'number', mode: 'increment' } } },
+};
+
+async function makeFilterableCtx(): Promise<QueryContext> {
+  const store = new MemoryStoreAdapter();
+  await generateAll(filterableSchemas, store, { seed: 'filter-test' });
+  return { schemas: filterableSchemas, store, pagination: DEFAULT_CONFIG.pagination, seed: 'filter-test' };
+}
+
+function manyEntitySchemas(count: number): SchemaBundle {
+  const bundle: SchemaBundle = {};
+  for (let i = 0; i < count; i++) {
+    const name = `entity${i}`;
+    bundle[name] = { name, file: 'x', amount: 1, data: { id: { kind: 'number', mode: 'increment' } } };
+  }
+  return bundle;
+}
+
+async function makeManyEntitiesCtx(count: number): Promise<QueryContext> {
+  const schemas = manyEntitySchemas(count);
+  const store = new MemoryStoreAdapter();
+  await generateAll(schemas, store, { seed: 'many-entities-test' });
+  return { schemas, store, pagination: DEFAULT_CONFIG.pagination, seed: 'many-entities-test' };
+}
+
 function fakeWorker(): MockWorker {
   return { start: vi.fn().mockResolvedValue(undefined), stop: vi.fn() };
 }
@@ -393,5 +421,60 @@ describe('MockDevtools', () => {
     fireEvent.change(input, { target: { files: [file] } });
 
     await waitFor(() => expect(screen.getByText('Invalid snapshot file.')).toBeTruthy());
+  });
+
+  it('the entity filter narrows the "Mock Data" list by name', async () => {
+    const ctx = await makeFilterableCtx();
+    render(
+      <MockProvider worker={fakeWorker()} ctx={ctx} storageKey={null}>
+        <MockDevtools />
+      </MockProvider>,
+    );
+    openPanel();
+    await openList();
+
+    expect(screen.getByTestId('entity-row-user')).toBeTruthy();
+    expect(screen.getByTestId('entity-row-blogpost')).toBeTruthy();
+    expect(screen.getByTestId('entity-row-category')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Filter entities'), { target: { value: 'blog' } });
+
+    expect(screen.getByTestId('entity-row-blogpost')).toBeTruthy();
+    expect(screen.queryByTestId('entity-row-user')).toBeNull();
+    expect(screen.queryByTestId('entity-row-category')).toBeNull();
+  });
+
+  it('shows "No matching entities." when the filter matches nothing', async () => {
+    const ctx = await makeFilterableCtx();
+    render(
+      <MockProvider worker={fakeWorker()} ctx={ctx} storageKey={null}>
+        <MockDevtools />
+      </MockProvider>,
+    );
+    openPanel();
+    await openList();
+
+    fireEvent.change(screen.getByLabelText('Filter entities'), { target: { value: 'nope' } });
+    expect(screen.getByText('No matching entities.')).toBeTruthy();
+  });
+
+  it('virtualizes the "Mock Data" list: only rows near the scroll position are rendered', async () => {
+    const ctx = await makeManyEntitiesCtx(30);
+    render(
+      <MockProvider worker={fakeWorker()} ctx={ctx} storageKey={null}>
+        <MockDevtools />
+      </MockProvider>,
+    );
+    openPanel();
+    await openList();
+
+    // Scrolled to the top: an entity far down the list isn't in the DOM at all yet.
+    expect(screen.getByTestId('entity-row-entity0')).toBeTruthy();
+    expect(screen.queryByTestId('entity-row-entity25')).toBeNull();
+
+    fireEvent.scroll(screen.getByTestId('entity-list-scroll'), { target: { scrollTop: 25 * 49 } });
+
+    await waitFor(() => expect(screen.getByTestId('entity-row-entity25')).toBeTruthy());
+    expect(screen.queryByTestId('entity-row-entity0')).toBeNull();
   });
 });

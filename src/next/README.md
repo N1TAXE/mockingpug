@@ -121,10 +121,13 @@ explicitly if `mock.config.js` sets a different one. It gives you:
 
 - Live `delay`/`errorRate` editing, applied immediately to the next request
   the Route Handler answers (no restart, unlike editing `mock.config.js`).
-- A "Mock Data" list of every entity and its record count. Clicking one
-  opens its stored records in a separate floating window, draggable by its
-  header, with its own reset button (wipes and regenerates just that
-  entity). Multiple entities' windows can be open at once.
+- A "Mock Data" list of every entity and its record count, filterable by
+  name and windowed (only rows near the current scroll position are
+  rendered) so it stays responsive with dozens/hundreds of entities.
+  Clicking one opens its stored records in a separate floating window,
+  draggable by its header, with its own reset button (wipes and
+  regenerates just that entity). Multiple entities' windows can be open at
+  once.
 - That window's JSON view is editable: the pencil icon turns it into a
   textarea, the checkmark saves. Saved edits go through
   `PUT {baseUrl}/__mockingpug/records/:entity/:id` — the same merge

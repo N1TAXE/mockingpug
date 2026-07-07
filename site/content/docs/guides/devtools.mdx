@@ -101,6 +101,14 @@ A floating collapsed button that expands into a settings panel with:
   schema is silently skipped (no create-arbitrary-entity support here);
   invalid JSON shows an inline error instead of failing silently.
 
+A text filter above the entity list narrows it by name (case-insensitive
+substring match) — useful once a real project has dozens of entities. The
+list itself is windowed: with a known fixed row height and container
+height, only the rows near the current scroll position are actually
+rendered (a small render-ahead margin either side), so scrolling through
+hundreds of entities/records doesn't degrade regardless of the exact
+count, no virtual-scroll dependency needed.
+
 Clicking an entity in that list opens its stored records (reads
 `ctx.store.load()` directly, not over HTTP) in a separate floating window
 that can be dragged by its header and repositioned anywhere on the page;
