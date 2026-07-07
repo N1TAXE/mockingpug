@@ -3,6 +3,7 @@ import {
   validateEntitiesExist,
   topologicalOrder,
   resolveFieldRef,
+  resolveMultiFieldRef,
   resolveInverseRelation,
   type SchemaMap,
 } from '../../src/core/dependencyGraph.js';
@@ -92,6 +93,25 @@ describe('topologicalOrder : genuine unresolvable cycles', () => {
     const order = topologicalOrder(schemas);
     expect(order.indexOf('user')).toBeLessThan(order.indexOf('blogpost'));
   });
+
+  it('orders the multi-pick target entity before its source, like a field-level ref', () => {
+    const schemas: SchemaMap = {
+      order: { product: { kind: 'crossRef', entity: 'product', fields: ['id', 'name'] } },
+      product: { id: uuid, name: lorem },
+    };
+    const order = topologicalOrder(schemas);
+    expect(order.indexOf('product')).toBeLessThan(order.indexOf('order'));
+  });
+
+  it('does not treat a bare relation as an ordering constraint (unaffected by multi-pick)', () => {
+    const schemas: SchemaMap = {
+      user: { posts: { kind: 'crossRef', entity: 'blogpost' } },
+      blogpost: { id: uuid },
+    };
+    const order = topologicalOrder(schemas);
+    expect(order).toContain('user');
+    expect(order).toContain('blogpost');
+  });
 });
 
 describe('resolveFieldRef', () => {
@@ -108,6 +128,45 @@ describe('resolveFieldRef', () => {
 
   it('throws GenerationError when the field is missing on target records', () => {
     expect(() => resolveFieldRef('user', 'missingField', [{ id: 1 }], createRng('s'))).toThrow(
+      GenerationError,
+    );
+  });
+});
+
+describe('resolveMultiFieldRef', () => {
+  it('projects every listed field from a single picked record', () => {
+    const rng = createRng('s');
+    const records = [
+      { id: 1, name: 'Steam', slug: 'steam-keys' },
+      { id: 2, name: 'VKontakte', slug: 'vk' },
+    ];
+    const result = resolveMultiFieldRef('product', ['id', 'name', 'slug'], records, rng);
+    // Whichever record got picked, all three projected fields must agree
+    // with each other (same record), not be independently drawn.
+    const match = records.find((r) => r.id === result.id);
+    expect(match).toBeDefined();
+    expect(result).toEqual({ id: match!.id, name: match!.name, slug: match!.slug });
+  });
+
+  it('makes exactly one pick regardless of how many fields are projected', () => {
+    // Same seed/context as resolveFieldRef would use for a *single* field
+    // pick — resolveMultiFieldRef must draw the record with one rng() call,
+    // not one per projected field, so results stay a valid same-record set
+    // however many fields are listed.
+    const records = Array.from({ length: 50 }, (_, i) => ({ id: i, name: `n${i}`, slug: `s${i}` }));
+    for (let seed = 0; seed < 20; seed++) {
+      const result = resolveMultiFieldRef('product', ['id', 'name', 'slug'], records, createRng(seed));
+      expect(result.name).toBe(`n${result.id}`);
+      expect(result.slug).toBe(`s${result.id}`);
+    }
+  });
+
+  it('throws GenerationError when the target entity has no records', () => {
+    expect(() => resolveMultiFieldRef('product', ['id', 'name'], [], createRng('s'))).toThrow(GenerationError);
+  });
+
+  it('throws GenerationError when a projected field is missing on target records', () => {
+    expect(() => resolveMultiFieldRef('product', ['id', 'missingField'], [{ id: 1 }], createRng('s'))).toThrow(
       GenerationError,
     );
   });

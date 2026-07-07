@@ -37,6 +37,8 @@ Thrown while parsing `mock/api/**/schema.json` / `mock/data/*.json`.
 | `MP-SCHEMA-017` | A `"slugify[field,...]"` references a field declared at the same position or later in `data` (including a self-reference). |
 | `MP-SCHEMA-018` | `"literal"` is present but isn't an array of objects. |
 | `MP-SCHEMA-019` | `"literal"` has more entries than `"amount"`. |
+| `MP-SCHEMA-020` | A multi-pick `"data.<entity>.[...]"` lists fewer than two fields, an invalid field name, or the same field twice. |
+| `MP-SCHEMA-021` | Two fields on the same entity produce the same output field name (a multi-pick's projected name collides with another declared/projected field). |
 
 ## `MP-DEP-*`: cross-entity reference graph
 

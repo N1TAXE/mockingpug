@@ -84,7 +84,7 @@ async function attachBareRelations(entity: string, record: StoredRecord, ctx: Qu
   if (!schema) return result;
 
   for (const [fieldName, spec] of Object.entries(schema.data)) {
-    if (spec.kind !== 'crossRef' || spec.field !== undefined) continue;
+    if (spec.kind !== 'crossRef' || spec.field !== undefined || spec.fields !== undefined) continue;
     const targetSchema = ctx.schemas[spec.entity];
     if (!targetSchema) continue;
     const targetStored = await ctx.store.load(spec.entity);

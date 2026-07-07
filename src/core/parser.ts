@@ -47,6 +47,32 @@ export function parseFieldType(raw: string, options: ParseFieldTypeOptions = {})
     return { kind: 'crossRef', entity: crossRefMatch[1]!, field: crossRefMatch[2] };
   }
 
+  // data.<entity>.[field1,field2,...]: a single pick of <entity>, projected
+  // onto several flat output fields from that one record (correlated
+  // multi-field relation) instead of one field's value.
+  const multiPickMatch = /^data\.([A-Za-z_][\w]*)\.\[(.*)]$/.exec(value);
+  if (multiPickMatch) {
+    const entity = multiPickMatch[1]!;
+    const rawList = multiPickMatch[2]!;
+    const fields = rawList.split(',').map((f) => f.trim());
+    const listLocation = options.file ? { file: options.file, path: options.fieldPath } : undefined;
+    if (fields.length < 2 || fields.some((f) => !/^[A-Za-z_]\w*$/.test(f))) {
+      throw new SchemaError(
+        'MP-SCHEMA-020',
+        `"data.${entity}.[...]" must list two or more comma-separated field names, got "${rawList}"`,
+        { location: listLocation, hint: 'e.g. "data.product.[id,name,slug]"; use "data.product.id" for a single field' },
+      );
+    }
+    if (new Set(fields).size !== fields.length) {
+      throw new SchemaError(
+        'MP-SCHEMA-020',
+        `"data.${entity}.[${rawList}]" lists the same field more than once`,
+        { location: listLocation },
+      );
+    }
+    return { kind: 'crossRef', entity, fields };
+  }
+
   // enum[a,b,c]
   const enumMatch = /^enum\[(.+)]$/.exec(value);
   if (enumMatch) {

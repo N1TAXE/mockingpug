@@ -98,6 +98,27 @@ describe('generateTypeDefinitions : field type mapping', () => {
     expect(generateTypeDefinitions(schemas)).toContain('posts: unknown[];');
   });
 
+  it('expands a multi-pick cross-reference into one property per projected field, not the schema key', () => {
+    const schemas: Record<string, EntitySchema> = {
+      order: {
+        name: 'order',
+        file: 'x',
+        amount: 1,
+        data: { product: { kind: 'crossRef', entity: 'product', fields: ['id', 'name'] } },
+      },
+      product: {
+        name: 'product',
+        file: 'x',
+        amount: 1,
+        data: { id: { kind: 'number', mode: 'increment' }, name: { kind: 'lorem' } },
+      },
+    };
+    const output = generateTypeDefinitions(schemas);
+    expect(output).toContain('id: number;');
+    expect(output).toContain('name: string;');
+    expect(output).not.toContain('product:');
+  });
+
   it('does not hang on a field-level cross-reference cycle', () => {
     const schemas: Record<string, EntitySchema> = {
       a: { name: 'a', file: 'x', amount: 1, data: { bRef: { kind: 'crossRef', entity: 'b', field: 'aRef' } } },

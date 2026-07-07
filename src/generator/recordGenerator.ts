@@ -5,6 +5,7 @@ import {
   generateValue,
   IncrementCounters,
   resolveFieldRef,
+  resolveMultiFieldRef,
   type CustomDictionaryEntry,
   type FieldSpec,
   type Rng,
@@ -34,9 +35,9 @@ export function buildCustomResolver(
   };
 }
 
-/** A field the generator actually stores: every field except bare (fieldless) cross-refs, which are resolved lazily on read. */
+/** A field the generator actually stores: every field except bare (fieldless, non-multi-pick) cross-refs, which are resolved lazily on read. */
 export function isStoredField(spec: FieldSpec): boolean {
-  return !(spec.kind === 'crossRef' && spec.field === undefined);
+  return !(spec.kind === 'crossRef' && spec.field === undefined && spec.fields === undefined);
 }
 
 /**
@@ -87,6 +88,35 @@ export async function generateFieldValue(
   });
 }
 
+/**
+ * Resolves one `data` entry to the set of output fields it contributes to a
+ * record. Every kind but multi-pick cross-refs contributes exactly one
+ * field, keyed by its own schema name (delegates to {@link generateFieldValue}).
+ * A multi-pick (`data.product.[id,name,slug]`) makes one RNG-keyed pick at
+ * *record* level (keyed by the schema field's own name, not per projected
+ * field) and contributes several flat output fields at once, named by the
+ * projected list — its own schema key never appears on the output record.
+ */
+export async function generateStoredFieldEntries(
+  entity: string,
+  index: number,
+  fieldName: string,
+  spec: FieldSpec,
+  seed: string | number,
+  increments: IncrementCounters,
+  resolveCustom: CustomResolver,
+  resolveTargetRecords: TargetRecordsResolver,
+  partialRecord?: Readonly<Record<string, unknown>>,
+): Promise<Record<string, unknown>> {
+  if (spec.kind === 'crossRef' && spec.fields !== undefined) {
+    const rng = createRng(seed, entity, index, fieldName);
+    const target = await resolveTargetRecords(spec.entity);
+    return resolveMultiFieldRef(spec.entity, spec.fields, target, rng);
+  }
+  const value = await generateFieldValue(entity, index, fieldName, spec, seed, increments, resolveCustom, resolveTargetRecords, partialRecord);
+  return { [fieldName]: value };
+}
+
 /** Generates every stored field for one brand-new record at stable index `index`. */
 export async function generateFullRecord(
   entity: string,
@@ -100,7 +130,7 @@ export async function generateFullRecord(
   const record: StoredRecord = { _seed: true, _index: index };
   for (const [fieldName, spec] of Object.entries(fields)) {
     if (!isStoredField(spec)) continue;
-    record[fieldName] = await generateFieldValue(
+    const entries = await generateStoredFieldEntries(
       entity,
       index,
       fieldName,
@@ -111,6 +141,7 @@ export async function generateFullRecord(
       resolveTargetRecords,
       record,
     );
+    Object.assign(record, entries);
   }
   return record;
 }

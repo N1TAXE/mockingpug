@@ -115,6 +115,33 @@ describe('generateOpenApiSpec : field type mapping', () => {
     expect(user.properties.posts).toEqual({ type: 'array', items: {} });
   });
 
+  it('expands a multi-pick cross-reference into one property per projected field, not the schema key, including a filter param each', () => {
+    const entities: Record<string, EntitySchema> = {
+      order: {
+        name: 'order',
+        file: 'x',
+        amount: 1,
+        data: { product: { kind: 'crossRef', entity: 'product', fields: ['id', 'name'] } },
+      },
+      product: {
+        name: 'product',
+        file: 'x',
+        amount: 1,
+        data: { id: { kind: 'number', mode: 'increment' }, name: { kind: 'lorem' } },
+      },
+    };
+    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const order = schemas(spec).Order as { properties: Record<string, unknown> };
+    expect(order.properties.id).toEqual({ type: 'number' });
+    expect(order.properties.name).toEqual({ type: 'string' });
+    expect(order.properties.product).toBeUndefined();
+
+    const listParams = (paths(spec)['/order'] as { get: { parameters: Array<{ name: string }> } }).get.parameters;
+    expect(listParams.some((p) => p.name === 'id')).toBe(true);
+    expect(listParams.some((p) => p.name === 'name')).toBe(true);
+    expect(listParams.some((p) => p.name === 'product')).toBe(false);
+  });
+
   it('does not hang on a field-level cross-reference cycle', () => {
     const entities: Record<string, EntitySchema> = {
       a: { name: 'a', file: 'x', amount: 1, data: { bRef: { kind: 'crossRef', entity: 'b', field: 'aRef' } } },

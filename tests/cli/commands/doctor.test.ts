@@ -173,6 +173,41 @@ describe('doctor', () => {
     expect(result.warnings).toEqual([]);
   });
 
+  it('checks a literal record against a multi-pick field\'s projected names, not its own schema key', async () => {
+    await writeFiles({
+      'mock/api/product/schema.json': JSON.stringify({
+        amount: 5,
+        data: { id: 'number.increment', name: 'lorem.16' },
+      }),
+      'mock/api/order/schema.json': JSON.stringify({
+        amount: 3,
+        data: { orderId: 'uuid', product: 'data.product.[id,name]' },
+        literal: [{ orderId: 'abc', id: 1, name: 'Pinned Product' }],
+      }),
+    });
+    const result = await doctor(dir);
+    expect(result.ok).toBe(true);
+    // The projected names ("id"/"name") are checked, not the schema key ("product").
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('warns when a literal record is missing a multi-pick field\'s projected name', async () => {
+    await writeFiles({
+      'mock/api/product/schema.json': JSON.stringify({
+        amount: 5,
+        data: { id: 'number.increment', name: 'lorem.16' },
+      }),
+      'mock/api/order/schema.json': JSON.stringify({
+        amount: 3,
+        data: { orderId: 'uuid', product: 'data.product.[id,name]' },
+        literal: [{ orderId: 'abc', id: 1 }],
+      }),
+    });
+    const result = await doctor(dir);
+    expect(result.ok).toBe(true);
+    expect(result.warnings.some((w) => w.includes('literal[0]') && w.includes('"name"'))).toBe(true);
+  });
+
   it('rejects literal.length greater than amount', async () => {
     await writeFiles({
       'mock/api/category/schema.json': JSON.stringify({

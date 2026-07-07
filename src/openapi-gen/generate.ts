@@ -1,3 +1,4 @@
+import { expandDataFields } from '../core/expandFields.js';
 import type { CustomDictionaryEntry, EntitySchema, FieldSpec } from '../core/types.js';
 import type { MockConfig } from '../cli/mockConfig.js';
 
@@ -110,7 +111,7 @@ function entitySchemaComponent(
   customDictionaries: Record<string, readonly CustomDictionaryEntry[]> | undefined,
 ): JsonSchema {
   const properties: Record<string, JsonSchema> = {};
-  for (const [fieldName, spec] of Object.entries(schema.data)) {
+  for (const [fieldName, spec] of expandDataFields(schema.data)) {
     properties[fieldName] = fieldSchema(spec, allSchemas, customDictionaries, new Set());
   }
   return { type: 'object', properties };
@@ -167,7 +168,7 @@ function filterParams(
   allSchemas: Record<string, EntitySchema>,
   customDictionaries: Record<string, readonly CustomDictionaryEntry[]> | undefined,
 ): JsonSchema[] {
-  return Object.entries(schema.data).map(([fieldName, spec]) => ({
+  return expandDataFields(schema.data).map(([fieldName, spec]) => ({
     name: fieldName,
     in: 'query',
     required: false,

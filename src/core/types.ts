@@ -11,7 +11,7 @@ export type FieldSpec =
   | { kind: 'enumInline'; values: string[] }
   | { kind: 'array'; item: FieldSpec; count: number }
   | { kind: 'custom'; name: string }
-  | { kind: 'crossRef'; entity: string; field?: string }
+  | { kind: 'crossRef'; entity: string; field?: string; fields?: readonly string[] }
   | { kind: 'slugify'; field: string; separator: string };
 
 /** One entry of a custom dictionary file under `mock/data/*.json`. */

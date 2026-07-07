@@ -12,6 +12,12 @@ interface FieldRef {
   sourceField: string;
   targetEntity: string;
   targetField?: string;
+  targetFields?: readonly string[];
+}
+
+/** True for any ref that needs `targetEntity` fully generated first: field-level (`data.user.id`) and multi-pick (`data.product.[id,name]`) refs, but not bare relations (`data.blogpost`), which resolve lazily at read time. */
+function isForwardRef(ref: FieldRef): boolean {
+  return ref.targetField !== undefined || (ref.targetFields !== undefined && ref.targetFields.length > 0);
 }
 
 /** Recursively visits a field spec, including nested `array` item specs. */
@@ -33,6 +39,7 @@ function collectRefs(schemas: SchemaMap): FieldRef[] {
           sourceField: fieldName,
           targetEntity: ref.entity,
           targetField: ref.field,
+          targetFields: ref.fields,
         });
       });
     }
@@ -50,12 +57,17 @@ export function validateEntitiesExist(schemas: SchemaMap): void {
   for (const ref of collectRefs(schemas)) {
     if (!(ref.targetEntity in schemas)) {
       const suggestion = closestMatch(ref.targetEntity, knownEntities);
+      const targetSuffix = ref.targetField
+        ? `.${ref.targetField}`
+        : ref.targetFields
+          ? `.[${ref.targetFields.join(',')}]`
+          : '';
       throw new DependencyError(
         'MP-DEP-001',
         `"${ref.sourceEntity}.${ref.sourceField}" references unknown entity "${ref.targetEntity}"`,
         {
           location: { file: `mock/api/${ref.sourceEntity}/schema.json`, path: `data.${ref.sourceField}` },
-          hint: suggestion ? `did you mean "data.${suggestion}${ref.targetField ? `.${ref.targetField}` : ''}"?` : undefined,
+          hint: suggestion ? `did you mean "data.${suggestion}${targetSuffix}"?` : undefined,
         },
       );
     }
@@ -75,7 +87,7 @@ export function validateEntitiesExist(schemas: SchemaMap): void {
  */
 export function topologicalOrder(schemas: SchemaMap): string[] {
   const entities = Object.keys(schemas);
-  const fieldRefs = collectRefs(schemas).filter((ref) => ref.targetField !== undefined);
+  const fieldRefs = collectRefs(schemas).filter(isForwardRef);
 
   const inDegree = new Map<string, number>(entities.map((e) => [e, 0]));
   const edges = new Map<string, Set<string>>(entities.map((e) => [e, new Set()]));
@@ -137,6 +149,40 @@ export function resolveFieldRef(
     );
   }
   return record[targetField];
+}
+
+/**
+ * Resolves a correlated multi-field pick (`data.product.[id,name,slug]`):
+ * exactly one RNG-keyed pick at *record* level (not one per field, unlike
+ * plain field-level refs), then projects the listed fields off that single
+ * picked record. Guarantees every projected field comes from the same
+ * underlying record, unlike declaring the same fields as separate
+ * `data.product.<field>` refs (each of which draws its own independent pick).
+ */
+export function resolveMultiFieldRef(
+  targetEntity: string,
+  fields: readonly string[],
+  targetRecords: readonly Record<string, unknown>[],
+  rng: Rng,
+): Record<string, unknown> {
+  if (targetRecords.length === 0) {
+    throw new GenerationError(
+      'MP-GEN-004',
+      `cannot resolve "data.${targetEntity}.[${fields.join(',')}]": entity "${targetEntity}" has no generated records yet`,
+    );
+  }
+  const record = pick(rng, targetRecords);
+  const result: Record<string, unknown> = {};
+  for (const field of fields) {
+    if (!(field in record)) {
+      throw new GenerationError(
+        'MP-GEN-005',
+        `cannot resolve "data.${targetEntity}.[${fields.join(',')}]": field "${field}" does not exist on "${targetEntity}" records`,
+      );
+    }
+    result[field] = record[field];
+  }
+  return result;
 }
 
 /**

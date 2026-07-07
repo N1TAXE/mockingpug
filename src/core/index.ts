@@ -22,9 +22,12 @@ export {
   validateEntitiesExist,
   topologicalOrder,
   resolveFieldRef,
+  resolveMultiFieldRef,
   resolveInverseRelation,
   type SchemaMap,
 } from './dependencyGraph.js';
+
+export { expandDataFields } from './expandFields.js';
 
 export { createRng, hashString, mulberry32, randomInt, pick, type Rng } from './rng.js';
 

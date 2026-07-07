@@ -1,6 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { topologicalOrder, validateEntitiesExist, type EntitySchema, type FieldSpec } from '../../core/index.js';
+import { expandDataFields, topologicalOrder, validateEntitiesExist, type EntitySchema, type FieldSpec } from '../../core/index.js';
 import { findOrphanEntities, FileStoreAdapter } from '../../store/index.js';
 import { isStoredField, toSchemaMap } from '../../generator/index.js';
 import { loadConfig, type LimitsConfig } from '../mockConfig.js';
@@ -82,7 +82,7 @@ function checkLiteralRecords(entities: Record<string, EntitySchema>): string[] {
   for (const schema of Object.values(entities)) {
     if (!schema.literal || schema.literal.length === 0) continue;
     schema.literal.forEach((record, i) => {
-      for (const [fieldName, spec] of Object.entries(schema.data)) {
+      for (const [fieldName, spec] of expandDataFields(schema.data)) {
         if (!isStoredField(spec)) continue;
         if (!(fieldName in record)) {
           warnings.push(`entity "${schema.name}"'s literal[${i}] is missing required field "${fieldName}"`);

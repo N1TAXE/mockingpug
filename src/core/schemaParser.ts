@@ -88,6 +88,29 @@ export function parseEntitySchema(
     fields[fieldName] = parseFieldType(rawType, { knownCustomTypes, file, fieldPath: `data.${fieldName}` });
   }
 
+  // A multi-pick field (`data.product.[id,name]`) never keeps its own
+  // schema key on the output record — it expands into one output field per
+  // projected name instead. Those projected names must not collide with
+  // any other declared/projected field on the same entity, or generation
+  // would silently overwrite one with the other depending on object key
+  // iteration order.
+  const outputFieldOwners = new Map<string, string>();
+  for (const [fieldName, spec] of Object.entries(fields)) {
+    const outputNames = spec.kind === 'crossRef' && spec.fields !== undefined ? spec.fields : [fieldName];
+    for (const outputName of outputNames) {
+      const owner = outputFieldOwners.get(outputName);
+      if (owner !== undefined && owner !== fieldName) {
+        throw new SchemaError(
+          'MP-SCHEMA-021',
+          `"${entityName}" has a field-name collision: "${fieldName}" produces output field "${outputName}", ` +
+            `which is also declared/produced by "${owner}"`,
+          { location: { file, path: `data.${fieldName}` } },
+        );
+      }
+      outputFieldOwners.set(outputName, fieldName);
+    }
+  }
+
   for (const [fieldName, spec] of Object.entries(fields)) {
     if (spec.kind !== 'slugify') continue;
     const sourceIndex = fieldOrder.indexOf(spec.field);

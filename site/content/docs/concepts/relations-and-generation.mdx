@@ -1,12 +1,13 @@
 ---
 title: Relations & Generation Order
-description: Field-level vs. bare cross-entity relations, and how generation order is decided
+description: Field-level, multi-pick, and bare cross-entity relations, and how generation order is decided
 ---
 
-`data.<entity>` and `data.<entity>.<field>` look similar but resolve
-completely differently. Understanding the split explains a lot of
-mockingpug's behavior (why a bare relation never shows up in `.mockingpug/db`,
-why self-references aren't supported yet, why generation order matters).
+`data.<entity>`, `data.<entity>.<field>`, and `data.<entity>.[field,...]`
+look similar but resolve completely differently. Understanding the split
+explains a lot of mockingpug's behavior (why a bare relation never shows up
+in `.mockingpug/db`, why self-references aren't supported yet, why
+generation order matters).
 
 ## Field-level relations (`data.<entity>.<field>`)
 
@@ -37,13 +38,52 @@ This does **not** guarantee `productId` and `productName` come from the
 same `product` record. Each field resolves with its own RNG stream (seeded
 including the field name), so `productId` and `productName` are two
 independent random picks — they'll often point at two different products.
-If you need several fields pulled from the *same* related record, there's
-no dedicated syntax for that yet; the current workaround is to only
-reference the id (`"data.product.id"`) and resolve the rest with an extra
-lookup at read/request time in your app, or duplicate the value into a
-custom dictionary keyed the way you need it. Track the roadmap if you need
-a native multi-field pick.
+Use a [multi-pick](#correlated-multi-field-pick) instead if you need them
+to agree.
 </Callout>
+
+## Correlated multi-field pick (`data.<entity>.[field,field,...]`)
+
+```json title="mock/api/order/schema.json"
+{ "product": "data.product.[id,name,slug]" }
+```
+
+Fixes exactly the problem in the callout above: this makes **one** pick of
+a `product` record (one RNG draw, not one per field) and projects the
+listed fields onto flat sibling fields of the `order` record — `id`,
+`name`, and `slug` here, guaranteed to come from the same underlying
+`product`. The schema key itself (`"product"`) never appears on the output
+record; only the projected names do:
+
+```json
+{ "orderId": "...", "id": 7, "name": "Wireless Mouse", "slug": "wireless-mouse" }
+```
+
+A few rules follow from that:
+
+- **At least two fields.** `data.product.[id]` is rejected
+  (`MP-SCHEMA-020`) — for a single field, use the plain
+  `"data.product.id"` form instead, which names the output field after
+  your own schema key rather than forcing it to be `id`.
+- **No duplicate names within one pick**, and **no collision with any
+  other field on the same entity** (including another multi-pick's
+  projected names) — both reject at parse time (`MP-SCHEMA-020`/
+  `MP-SCHEMA-021`). Generation would otherwise silently let one field win
+  over the other depending on object key iteration order.
+- **Generation order applies exactly like a field-level ref**: the target
+  entity (`product`) is generated first, and an empty/missing target field
+  fails the same way (`MP-GEN-004`/`MP-GEN-005`).
+- **Editing the field list is a change like any other** — `doctor`/
+  `generate` detect it via the schema's fingerprint and re-pick for every
+  record, same as a field's generator type changing. One caveat: if you
+  *shrink* the list (`[id,name,slug]` → `[id,name]`), the now-dropped
+  projected key (`slug`) isn't retroactively deleted from already-generated
+  records — only new records skip it. Run `mpug reset`/`prune` if you need
+  a clean slate.
+- **`literal`/`fixtures` see the projected names, not the schema key.** A
+  [`literal`](/docs/concepts/schema-dsl#literal-records) record for the
+  `order` example above needs `id`/`name`/`slug` keys, not a `product` key —
+  `doctor` checks against the projected names for exactly this reason.
 
 ## Bare relations (`data.<entity>`, no field)
 
@@ -95,6 +135,14 @@ Generation processes one entity fully before moving to the next, so a
 self-reference would need to point at records that don't exist yet within
 that same run. This throws a clear error rather than silently producing
 `null`. Track the roadmap if you need this.
+
+**A multi-pick as an `array[...]` item, or as a bare relation's back-reference.**
+`array[data.product.[id,name]].3` isn't supported — arrays don't support
+`crossRef` items of any kind yet (`MP-GEN-001`, tracked on the roadmap
+separately). A multi-pick also can't stand in for the single field-level
+back-reference a bare relation looks for, even if `id` is one of its
+projected names — declare a plain `data.<entity>.id` field if you need an
+entity to be a bare relation's target.
 
 ## Generation is otherwise a pure function
 

@@ -11,6 +11,7 @@ export {
   buildCustomResolver,
   generateFieldValue,
   generateFullRecord,
+  generateStoredFieldEntries,
   isStoredField,
   seedIncrementCounters,
   type CustomResolver,

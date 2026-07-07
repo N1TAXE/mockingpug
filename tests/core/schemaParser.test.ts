@@ -216,4 +216,40 @@ describe('parseEntitySchema : validation', () => {
       expect((error as SchemaError).code).toBe('MP-SCHEMA-017');
     }
   });
+
+  it('parses a correlated multi-field pick onto the returned schema', () => {
+    const schema = parseEntitySchema('order', 'x', {
+      amount: 5,
+      data: { orderId: 'uuid', product: 'data.product.[id,name,slug]' },
+    });
+    expect(schema.data.product).toEqual({ kind: 'crossRef', entity: 'product', fields: ['id', 'name', 'slug'] });
+  });
+
+  it('throws SchemaError MP-SCHEMA-021 when a multi-pick collides with a regular field on the same entity', () => {
+    try {
+      parseEntitySchema('order', 'x', {
+        amount: 5,
+        data: { id: 'uuid', name: 'lorem', product: 'data.product.[id,name]' },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-021');
+    }
+  });
+
+  it('throws SchemaError MP-SCHEMA-021 when two multi-picks project the same field name', () => {
+    try {
+      parseEntitySchema('order', 'x', {
+        amount: 5,
+        data: {
+          id: 'uuid',
+          product: 'data.product.[id,name]',
+          category: 'data.category.[id,slug]',
+        },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-021');
+    }
+  });
 });

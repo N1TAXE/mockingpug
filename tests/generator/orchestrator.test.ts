@@ -590,6 +590,88 @@ describe('generateAll : slugify', () => {
   });
 });
 
+/** order: correlated multi-field pick of product's id/name/slug in one go. */
+function orderProductSchemas(orderAmount: number, productAmount: number): SchemaBundle {
+  return {
+    product: {
+      name: 'product',
+      file: 'mock/api/product/schema.json',
+      amount: productAmount,
+      data: { id: increment, name: lorem, slug: lorem },
+    },
+    order: {
+      name: 'order',
+      file: 'mock/api/order/schema.json',
+      amount: orderAmount,
+      data: {
+        orderId: { kind: 'uuid' },
+        product: { kind: 'crossRef', entity: 'product', fields: ['id', 'name', 'slug'] },
+      },
+    },
+  };
+}
+
+describe('generateAll : multi-field pick', () => {
+  it('projects every listed field flat onto the record, from a single correlated pick', async () => {
+    const store = new MemoryStoreAdapter();
+    await generateAll(orderProductSchemas(30, 10), store, { seed: 's' });
+    const products = (await store.load('product'))!.records;
+    const orders = (await store.load('order'))!.records;
+
+    expect(orders).toHaveLength(30);
+    for (const order of orders) {
+      // The schema key "product" itself never appears on the output record...
+      expect(order.product).toBeUndefined();
+      // ...instead id/name/slug are flat sibling fields, all three drawn
+      // from the SAME underlying product record (the actual bug this
+      // feature fixes: independent per-field picks would disagree).
+      const match = products.find((p) => p.id === order.id);
+      expect(match).toBeDefined();
+      expect(order.name).toBe(match!.name);
+      expect(order.slug).toBe(match!.slug);
+    }
+  });
+
+  it('is reproducible for the same seed', async () => {
+    const storeA = new MemoryStoreAdapter();
+    const storeB = new MemoryStoreAdapter();
+    await generateAll(orderProductSchemas(10, 5), storeA, { seed: 'fixed' });
+    await generateAll(orderProductSchemas(10, 5), storeB, { seed: 'fixed' });
+    const ordersA = (await storeA.load('order'))!.records;
+    const ordersB = (await storeB.load('order'))!.records;
+    expect(ordersA).toEqual(ordersB);
+  });
+
+  it('regenerates only the multi-pick field when its own spec changes, leaving other fields untouched', async () => {
+    const store = new MemoryStoreAdapter();
+    const base = orderProductSchemas(10, 5);
+    await generateAll(base, store, { seed: 's' });
+    const before = (await store.load('order'))!.records;
+
+    const changed: SchemaBundle = {
+      ...base,
+      order: {
+        ...base.order!,
+        data: { ...base.order!.data, product: { kind: 'crossRef', entity: 'product', fields: ['id', 'name'] } },
+      },
+    };
+    await generateAll(changed, store, { seed: 's' });
+    const after = (await store.load('order'))!.records;
+
+    expect(after[0]!.orderId).toBe(before[0]!.orderId);
+    expect(after[0]!.id).toBeDefined();
+    expect(after[0]!.name).toBeDefined();
+  });
+
+  it('throws GenerationError when the target entity has no generated records (ordering enforced)', async () => {
+    const store = new MemoryStoreAdapter();
+    // "order" is processed after "product" in topological order regardless
+    // of declaration order, but an empty product set still can't satisfy a
+    // pick.
+    await expect(generateAll(orderProductSchemas(5, 0), store, { seed: 's' })).rejects.toThrow();
+  });
+});
+
 describe('generateAll : end-to-end with the real FileStoreAdapter', () => {
   let dir: string;
 

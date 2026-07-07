@@ -204,8 +204,10 @@ source field's own type changes) — it derives a value, it doesn't fix one.
 
 ## Cross-entity relations
 
-`data.<entity>` and `data.<entity>.<field>` are the two relation forms.
-They behave very differently, and have their own dedicated page:
+`data.<entity>`, `data.<entity>.<field>`, and `data.<entity>.[field,...]`
+(a correlated multi-field pick — several fields from one guaranteed-same
+related record) are the three relation forms. They behave very
+differently, and have their own dedicated page:
 [Relations & Generation Order](/docs/concepts/relations-and-generation).
 
 ## Typo detection

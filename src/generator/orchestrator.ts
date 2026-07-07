@@ -17,8 +17,8 @@ import { safeMerge } from '../store/safeMerge.js';
 import type { StoreAdapter, StoredRecord } from '../store';
 import {
   buildCustomResolver,
-  generateFieldValue,
   generateFullRecord,
+  generateStoredFieldEntries,
   isStoredField,
   seedIncrementCounters,
 } from './recordGenerator.js';
@@ -211,7 +211,7 @@ export async function generateAll(
       const spec = schema.data[fieldName];
       if (!spec || !isStoredField(spec)) continue;
       for (const record of records) {
-        record[fieldName] = await generateFieldValue(
+        const entries = await generateStoredFieldEntries(
           entity,
           record._index as number,
           fieldName,
@@ -222,6 +222,7 @@ export async function generateAll(
           resolveTargetRecords,
           record,
         );
+        Object.assign(record, entries);
       }
     }
 

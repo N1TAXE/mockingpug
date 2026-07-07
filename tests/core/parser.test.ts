@@ -77,6 +77,49 @@ describe('parseFieldType', () => {
     });
   });
 
+  it('parses a correlated multi-field pick', () => {
+    expect(parseFieldType('data.product.[id,name,slug]')).toEqual({
+      kind: 'crossRef',
+      entity: 'product',
+      fields: ['id', 'name', 'slug'],
+    });
+  });
+
+  it('trims whitespace around multi-pick field names', () => {
+    expect(parseFieldType('data.product.[ id , name ]')).toEqual({
+      kind: 'crossRef',
+      entity: 'product',
+      fields: ['id', 'name'],
+    });
+  });
+
+  it('throws SchemaError MP-SCHEMA-020 when a multi-pick lists fewer than two fields', () => {
+    try {
+      parseFieldType('data.product.[id]');
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-020');
+    }
+  });
+
+  it('throws SchemaError MP-SCHEMA-020 when a multi-pick lists an invalid field name', () => {
+    try {
+      parseFieldType('data.product.[id,3name]');
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-020');
+    }
+  });
+
+  it('throws SchemaError MP-SCHEMA-020 when a multi-pick lists the same field twice', () => {
+    try {
+      parseFieldType('data.product.[id,name,id]');
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-020');
+    }
+  });
+
   it('parses slugify[field,separator]', () => {
     expect(parseFieldType('slugify[title,-]')).toEqual({
       kind: 'slugify',

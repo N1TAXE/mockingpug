@@ -1,3 +1,4 @@
+import { expandDataFields } from '../core/expandFields.js';
 import type { CustomDictionaryEntry, EntitySchema, FieldSpec } from '../core/types.js';
 
 /** `blogpost` -> `Blogpost`, `blog-post`/`blog_post` -> `BlogPost`: a TS-safe interface name for an entity. */
@@ -94,7 +95,7 @@ export function generateTypeDefinitions(
   const interfaces = Object.values(schemas)
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((schema) => {
-      const fields = Object.entries(schema.data)
+      const fields = expandDataFields(schema.data)
         .map(([fieldName, spec]) => `  ${propertyKey(fieldName)}: ${fieldType(spec, schemas, customDictionaries, new Set())};`)
         .join('\n');
       return `export interface ${pascalCase(schema.name)} {\n${fields}\n}`;
