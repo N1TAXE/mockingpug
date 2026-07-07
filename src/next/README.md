@@ -256,6 +256,41 @@ Plain first-party cookie, no server round-trip. Not wired into
 `<MockDevtools>`'s panel: it needs its own `middleware.ts` to work, so
 it's assembled with your own toggle UI, separate from the panel below.
 
+## Recipe D: branch per call site instead of routing through `/api/*`
+
+Recipes A-C all assume your app always calls a single mock base path
+(`/api/*`) and something decides mock-vs-real for that path as a whole.
+If you already have a real API client and would rather not have *any*
+production request pass anywhere near a Route Handler that could serve a
+mock, branch in your own data-fetching layer instead, with a build-time
+flag deciding which function runs:
+
+```ts
+// shared/api.ts
+const useMocks = process.env.USE_MOCKS !== 'false' && process.env.NODE_ENV !== 'production';
+
+export async function getUsers() {
+  if (useMocks) {
+    // reads straight from the mock's own /api/user, or straight from
+    // ctx/store if you're calling mockingpug in-process
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/user`);
+    return (await res.json()).data;
+  }
+  return fetchJson('/users'); // your real backend client
+}
+```
+
+There's no HTTP-level routing decision here at all (no `rewrites()`, no
+proxy, no middleware): `useMocks` is a plain constant computed once at
+process start from `process.env`, and every call site branches on it
+directly. This is the simplest option when your app already has a real
+API client per endpoint and you just want to swap in mock data during
+development/CI — but it's a per-call-site decision, not a per-request
+one, so **the cookie-based toggle from Recipe C, and the `liveToggle`
+concept in general, has no effect here**: there's nothing listening for a
+cookie, `useMocks` is fixed for the life of the process. Toggle it with
+the env var and restart, the same way you'd toggle `MOCK_MODE` in Recipe A.
+
 ## Live schema reloading
 
 `getMockContext()` watches your resolved mock dir and `mock.config.js`
