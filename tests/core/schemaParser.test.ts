@@ -252,4 +252,40 @@ describe('parseEntitySchema : validation', () => {
       expect((error as SchemaError).code).toBe('MP-SCHEMA-021');
     }
   });
+
+  it('parses a field-level cross-ref array item onto the returned schema', () => {
+    const schema = parseEntitySchema('order', 'x', {
+      amount: 5,
+      data: { relatedProductIds: 'array[data.product.id].3' },
+    });
+    expect(schema.data.relatedProductIds).toEqual({
+      kind: 'array',
+      item: { kind: 'crossRef', entity: 'product', field: 'id' },
+      count: 3,
+    });
+  });
+
+  it('throws SchemaError MP-SCHEMA-022 when an array item is a bare relation', () => {
+    try {
+      parseEntitySchema('order', 'x', {
+        amount: 5,
+        data: { products: 'array[data.product].3' },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-022');
+    }
+  });
+
+  it('throws SchemaError MP-SCHEMA-022 when an array item is a multi-pick', () => {
+    try {
+      parseEntitySchema('order', 'x', {
+        amount: 5,
+        data: { products: 'array[data.product.[id,name]].3' },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-022');
+    }
+  });
 });

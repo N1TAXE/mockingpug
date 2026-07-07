@@ -144,7 +144,12 @@ export function generateValue(spec: FieldSpec, rng: Rng, ctx: GenerateContext): 
       throw new GenerationError(
         'MP-GEN-001',
         `cross-entity reference "data.${spec.entity}${spec.field ? `.${spec.field}` : ''}" cannot be resolved by generateValue() directly`,
-        { hint: 'resolve crossRef fields through the dependency-graph module, not generate.ts' },
+        {
+          hint:
+            'resolve crossRef fields through the dependency-graph module, not generate.ts — a single-level ' +
+            '"array[data.<entity>.<field>].N" is handled in recordGenerator.ts before ever reaching here; ' +
+            'a bare/multi-pick item is rejected at parse time (MP-SCHEMA-022); a nested array of crossRef items is not supported',
+        },
       );
 
     case 'slugify':

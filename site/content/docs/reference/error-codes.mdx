@@ -39,6 +39,7 @@ Thrown while parsing `mock/api/**/schema.json` / `mock/data/*.json`.
 | `MP-SCHEMA-019` | `"literal"` has more entries than `"amount"`. |
 | `MP-SCHEMA-020` | A multi-pick `"data.<entity>.[...]"` lists fewer than two fields, an invalid field name, or the same field twice. |
 | `MP-SCHEMA-021` | Two fields on the same entity produce the same output field name (a multi-pick's projected name collides with another declared/projected field). |
+| `MP-SCHEMA-022` | An `array[...]` item is a bare or multi-pick `crossRef`; only a field-level pick (`array[data.<entity>.<field>].N`) is a valid array item. |
 
 ## `MP-DEP-*`: cross-entity reference graph
 
@@ -57,7 +58,7 @@ generation happens).
 | Code | Cause |
 |---|---|
 | `MP-GEN-000` | Internal exhaustiveness guard, should be unreachable for any valid schema; report it as a bug if you see it. |
-| `MP-GEN-001` | A `crossRef` field reached the low-level value generator directly instead of going through the dependency-graph resolver. This is user-reachable today via `array[data.<entity>...].N` — a `crossRef` as an array's inner type isn't supported yet (see [Schema DSL → Arrays](/docs/concepts/schema-dsl#arrays)); everywhere else it's an internal invariant violation, report it as a bug. |
+| `MP-GEN-001` | A `crossRef` field reached the low-level value generator directly instead of going through the dependency-graph resolver. A single-level `array[data.<entity>.<field>].N` is supported (handled before reaching here); a bare/multi-pick array item is rejected earlier at parse time (`MP-SCHEMA-022`); a nested array of `crossRef` items isn't supported yet (see [Schema DSL → Arrays](/docs/concepts/schema-dsl#arrays)). Everywhere else it's an internal invariant violation, report it as a bug. |
 | `MP-GEN-002` / `MP-GEN-003` | A custom dictionary is empty, or every entry has already hit its `max` cap and there's nothing left to pick from. |
 | `MP-GEN-004` / `MP-GEN-005` | A field-level reference (`data.user.id`) couldn't resolve because the target entity has zero generated records, or the referenced field doesn't exist on it. |
 | `MP-GEN-006` | A `slugify` field reached the low-level value generator directly instead of going through `recordGenerator.ts`. Same `array[slugify[...]].N` caveat as `MP-GEN-001` applies; everywhere else it's an internal invariant violation, report it as a bug. |

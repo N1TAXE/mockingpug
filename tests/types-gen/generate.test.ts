@@ -52,6 +52,19 @@ describe('generateTypeDefinitions : field type mapping', () => {
     expect(generateTypeDefinitions(schemas)).toContain('tags: Array<string>;');
   });
 
+  it('renders an array of a field-level cross-reference as Array<the target field\'s type>', () => {
+    const schemas: Record<string, EntitySchema> = {
+      order: {
+        name: 'order',
+        file: 'x',
+        amount: 1,
+        data: { relatedProductIds: { kind: 'array', item: { kind: 'crossRef', entity: 'product', field: 'id' }, count: 3 } },
+      },
+      product: { name: 'product', file: 'x', amount: 1, data: { id: { kind: 'number', mode: 'increment' } } },
+    };
+    expect(generateTypeDefinitions(schemas)).toContain('relatedProductIds: Array<number>;');
+  });
+
   it('renders an all-string-literal custom dictionary as a union', () => {
     const schemas: Record<string, EntitySchema> = {
       user: { name: 'user', file: 'x', amount: 1, data: { role: { kind: 'custom', name: 'role' } } },

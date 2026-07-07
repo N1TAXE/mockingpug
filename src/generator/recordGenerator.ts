@@ -69,6 +69,21 @@ export async function generateFieldValue(
     const target = await resolveTargetRecords(spec.entity);
     return resolveFieldRef(spec.entity, spec.field, target, rng);
   }
+  if (spec.kind === 'array' && spec.item.kind === 'crossRef' && spec.item.field !== undefined) {
+    // Each element is an independent pick, keyed by its position in the
+    // array (not shared with the others), so a `count` > 1 doesn't
+    // trivially repeat the same value across every slot. generateValue()
+    // can't do this itself — it has no access to another entity's
+    // already-generated records — so array-of-crossRef is special-cased
+    // here rather than falling through to it.
+    const target = await resolveTargetRecords(spec.item.entity);
+    const values: unknown[] = [];
+    for (let i = 0; i < spec.count; i++) {
+      const itemRng = createRng(seed, entity, index, fieldName, i);
+      values.push(resolveFieldRef(spec.item.entity, spec.item.field, target, itemRng));
+    }
+    return values;
+  }
   if (spec.kind === 'slugify') {
     const sourceValue = partialRecord?.[spec.field];
     if (typeof sourceValue !== 'string') {

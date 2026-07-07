@@ -111,6 +111,26 @@ export function parseEntitySchema(
     }
   }
 
+  // `array[data.<entity>.<field>].N` (a field-level pick per element) is
+  // supported, but a bare or multi-pick crossRef as an array item isn't:
+  // neither produces one concrete stored value per element the way a
+  // field-level pick does (bare resolves lazily to a whole list at read
+  // time; multi-pick produces several flat sibling fields, not one array
+  // slot's worth of value).
+  for (const [fieldName, spec] of Object.entries(fields)) {
+    if (spec.kind !== 'array' || spec.item.kind !== 'crossRef') continue;
+    if (spec.item.field !== undefined) continue;
+    const reason = spec.item.fields !== undefined ? 'a multi-pick' : 'a bare relation (no field)';
+    throw new SchemaError(
+      'MP-SCHEMA-022',
+      `field "${fieldName}" in "${entityName}" is "array[data.${spec.item.entity}...].${spec.count}", but an array item can't be ${reason}`,
+      {
+        location: { file, path: `data.${fieldName}` },
+        hint: `use a field-level pick instead, e.g. "array[data.${spec.item.entity}.id].${spec.count}"`,
+      },
+    );
+  }
+
   for (const [fieldName, spec] of Object.entries(fields)) {
     if (spec.kind !== 'slugify') continue;
     const sourceIndex = fieldOrder.indexOf(spec.field);

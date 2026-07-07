@@ -136,13 +136,17 @@ self-reference would need to point at records that don't exist yet within
 that same run. This throws a clear error rather than silently producing
 `null`. Track the roadmap if you need this.
 
-**A multi-pick as an `array[...]` item, or as a bare relation's back-reference.**
-`array[data.product.[id,name]].3` isn't supported — arrays don't support
-`crossRef` items of any kind yet (`MP-GEN-001`, tracked on the roadmap
-separately). A multi-pick also can't stand in for the single field-level
-back-reference a bare relation looks for, even if `id` is one of its
-projected names — declare a plain `data.<entity>.id` field if you need an
-entity to be a bare relation's target.
+**A bare or multi-pick `crossRef` as an `array[...]` item, a nested array
+of `crossRef` items, or a multi-pick as a bare relation's back-reference.**
+A field-level pick (`array[data.product.id].3`) works — see
+[Schema DSL → Arrays](/docs/concepts/schema-dsl#arrays) — but
+`array[data.product].3` (bare) and `array[data.product.[id,name]].3`
+(multi-pick) both reject at parse time (`MP-SCHEMA-022`), and
+`array[array[data.x.id].2].3` (nested) still fails at generation time
+(`MP-GEN-001`). Separately, a multi-pick can't stand in for the single
+field-level back-reference a bare relation looks for, even if `id` is one
+of its projected names — declare a plain `data.<entity>.id` field if you
+need an entity to be a bare relation's target.
 
 ## Generation is otherwise a pure function
 

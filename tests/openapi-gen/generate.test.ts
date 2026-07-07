@@ -66,6 +66,26 @@ describe('generateOpenApiSpec : field type mapping', () => {
     expect(user.properties.tags).toEqual({ type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 3 });
   });
 
+  it('renders an array of a field-level cross-reference with items recursing into the target field\'s schema', () => {
+    const entities: Record<string, EntitySchema> = {
+      order: {
+        name: 'order',
+        file: 'x',
+        amount: 1,
+        data: { relatedProductIds: { kind: 'array', item: { kind: 'crossRef', entity: 'product', field: 'id' }, count: 3 } },
+      },
+      product: { name: 'product', file: 'x', amount: 1, data: { id: { kind: 'number', mode: 'increment' } } },
+    };
+    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const order = schemas(spec).Order as { properties: Record<string, unknown> };
+    expect(order.properties.relatedProductIds).toEqual({
+      type: 'array',
+      items: { type: 'number' },
+      minItems: 3,
+      maxItems: 3,
+    });
+  });
+
   it('renders an all-primitive custom dictionary as a typed enum', () => {
     const entities: Record<string, EntitySchema> = {
       user: { name: 'user', file: 'x', amount: 1, data: { role: { kind: 'custom', name: 'role' } } },

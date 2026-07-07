@@ -672,6 +672,69 @@ describe('generateAll : multi-field pick', () => {
   });
 });
 
+/** order: array of field-level crossRef picks (`array[data.product.id].N`). */
+function orderTagsSchemas(orderAmount: number, productAmount: number, count: number): SchemaBundle {
+  return {
+    product: {
+      name: 'product',
+      file: 'mock/api/product/schema.json',
+      amount: productAmount,
+      data: { id: increment, name: lorem },
+    },
+    order: {
+      name: 'order',
+      file: 'mock/api/order/schema.json',
+      amount: orderAmount,
+      data: {
+        orderId: { kind: 'uuid' },
+        relatedProductIds: { kind: 'array', item: { kind: 'crossRef', entity: 'product', field: 'id' }, count },
+      },
+    },
+  };
+}
+
+describe('generateAll : crossRef inside array[...]', () => {
+  it('generates a fixed-length array of picked field values', async () => {
+    const store = new MemoryStoreAdapter();
+    await generateAll(orderTagsSchemas(20, 10, 3), store, { seed: 's' });
+    const products = (await store.load('product'))!.records;
+    const productIds = new Set(products.map((p) => p.id));
+    const orders = (await store.load('order'))!.records;
+
+    expect(orders).toHaveLength(20);
+    for (const order of orders) {
+      const ids = order.relatedProductIds as unknown[];
+      expect(ids).toHaveLength(3);
+      for (const id of ids) expect(productIds.has(id)).toBe(true);
+    }
+  });
+
+  it('picks each array position independently, not repeating the same value for every slot', async () => {
+    const store = new MemoryStoreAdapter();
+    // A large target pool and several positions: if every slot shared one
+    // RNG stream, all elements would be identical every time.
+    await generateAll(orderTagsSchemas(1, 200, 5), store, { seed: 's' });
+    const order = (await store.load('order'))!.records[0]!;
+    const ids = order.relatedProductIds as unknown[];
+    expect(new Set(ids).size).toBeGreaterThan(1);
+  });
+
+  it('is reproducible for the same seed', async () => {
+    const storeA = new MemoryStoreAdapter();
+    const storeB = new MemoryStoreAdapter();
+    await generateAll(orderTagsSchemas(10, 10, 3), storeA, { seed: 'fixed' });
+    await generateAll(orderTagsSchemas(10, 10, 3), storeB, { seed: 'fixed' });
+    const ordersA = (await storeA.load('order'))!.records;
+    const ordersB = (await storeB.load('order'))!.records;
+    expect(ordersA).toEqual(ordersB);
+  });
+
+  it('requires the target entity generated first, like a plain field-level ref', async () => {
+    const store = new MemoryStoreAdapter();
+    await expect(generateAll(orderTagsSchemas(5, 0, 3), store, { seed: 's' })).rejects.toThrow();
+  });
+});
+
 describe('generateAll : end-to-end with the real FileStoreAdapter', () => {
   let dir: string;
 

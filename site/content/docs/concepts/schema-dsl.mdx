@@ -63,15 +63,26 @@ including another `array[...]` (nested arrays):
 { "tags": "array[lorem.8].5" }
 ```
 
-<Callout type="warn" title="A crossRef inner type is not supported yet">
-`array[data.category].3` parses without error but **fails at generation
-time** with `MP-GEN-001` — the array generator doesn't know how to resolve
-a cross-entity reference per element (that resolution lives in a separate
-dependency-graph module, not reachable from inside `array[...]`'s
-item-generation loop). If you need a fixed-size set of related records
-today, declare separate fields instead (`category_id_1`, `category_id_2`,
-`category_id_3`), each `"data.category.id"`. Track the roadmap for native
-support.
+A `crossRef` inner type is supported for the field-level form:
+
+```json
+{ "relatedProductIds": "array[data.product.id].3" }
+```
+
+Each element is an **independent pick** (its own RNG stream per array
+position, not shared across the array), so a `count` > 1 doesn't just
+repeat the same product three times. Generation order applies exactly like
+a plain field-level ref: `product` must be generated before `order` here,
+enforced automatically.
+
+<Callout type="warn" title="A bare or multi-pick crossRef can't be an array item">
+`array[data.category].3` (bare, no field) and
+`array[data.product.[id,name]].3` (multi-pick) both reject at parse time
+with `MP-SCHEMA-022` — neither produces one concrete stored value per
+array slot the way a field-level pick does. Use
+`array[data.category.id].3` instead. A nested array of `crossRef` items
+(`array[array[data.x.id].2].3`) isn't supported either, and still fails at
+generation time with `MP-GEN-001`.
 </Callout>
 
 `count` is checked against `mock.config.js`'s `limits.maxArrayDepth` by
