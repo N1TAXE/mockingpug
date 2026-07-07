@@ -48,6 +48,12 @@ directory. Idempotent and non-destructive:
   `mock/api/` is completely empty, so running `init` in a project that
   already has real schemas doesn't clutter it.
 
+`init` also detects your package manager from its lockfile (`package-lock.json`,
+`pnpm-lock.yaml`, `yarn.lock`, `bun.lockb`/`bun.lock`, `deno.lock`/`deno.json`/
+`deno.jsonc`; falls back to npm if none exist yet) and prints the "next
+steps" in that manager's own run syntax — `pnpm exec mpug doctor` instead of
+`npx mpug doctor`, and so on for each of the five managers listed above.
+
 ## `doctor`
 
 ```bash

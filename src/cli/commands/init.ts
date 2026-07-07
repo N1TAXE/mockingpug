@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ok, type CommandResult } from '../commandResult.js';
+import { detectPackageManager, formatRunCommand } from '../packageManager.js';
 
 const CONFIG_TEMPLATE = `// See mockingpug's docs for the full list of options.
 module.exports = {
@@ -57,6 +58,10 @@ export async function init(projectDir: string): Promise<CommandResult> {
     await writeFile(join(exampleDir, 'schema.json'), EXAMPLE_SCHEMA, 'utf-8');
     messages.push('added an example schema at mock/api/example/schema.json');
   }
+
+  const packageManager = detectPackageManager(projectDir);
+  messages.push(`detected package manager: ${packageManager} (from lockfile; defaults to npm if none found)`);
+  messages.push(`next: ${formatRunCommand(packageManager, 'doctor')} to validate, then ${formatRunCommand(packageManager, 'generate')} to generate mock data`);
 
   return ok(messages);
 }

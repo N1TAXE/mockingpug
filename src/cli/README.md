@@ -49,6 +49,13 @@ directory. Idempotent and non-destructive:
   already has real schemas (like this repo's `mock/api/user`,
   `mock/api/blogpost`) won't clutter it.
 
+It also detects which package manager your project uses (`package-lock.json`
+→ npm, `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, `bun.lockb`/`bun.lock` →
+bun, `deno.lock`/`deno.json`/`deno.jsonc` → deno; defaults to npm if none of
+these are present yet) and prints the next-step commands in that manager's
+syntax, matching the table above — so you don't have to manually translate
+`npx mpug doctor` into `pnpm exec mpug doctor` yourself.
+
 ## 2. `doctor`
 
 ```bash

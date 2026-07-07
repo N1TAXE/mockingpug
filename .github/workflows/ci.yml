@@ -152,3 +152,25 @@ jobs:
           deno run -A npm:mockingpug types
           test -f .mockingpug/db/user.json
           test -f .mockingpug/types/index.d.ts
+
+      # Resolution only, deliberately not a real import: `mockingpug/react`
+      # and `mockingpug/next` pull in `react`/`next` at the top of the
+      # module, which aren't (and shouldn't need to be) installed for this
+      # CLI-focused smoke test. `import.meta.resolve()` exercises exactly
+      # the thing each manager historically gets wrong for a package with
+      # ESM-only conditional `exports` sub-paths — pnpm's strict,
+      # non-flattened `node_modules`/symlink layout, and Deno's npm-compat
+      # `node_modules` from `--node-modules-dir=auto` — without needing to
+      # execute (and therefore fully install the peer deps of) the module
+      # itself. Runs after every manager's install step above, since by
+      # this point `node_modules` exists regardless of which one populated
+      # it, and plain `node` (from the unconditional setup-node step) can
+      # resolve against any of their layouts.
+      - name: verify mockingpug/react, mockingpug/next, mockingpug/vite subpath exports resolve
+        working-directory: /tmp/consumer
+        run: |
+          node --input-type=module -e "
+          for (const sub of ['mockingpug/react', 'mockingpug/next', 'mockingpug/vite']) {
+            console.log(sub, '->', import.meta.resolve(sub));
+          }
+          "

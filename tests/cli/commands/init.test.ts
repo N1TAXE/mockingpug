@@ -54,4 +54,25 @@ describe('init', () => {
     const apiEntries = await readdir(join(dir, 'mock', 'api'));
     expect(apiEntries).toEqual(['user']);
   });
+
+  it('reports npm as the detected package manager when no lockfile is present', async () => {
+    const result = await init(dir);
+    expect(result.messages.some((m) => m.includes('detected package manager: npm'))).toBe(true);
+    expect(result.messages.some((m) => m.includes('npx mpug doctor'))).toBe(true);
+    expect(result.messages.some((m) => m.includes('npx mpug generate'))).toBe(true);
+  });
+
+  it('detects pnpm from pnpm-lock.yaml and prints pnpm-flavored next steps', async () => {
+    await writeFile(join(dir, 'pnpm-lock.yaml'), '', 'utf-8');
+    const result = await init(dir);
+    expect(result.messages.some((m) => m.includes('detected package manager: pnpm'))).toBe(true);
+    expect(result.messages.some((m) => m.includes('pnpm exec mpug doctor'))).toBe(true);
+  });
+
+  it('detects deno from deno.json and prints deno-flavored next steps', async () => {
+    await writeFile(join(dir, 'deno.json'), '{}', 'utf-8');
+    const result = await init(dir);
+    expect(result.messages.some((m) => m.includes('detected package manager: deno'))).toBe(true);
+    expect(result.messages.some((m) => m.includes('deno run -A npm:mockingpug doctor'))).toBe(true);
+  });
 });
