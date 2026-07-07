@@ -7,6 +7,7 @@ import { generate } from './commands/generate.js';
 import { reset } from './commands/reset.js';
 import { prune } from './commands/prune.js';
 import { types } from './commands/types.js';
+import { docs } from './commands/docs.js';
 import type { CommandResult } from './commandResult.js';
 
 const USAGE = `Usage: mockingpug <command> [flags]
@@ -20,6 +21,7 @@ Commands:
   reset     Wipe the store entirely (--yes required)
   prune     Delete orphaned entities from the store (--yes required)
   types     Write .mockingpug/types/index.d.ts (one TS interface per entity)
+  docs      Write .mockingpug/docs/{index.html,openapi.json} (REST API reference)
 `;
 
 /** Reads the value following a `--flag <value>` pair out of the raw argv, or undefined if the flag wasn't passed. */
@@ -71,6 +73,11 @@ export async function run(argv: string[], cwd: string): Promise<number> {
       }
       case 'types': {
         const result = await types(cwd);
+        printResult(result);
+        return result.ok ? 0 : 1;
+      }
+      case 'docs': {
+        const result = await docs(cwd);
         printResult(result);
         return result.ok ? 0 : 1;
       }

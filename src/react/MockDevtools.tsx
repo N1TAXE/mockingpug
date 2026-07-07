@@ -8,6 +8,8 @@ import {
   type RequestLogEntry,
   type StoreSnapshot,
 } from '../query/index.js';
+import { generateOpenApiSpec } from '../openapi-gen/generate.js';
+import { renderDocsHtml } from '../openapi-gen/renderHtml.js';
 import { buildCurlCommand } from '../shared/curl.js';
 import { copyToClipboard } from '../shared/clipboard.js';
 import { DevtoolsPanel } from '../shared/devtoolsUI.js';
@@ -94,6 +96,22 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
     await copyToClipboard(buildCurlCommand('GET', url));
   }
 
+  /**
+   * Generated entirely client-side (unlike `mockingpug/next`'s live route,
+   * there's no server here to hit) — `ctx.schemas` is already the same
+   * fully-parsed `EntitySchema` map the CLI's `mpug docs` reads, so this
+   * needs no round-trip. Opened via a blob URL rather than downloaded, so
+   * it behaves like any other "open docs" link; revoked after giving the
+   * new tab plenty of time to finish loading it.
+   */
+  function openDocs() {
+    const spec = generateOpenApiSpec(ctx.schemas, { baseUrl, pagination: ctx.pagination }, ctx.customDictionaries);
+    const html = renderDocsHtml(spec);
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
   return (
     <DevtoolsPanel
       title="mockingpug"
@@ -110,6 +128,7 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
       onExportSnapshot={handleExportSnapshot}
       onImportSnapshot={handleImportSnapshot}
       onCopyRecordCurl={copyRecordCurl}
+      onOpenDocs={(ctx.docs?.enabled ?? true) ? openDocs : undefined}
       onOpen={() => void refreshCounts()}
       mockNetwork={{ enabled: mode === 'mock', onToggle: (next) => setMode(next ? 'mock' : 'off') }}
       bypass={{

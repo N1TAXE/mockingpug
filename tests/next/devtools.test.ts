@@ -37,14 +37,19 @@ function plainParams(mock: string[]): NextRouteContext {
 }
 
 describe('devtools sub-API (`{baseUrl}/__mockingpug/*`)', () => {
-  it('GET __mockingpug lists entity counts and the current runtime config', async () => {
+  it('GET __mockingpug lists entity counts, the current runtime config, and docsEnabled (default true)', async () => {
     const ctx = await makeContext(5);
     const handlers = createNextHandlers(ctx);
     const res = await handlers.GET(new Request('http://localhost/api/__mockingpug'), plainParams(['__mockingpug']));
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { entities: Record<string, number>; runtime: { delay: number; errorRate: number } };
+    const body = (await res.json()) as {
+      entities: Record<string, number>;
+      runtime: { delay: number; errorRate: number };
+      docsEnabled: boolean;
+    };
     expect(body.entities).toEqual({ user: 5 });
     expect(body.runtime).toEqual({ delay: 0, errorRate: 0 });
+    expect(body.docsEnabled).toBe(true);
   });
 
   it('GET __mockingpug/records/:entity returns up to 10 records', async () => {
@@ -419,6 +424,56 @@ describe('devtools sub-API (`{baseUrl}/__mockingpug/*`)', () => {
       new Request('http://localhost/api/__mockingpug/snapshot', { method: 'POST', body: '{}' }),
       plainParams(['__mockingpug', 'snapshot']),
     );
+
+    expect(ctx.requestLog.list()).toHaveLength(0);
+  });
+
+  it('GET __mockingpug/docs renders a live HTML API reference from the loaded schemas', async () => {
+    const ctx = await makeContext(1);
+    const handlers = createNextHandlers(ctx);
+    const res = await handlers.GET(
+      new Request('http://localhost/api/__mockingpug/docs'),
+      plainParams(['__mockingpug', 'docs']),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/html');
+    const html = await res.text();
+    expect(html).toContain('<!doctype html>');
+    expect(html).toContain('<section id="entity-user"');
+    // The server URL in the rendered curl examples is derived from the actual request path, not a hardcoded baseUrl.
+    expect(html).toContain("curl -X GET &#39;/api/user/1&#39;");
+  });
+
+  it('GET __mockingpug/docs returns a 404 (same as any unknown devtools route) when ctx.docs.enabled is false', async () => {
+    const ctx = await makeContext(1);
+    ctx.docs = { enabled: false };
+    const handlers = createNextHandlers(ctx);
+    const res = await handlers.GET(
+      new Request('http://localhost/api/__mockingpug/docs'),
+      plainParams(['__mockingpug', 'docs']),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('GET __mockingpug/docs works when mounted under a custom baseUrl, derived from the request itself', async () => {
+    const ctx = await makeContext(1);
+    const handlers = createNextHandlers(ctx);
+    const res = await handlers.GET(
+      new Request('http://localhost/backend/__mockingpug/docs'),
+      plainParams(['__mockingpug', 'docs']),
+    );
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("curl -X GET &#39;/backend/user/1&#39;");
+  });
+
+  it('devtools docs calls are never written to ctx.requestLog', async () => {
+    const { RequestLog } = await import('../../src/query/index.js');
+    const ctx = await makeContext(1);
+    ctx.requestLog = new RequestLog();
+    const handlers = createNextHandlers(ctx);
+
+    await handlers.GET(new Request('http://localhost/api/__mockingpug/docs'), plainParams(['__mockingpug', 'docs']));
 
     expect(ctx.requestLog.list()).toHaveLength(0);
   });

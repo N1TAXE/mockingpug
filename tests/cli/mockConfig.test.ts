@@ -54,6 +54,7 @@ describe('loadConfig', () => {
       pagination: DEFAULT_CONFIG.pagination,
       limits: DEFAULT_CONFIG.limits,
       runtime: DEFAULT_CONFIG.runtime,
+      docs: DEFAULT_CONFIG.docs,
     });
   });
 
@@ -200,5 +201,27 @@ describe('loadConfig', () => {
   it('throws ConfigError on a negative "runtime.delay"', async () => {
     await writeFile(join(dir, 'mock.config.js'), 'module.exports = { runtime: { delay: -50 } };', 'utf-8');
     await expect(loadConfig(dir)).rejects.toMatchObject({ code: 'MP-CONFIG-019' });
+  });
+
+  it('defaults "docs.enabled" to true when omitted', async () => {
+    await writeFile(join(dir, 'mock.config.js'), 'module.exports = {};', 'utf-8');
+    const config = await loadConfig(dir);
+    expect(config.docs).toEqual({ enabled: true });
+  });
+
+  it('merges a "docs.enabled: false" override over the defaults', async () => {
+    await writeFile(join(dir, 'mock.config.js'), 'module.exports = { docs: { enabled: false } };', 'utf-8');
+    const config = await loadConfig(dir);
+    expect(config.docs).toEqual({ enabled: false });
+  });
+
+  it('throws ConfigError when "docs" is not an object', async () => {
+    await writeFile(join(dir, 'mock.config.js'), 'module.exports = { docs: "yes" };', 'utf-8');
+    await expect(loadConfig(dir)).rejects.toMatchObject({ code: 'MP-CONFIG-020' });
+  });
+
+  it('throws ConfigError on a non-boolean "docs.enabled"', async () => {
+    await writeFile(join(dir, 'mock.config.js'), 'module.exports = { docs: { enabled: "yes" } };', 'utf-8');
+    await expect(loadConfig(dir)).rejects.toMatchObject({ code: 'MP-CONFIG-021' });
   });
 });

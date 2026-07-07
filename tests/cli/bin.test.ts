@@ -74,6 +74,14 @@ describe('run: CLI dispatch and exit codes', () => {
     logSpy.mockRestore();
   });
 
+  it('docs writes .mockingpug/docs/{index.html,openapi.json} and exits 0', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await writeFiles({ 'mock/api/user/schema.json': JSON.stringify({ amount: 1, data: { id: 'uuid' } }) });
+    expect(await run(['docs'], dir)).toBe(0);
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('.mockingpug'));
+    logSpy.mockRestore();
+  });
+
   it('doctor --assert-prod-safe exits 1 when the build dir contains mock markers', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});

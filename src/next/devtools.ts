@@ -1,6 +1,9 @@
 import { generateAll } from '../generator/index.js';
+import { generateOpenApiSpec } from '../openapi-gen/generate.js';
+import { renderDocsHtml } from '../openapi-gen/renderHtml.js';
 import {
   exportSnapshot,
+  htmlResponse,
   importSnapshot,
   jsonResponse,
   readJsonBody,
@@ -24,6 +27,24 @@ async function entityCounts(ctx: QueryContext): Promise<Record<string, number>> 
 
 function runtimeSnapshot(ctx: QueryContext): { delay: number; errorRate: number } {
   return { delay: ctx.runtime?.delay ?? 0, errorRate: ctx.runtime?.errorRate ?? 0 };
+}
+
+/** `docs.enabled` defaults to `true` when `ctx.docs` is unset, matching `mock.config.js`'s own default. */
+function docsEnabled(ctx: QueryContext): boolean {
+  return ctx.docs?.enabled ?? true;
+}
+
+/**
+ * `request.url`'s path minus the trailing `/__mockingpug/docs` this route is
+ * always reached at — self-describing from the actual request rather than
+ * needing `baseUrl` threaded through `handleDevtoolsRequest()`'s signature
+ * (which `createNextHandlers()` doesn't otherwise need to know: Next's own
+ * file-based routing decides where the catch-all route is mounted, not a
+ * config value).
+ */
+function baseUrlFromRequest(request: Request): string {
+  const { pathname } = new URL(request.url);
+  return pathname.slice(0, -`/${DEVTOOLS_SEGMENT}/docs`.length) || '/';
 }
 
 /**
@@ -54,7 +75,7 @@ export async function handleDevtoolsRequest(
   const [action, entity, id] = segments;
 
   if (!action && method === 'GET') {
-    return jsonResponse({ entities: await entityCounts(ctx), runtime: runtimeSnapshot(ctx) });
+    return jsonResponse({ entities: await entityCounts(ctx), runtime: runtimeSnapshot(ctx), docsEnabled: docsEnabled(ctx) });
   }
 
   if (action === 'runtime' && method === 'POST') {
@@ -121,6 +142,21 @@ export async function handleDevtoolsRequest(
     const body = (await readJsonBody(request)) as StoreSnapshot;
     await importSnapshot(ctx, body);
     return jsonResponse({ entities: await entityCounts(ctx) });
+  }
+
+  // Live-rendered API reference for `<MockDevtools>`'s "API Docs" button —
+  // the same generator/renderer `mpug docs` uses, just run against the
+  // already-loaded `ctx` instead of writing files, so it's always current
+  // with whatever schema the running process has. Absent entirely (falls
+  // through to the 404 below) when `docs.enabled: false`, same as the CLI
+  // command skipping its own output.
+  if (action === 'docs' && !entity && method === 'GET' && docsEnabled(ctx)) {
+    const spec = generateOpenApiSpec(
+      ctx.schemas,
+      { baseUrl: baseUrlFromRequest(request), pagination: ctx.pagination },
+      ctx.customDictionaries,
+    );
+    return htmlResponse(renderDocsHtml(spec));
   }
 
   return jsonResponse({ error: { message: 'not found' } }, { status: 404 });

@@ -60,6 +60,11 @@ export interface RuntimeConfig {
   delay: number;
 }
 
+export interface DocsConfig {
+  /** `mpug docs`/`<MockDevtools>`'s "API Docs" button, on by default. `false` skips generation entirely and hides the button — no OpenAPI spec of your mock's exact shape ships anywhere. */
+  enabled: boolean;
+}
+
 export interface MockConfig {
   dir: string;
   seed: string | number;
@@ -71,6 +76,7 @@ export interface MockConfig {
   pagination: PaginationConfig;
   limits: LimitsConfig;
   runtime: RuntimeConfig;
+  docs: DocsConfig;
 }
 
 export const DEFAULT_CONFIG: MockConfig = {
@@ -87,6 +93,7 @@ export const DEFAULT_CONFIG: MockConfig = {
   },
   limits: { maxAmount: 100_000, maxArrayDepth: 3 },
   runtime: { errorRate: 0, delay: 0 },
+  docs: { enabled: true },
 };
 
 const VALID_ADAPTERS = ['memory', 'file'];
@@ -99,7 +106,7 @@ function validate(config: unknown, configPath: string): asserts config is Partia
       location: { file: configPath },
     });
   }
-  const { dir, seed, baseUrl, persist, pagination, limits, runtime } = config as Record<string, unknown>;
+  const { dir, seed, baseUrl, persist, pagination, limits, runtime, docs } = config as Record<string, unknown>;
 
   if (dir !== undefined && typeof dir !== 'string') {
     throw new ConfigError('MP-CONFIG-002', '"dir" must be a string', {
@@ -200,6 +207,19 @@ function validate(config: unknown, configPath: string): asserts config is Partia
       });
     }
   }
+  if (docs !== undefined) {
+    if (typeof docs !== 'object' || docs === null) {
+      throw new ConfigError('MP-CONFIG-020', '"docs" must be an object', {
+        location: { file: configPath, path: 'docs' },
+      });
+    }
+    const { enabled } = docs as Record<string, unknown>;
+    if (enabled !== undefined && typeof enabled !== 'boolean') {
+      throw new ConfigError('MP-CONFIG-021', '"docs.enabled" must be a boolean', {
+        location: { file: configPath, path: 'docs.enabled' },
+      });
+    }
+  }
 }
 
 /** Loads and validates `mock.config.js`, falling back to defaults if it doesn't exist yet. */
@@ -249,6 +269,9 @@ export async function loadConfig(projectDir: string): Promise<MockConfig> {
     runtime: {
       errorRate: userConfig.runtime?.errorRate ?? DEFAULT_CONFIG.runtime.errorRate,
       delay: userConfig.runtime?.delay ?? DEFAULT_CONFIG.runtime.delay,
+    },
+    docs: {
+      enabled: userConfig.docs?.enabled ?? DEFAULT_CONFIG.docs.enabled,
     },
   };
 }

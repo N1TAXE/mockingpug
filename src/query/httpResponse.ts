@@ -15,6 +15,13 @@ export function jsonResponse(data: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(data), { ...init, headers });
 }
 
+/** Only used by the live `GET {baseUrl}/__mockingpug/docs` route (`<MockDevtools>`'s "API Docs" button) — every other devtools/entity response is JSON. */
+export function htmlResponse(html: string, init?: ResponseInit): Response {
+  const headers = new Headers(init?.headers);
+  headers.set('content-type', 'text/html; charset=utf-8');
+  return new Response(html, { ...init, headers });
+}
+
 /**
  * Turns a caught error into an HTTP response. `RequestError` (expected:
  * bad id, bad body) becomes its own status code with a clean body;

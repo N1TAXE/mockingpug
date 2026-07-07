@@ -48,6 +48,7 @@ export async function createMockContext(projectDir: string): Promise<MockContext
     runtime: config.runtime,
     requestLog: new RequestLog(),
     oneShotOverrides: new OneShotOverrides(),
+    docs: config.docs,
   };
 
   return { ctx, baseUrl: config.baseUrl, dir: join(projectDir, config.dir) };

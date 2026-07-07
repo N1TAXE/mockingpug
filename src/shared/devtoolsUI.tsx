@@ -445,6 +445,13 @@ export interface DevtoolsPanelProps {
    * terminal) without piecing the URL together by hand.
    */
   onCopyRecordCurl: (entity: string, id: string) => Promise<void> | void;
+  /**
+   * Opens the generated API reference (`mock.config.js`'s `docs.enabled`,
+   * defaults to `true`) in a new tab/window. Omit entirely (rather than
+   * passing a no-op) to hide the "API Docs" row — the wrapper components
+   * do this when `docs.enabled: false`.
+   */
+  onOpenDocs?: () => void;
   /** Called every time the panel transitions from closed to open, so the caller can refresh `entities`/`runtime`. */
   onOpen?: () => void;
   /** React/MSW-only: worker on/off. Omit entirely for transports (like Next.js) with nothing to intercept. */
@@ -947,6 +954,7 @@ export function DevtoolsPanel({
   onExportSnapshot,
   onImportSnapshot,
   onCopyRecordCurl,
+  onOpenDocs,
   onOpen,
   mockNetwork,
   bypass,
@@ -1096,6 +1104,15 @@ export function DevtoolsPanel({
                   </span>
                 </Row>
               </button>
+
+              {onOpenDocs && (
+                <button type="button" onClick={onOpenDocs} aria-label="API Docs" style={unstyledButton}>
+                  <Row hoverable>
+                    <span style={rowLabelStyle} aria-hidden="true">API Docs</span>
+                    <span style={fadedStyle} aria-hidden="true">↗</span>
+                  </Row>
+                </button>
+              )}
 
               {mockNetwork && (
                 <Row>

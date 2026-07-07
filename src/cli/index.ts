@@ -4,6 +4,7 @@ export { generate } from './commands/generate.js';
 export { reset, type ResetOptions } from './commands/reset.js';
 export { prune, type PruneOptions } from './commands/prune.js';
 export { types } from './commands/types.js';
+export { docs } from './commands/docs.js';
 export { run } from './bin.js';
 export { ok, fail, type CommandResult } from './commandResult.js';
 export { loadConfig, DEFAULT_CONFIG, type MockConfig } from './mockConfig.js';

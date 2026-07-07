@@ -155,6 +155,12 @@ explicitly if `mock.config.js` sets a different one. It gives you:
   one — handy for sharing an exact repro of a bug instead of describing
   the test data in words. An entity name in the file that doesn't match a
   current schema is silently skipped.
+- An "API Docs" row, via `GET {baseUrl}/__mockingpug/docs`: opens a
+  generated OpenAPI-based HTML reference of the whole REST surface in a
+  new tab, rendered live from the process's current schemas on every
+  request (no separate regenerate step). Hidden, and the route itself
+  404s, when `mock.config.js`'s `docs.enabled` is `false` (defaults
+  `true`) — same flag `mpug docs` checks.
 
 There's no "mock network" toggle or per-entity `bypass` checkbox built
 into this panel: both are React/MSW-specific concepts that don't apply to

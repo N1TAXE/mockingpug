@@ -414,6 +414,50 @@ describe('MockDevtools', () => {
     }
   });
 
+  it('"API Docs" opens a client-generated HTML API reference in a new tab', async () => {
+    await renderDevtools();
+    openPanel();
+
+    let capturedBlob: Blob | null = null;
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+      capturedBlob = blob as Blob;
+      return 'blob:mock-docs';
+    });
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const windowOpen = vi.spyOn(window, 'open').mockImplementation(() => null);
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'API Docs' }));
+
+      expect(createObjectURL).toHaveBeenCalled();
+      expect(windowOpen).toHaveBeenCalledWith('blob:mock-docs', '_blank', 'noopener,noreferrer');
+      expect(capturedBlob!.type).toBe('text/html');
+      const html = await capturedBlob!.text();
+      expect(html).toContain('<!doctype html>');
+      expect(html).toContain('<section id="entity-user"');
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-docs');
+    } finally {
+      vi.useRealTimers();
+      createObjectURL.mockRestore();
+      revokeObjectURL.mockRestore();
+      windowOpen.mockRestore();
+    }
+  });
+
+  it('hides the "API Docs" row when ctx.docs.enabled is false', async () => {
+    const ctx = await makeCtx();
+    ctx.docs = { enabled: false };
+    render(
+      <MockProvider worker={fakeWorker()} ctx={ctx} storageKey={null}>
+        <MockDevtools />
+      </MockProvider>,
+    );
+    openPanel();
+    expect(screen.queryByRole('button', { name: 'API Docs' })).toBeNull();
+  });
+
   it('"Import" restores entities from a selected snapshot file and refreshes counts', async () => {
     const ctx = await renderDevtools();
     openPanel();

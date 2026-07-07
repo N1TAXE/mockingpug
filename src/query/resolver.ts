@@ -17,7 +17,7 @@ import {
   seedIncrementCounters,
   type SchemaBundle,
 } from '../generator/index.js';
-import type { PaginationConfig, RuntimeConfig } from '../cli/mockConfig.js';
+import type { DocsConfig, PaginationConfig, RuntimeConfig } from '../cli/mockConfig.js';
 import { filterRecords } from './filter.js';
 import type { OneShotOverrides } from './oneShotOverride.js';
 import { paginate, type PaginatedResult } from './pagination.js';
@@ -41,6 +41,8 @@ export interface QueryContext {
   requestLog?: RequestLog;
   /** Per-entity one-shot fail/delay overrides armed by `<MockDevtools>`, checked before `runtime.errorRate`/`delay`. Omit to disable the feature entirely. */
   oneShotOverrides?: OneShotOverrides;
+  /** Controls `<MockDevtools>`'s "API Docs" button/`mpug docs`'s CLI output. Omit to default to enabled, matching `mock.config.js`'s `docs.enabled: true` default. */
+  docs?: DocsConfig;
 }
 
 /** What a consumer actually sees: internal bookkeeping fields stripped. */

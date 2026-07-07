@@ -88,6 +88,13 @@ A floating collapsed button that expands into a settings panel with:
 - Mock network toggle: same as `mode`/`setMode` above.
 - Live `delay`/`errorRate` inputs: edits `ctx.runtime` through the
   provider.
+- An "API Docs" row (hidden entirely when `mock.config.js`'s
+  `docs.enabled` is `false`, the same flag `mpug docs` checks — see
+  [`mock.config.js` reference → `docs.enabled`](/docs/reference/mock-config#docsenabled))
+  that opens a generated OpenAPI-based HTML reference of your mock's
+  entire REST surface in a new tab. Generated entirely client-side from
+  `ctx.schemas` (the same fully-parsed schema map the CLI reads), no
+  server round-trip: opened as a `Blob` URL, not downloaded.
 - A "Mock Data" row that navigates to a second page listing every entity,
   its record count, and a per-entity bypass switch (the runtime half of
   [bypass](/docs/guides/react#per-entity-bypass)), plus a "reset all"
@@ -214,13 +221,24 @@ a context directly:
 - `POST {baseUrl}/__mockingpug/snapshot`: restores entities from a
   previously exported snapshot, for the "Import" button; returns the
   updated entity counts.
+- `GET {baseUrl}/__mockingpug/docs`: the same generated HTML API reference
+  as `mpug docs`' `index.html`, rendered live from the process's current
+  `ctx` on every request rather than written to disk — always current with
+  whatever schema the running dev server has loaded, no separate
+  regenerate step. Returns a `404` (same as any unknown devtools route)
+  when `docs.enabled: false`, and the "API Docs" row is hidden in that
+  case too, driven by a `docsEnabled` flag on the panel's root
+  `GET {baseUrl}/__mockingpug` response.
 
 Same panel, same "Mock Data" list page/draggable floating record windows,
 same editable JSON viewer, same request log, same one-shot fail/delay
 override and Export/Import snapshot controls, and the same per-record
 "Copy as curl" button as the React version (`baseUrl` is what it uses to
 build the URL, no extra route needed — it's built client-side from
-`window.location.origin` + `baseUrl` + the record's `.id`). There's no
+`window.location.origin` + `baseUrl` + the record's `.id`). The "API Docs"
+button works the same way from the user's perspective, but unlike React's
+entirely-client-side generation, this transport serves it live from the
+route above, since a Route Handler runs server-side. There's no
 mock-network toggle or per-entity bypass switch built
 into this panel: both are React/MSW-specific concepts, and a Route
 Handler *is* the real server, so there's nothing to switch off or bypass

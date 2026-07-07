@@ -227,11 +227,14 @@ touching `runtime.errorRate`/`delay` globally), "Export"/"Import" buttons
 in the "Mock Data" list (download the whole store as one JSON file, or
 restore it from one — handy for sharing an exact repro of a bug), a text
 filter and windowed rendering on that same list (so dozens/hundreds of
-entities stay responsive to filter and scroll), and a "Requests" view
+entities stay responsive to filter and scroll), a "Requests" view
 listing the last 50 requests the mock actually answered
 (method, path, status, duration, time) so you don't have to switch to the
 Network tab to
-see whether a `fetch()` reached the mock:
+see whether a `fetch()` reached the mock, and an "API Docs" row that opens
+a generated OpenAPI-based HTML reference of the whole REST surface in a
+new tab — built entirely client-side from `ctx.schemas`, no server needed.
+Hidden when `mock.config.js`'s `docs.enabled` is `false` (defaults `true`):
 
 ```tsx
 // src/mocks/browser.tsx

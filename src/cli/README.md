@@ -135,6 +135,35 @@ it any time after changing `mock/api/**`; there's no watch mode, this is a
 one-shot codegen step (add it to a `postinstall`/pre-dev script if you want
 it automatic).
 
+## 7. `docs`
+
+```bash
+npx mpug docs
+```
+
+Writes an API reference describing the REST surface every entity's mock
+exposes — `GET`/`POST` on the collection, `GET`/`PUT`/`PATCH`/`DELETE` on
+one record, every query parameter (pagination, `sort`, `q`/`searchFields`,
+one optional filter param per schema field), and the response envelope
+shape from `mock.config.js`'s `pagination` config:
+
+- **`.mockingpug/docs/openapi.json`**: a standard OpenAPI 3.1 document.
+  Import it into a real Swagger UI/Postman/Redocly if you want one of
+  those.
+- **`.mockingpug/docs/index.html`**: a dependency-free static page
+  rendering the same spec — no `swagger-ui-dist`/Redoc pulled in, same
+  reasoning that keeps `<MockDevtools>`'s own JSON viewer dependency-free.
+  Opens directly off disk (`file://`), no server needed.
+
+The devtools sub-API (`{baseUrl}/__mockingpug/*`) is not part of this
+output — it's an internal channel, not part of the contract being mocked.
+Regenerate after changing `mock/api/**`, same one-shot model as `types`.
+
+Set `docs: { enabled: false }` in `mock.config.js` to skip this entirely
+(writes nothing, reports itself disabled) — also hides `<MockDevtools>`'s
+"API Docs" button and 404s its `{baseUrl}/__mockingpug/docs` route.
+Defaults to `true`.
+
 ## `mock.config.js` reference
 
 All fields are optional; this shows every default:
@@ -162,6 +191,9 @@ module.exports = {
   runtime: {
     errorRate: 0,                 // [0,1], fraction of requests synthetically failing with a 500
     delay: 0,                     // artificial latency (ms) added to every mock response
+  },
+  docs: {
+    enabled: true,                 // mpug docs + <MockDevtools>'s "API Docs" button
   },
 };
 ```

@@ -131,6 +131,28 @@ values become a literal union, e.g. `role: "ADMIN" | "USER" | "MODER"`).
 Regenerate it any time after changing `mock/api/**`. There's no watch
 mode, this is a one-shot codegen step.
 
+## `docs`
+
+```bash
+npx mpug docs
+```
+
+Writes an API reference describing the REST surface every entity's mock
+exposes — `GET`/`POST` on the collection, `GET`/`PUT`/`PATCH`/`DELETE` on
+one record, every query parameter (pagination, `sort`, `q`/`searchFields`,
+one optional filter param per schema field), and the response envelope
+shape from `mock.config.js`'s `pagination` config:
+
+- **`.mockingpug/docs/openapi.json`**: a standard OpenAPI 3.1 document,
+  importable into a real Swagger UI/Postman/Redocly.
+- **`.mockingpug/docs/index.html`**: a dependency-free static page
+  rendering the same spec (no `swagger-ui-dist`/Redoc pulled in), openable
+  straight off disk with no server needed.
+
+The devtools sub-API (`{baseUrl}/__mockingpug/*`) isn't part of this
+output — it's an internal channel, not part of the contract being mocked.
+Same one-shot model as `types`: regenerate after changing `mock/api/**`.
+
 ## Logs and errors
 
 Every message is prefixed `[mockingpug]`; warnings are prefixed

@@ -26,6 +26,7 @@ export interface MockDevtoolsProps {
 interface Snapshot {
   entities: Record<string, number>;
   runtime: { delay: number; errorRate: number };
+  docsEnabled: boolean;
 }
 
 /**
@@ -42,7 +43,7 @@ interface Snapshot {
  */
 export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
   const apiBase = `${baseUrl}/${DEVTOOLS_SEGMENT}`;
-  const [snapshot, setSnapshot] = useState<Snapshot>({ entities: {}, runtime: { delay: 0, errorRate: 0 } });
+  const [snapshot, setSnapshot] = useState<Snapshot>({ entities: {}, runtime: { delay: 0, errorRate: 0 }, docsEnabled: true });
 
   async function refresh() {
     const res = await fetch(apiBase);
@@ -131,6 +132,10 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
     await copyToClipboard(buildCurlCommand('GET', url));
   }
 
+  function openDocs() {
+    window.open(`${apiBase}/docs`, '_blank', 'noopener,noreferrer');
+  }
+
   return (
     <DevtoolsPanel
       title="mockingpug (next)"
@@ -147,6 +152,7 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
       onExportSnapshot={fetchStoreSnapshot}
       onImportSnapshot={importStoreSnapshot}
       onCopyRecordCurl={copyRecordCurl}
+      onOpenDocs={snapshot.docsEnabled ? openDocs : undefined}
       onOpen={() => void refresh()}
     />
   );

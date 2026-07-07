@@ -44,7 +44,7 @@ entity.
 | Import | What it's for |
 |---|---|
 | `mockingpug` | Core: schema parsing, generators, seeded RNG, dependency graph. No framework dependency. |
-| `mockingpug/cli` | Programmatic access to the CLI commands (`init`, `doctor`, `generate`, `reset`, `prune`, `types`). |
+| `mockingpug/cli` | Programmatic access to the CLI commands (`init`, `doctor`, `generate`, `reset`, `prune`, `types`, `docs`). |
 | `mockingpug/react` | MSW handler generation, `<MockProvider>`/`<MockDevtools>`, `bypass()`/`unbypass()`. |
 | `mockingpug/next` | App Router catch-all Route Handler builder + context loader. |
 | `mockingpug/next/client` | `<MockDevtools>` for the Next.js transport. |

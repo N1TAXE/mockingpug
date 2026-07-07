@@ -29,6 +29,9 @@ module.exports = {
     errorRate: 0,                 // [0,1] fraction of requests synthetically failing with a 500
     delay: 0,                     // artificial latency (ms) added to every mock response
   },
+  docs: {
+    enabled: true,                 // mpug docs + <MockDevtools>'s "API Docs" button
+  },
 };
 ```
 
@@ -117,3 +120,14 @@ rendering regardless of `errorRate`. For testing one specific
 error/loading state without this risk at all, prefer the panel's per-entity
 one-shot "Fail next request"/"Delay next" override over the global
 `errorRate`/`delay` — see [Devtools](/docs/guides/devtools).
+
+### `docs.enabled`
+
+Controls both `npx mpug docs` (writes nothing and reports itself disabled
+when `false`, instead of generating `.mockingpug/docs/{openapi.json,
+index.html}`) and whether `<MockDevtools>` shows its "API Docs" button at
+all. Defaults to `true`. Set to `false` if you'd rather not have an
+auto-generated description of your mock's exact shape sitting around, or
+if you already publish your own API docs and don't want a second,
+generated one. See [Devtools](/docs/guides/devtools) for what the button
+does.
