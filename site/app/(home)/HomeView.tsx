@@ -406,10 +406,30 @@ function FrameworkStrip() {
   );
 }
 
+const DEVTOOLS_RECORD = { id: 1042, name: 'Elena Ruiz', role: 'ADMIN', email: 'elena.492@gmail.com' };
+
 function DevtoolsDemo({ shouldReduce }: { shouldReduce: boolean | null }) {
-  const [masked, setMasked] = useState(false);
-  const fields = { name: 'Elena Ruiz', role: 'ADMIN', email: 'elena.492@gmail.com' };
-  const mask = (value: string) => '*'.repeat(value.length);
+  const [editing, setEditing] = useState(false);
+  const [record, setRecord] = useState(DEVTOOLS_RECORD);
+  const [draft, setDraft] = useState(DEVTOOLS_RECORD);
+  const [copied, setCopied] = useState(false);
+  const [failNext, setFailNext] = useState(false);
+  const [armed, setArmed] = useState(false);
+
+  const startEditing = () => {
+    setDraft(record);
+    setEditing(true);
+  };
+
+  const saveEditing = () => {
+    setRecord(draft);
+    setEditing(false);
+  };
+
+  const copyAsCurl = () => {
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
 
   return (
     <section className={styles.devtools}>
@@ -419,48 +439,91 @@ function DevtoolsDemo({ shouldReduce }: { shouldReduce: boolean | null }) {
             <div className={styles['devtools__eyebrow']}>&lt;MockDevtools/&gt;</div>
             <h2 className={styles['devtools__title']}>A handy debugging tool</h2>
             <p className={styles['devtools__text']}>
-              Devtools helps you visually locate mock data on a page by hiding it with asterisks <code className={styles['devtools__code-inline']}>***</code>. You can easily view each individual mock data model and add response delays or error rates to requests.
+              Devtools gives you a live view into every mocked entity: edit a record in place, copy any request as{' '}
+              <code className={styles['devtools__code-inline']}>curl</code>, arm a one-off failure or delay for just
+              the next request, and browse the last 50 requests your app actually made — no restart required.
             </p>
           </Reveal>
 
           <Reveal shouldReduce={shouldReduce} delay={0.1} className={styles['devtools__card']}>
-            <div className={styles['devtools__row']}>
-              <span className={styles['devtools__row-label']}>NAME</span>
-              <span className={cx(styles['devtools__row-value'], masked && styles['devtools__row-value--masked'])}>
-                {masked ? mask(fields.name) : fields.name}
-              </span>
+            <div className={styles['devtools__card-head']}>
+              <span className={styles['devtools__entity']}>user #{record.id}</span>
+              <div className={styles['devtools__card-actions']}>
+                <button type="button" className={styles['devtools__icon-btn']} onClick={copyAsCurl}>
+                  {copied ? 'copied!' : 'copy as curl'}
+                </button>
+                {!editing && (
+                  <button type="button" className={styles['devtools__icon-btn']} onClick={startEditing} aria-label="Edit record">
+                    <PencilIcon />
+                  </button>
+                )}
+              </div>
             </div>
-            <div className={styles['devtools__row']}>
-              <span className={styles['devtools__row-label']}>ROLE</span>
-              <span className={cx(styles['devtools__row-value'], masked && styles['devtools__row-value--masked'])}>
-                {masked ? mask(fields.role) : fields.role}
-              </span>
+
+            {(['name', 'role', 'email'] as const).map((field) => (
+              <div className={styles['devtools__row']} key={field}>
+                <span className={styles['devtools__row-label']}>{field.toUpperCase()}</span>
+                {editing ? (
+                  <input
+                    className={styles['devtools__input']}
+                    value={draft[field]}
+                    onChange={(e) => setDraft((d) => ({ ...d, [field]: e.target.value }))}
+                  />
+                ) : (
+                  <span className={styles['devtools__row-value']}>{record[field]}</span>
+                )}
+              </div>
+            ))}
+
+            {editing && (
+              <div className={styles['devtools__edit-actions']}>
+                <button type="button" className={styles['devtools__save-btn']} onClick={saveEditing}>
+                  save
+                </button>
+                <button type="button" className={styles['devtools__icon-btn']} onClick={() => setEditing(false)}>
+                  cancel
+                </button>
+              </div>
+            )}
+
+            <div className={styles['devtools__override']}>
+              <button
+                type="button"
+                className={styles['devtools__toggle']}
+                onClick={() => setFailNext((v) => !v)}
+                aria-pressed={failNext}
+              >
+                <span className={cx(styles['devtools__switch'], failNext && styles['devtools__switch--on'])}>
+                  <span className={cx(styles['devtools__knob'], failNext && styles['devtools__knob--on'])} />
+                </span>
+                fail next request
+              </button>
+              <button
+                type="button"
+                className={cx(styles['devtools__arm-btn'], armed && styles['devtools__arm-btn--armed'])}
+                onClick={() => setArmed((v) => !v)}
+              >
+                {armed ? 'armed ⚡' : 'arm'}
+              </button>
             </div>
-            <div className={styles['devtools__row']}>
-              <span className={styles['devtools__row-label']}>EMAIL</span>
-              <span className={cx(styles['devtools__row-value'], masked && styles['devtools__row-value--masked'])}>
-                {masked ? mask(fields.email) : fields.email}
-              </span>
-            </div>
-            <div className={styles['devtools__row']}>
-              <span className={styles['devtools__row-label']}>Page title (hardcoded)</span>
-              <span className={styles['devtools__row-value']}>User Profile</span>
-            </div>
-            <button
-              type="button"
-              className={styles['devtools__toggle']}
-              onClick={() => setMasked((v) => !v)}
-              aria-pressed={masked}
-            >
-              <span className={cx(styles['devtools__switch'], masked && styles['devtools__switch--on'])}>
-                <span className={cx(styles['devtools__knob'], masked && styles['devtools__knob--on'])} />
-              </span>
-              {masked ? 'showing real values' : 'highlight mock data'}
-            </button>
           </Reveal>
         </div>
       </div>
     </section>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path
+        d="M11.3 1.7a1.5 1.5 0 0 1 2.12 0l.88.88a1.5 1.5 0 0 1 0 2.12L5.5 13.5 1.5 14.5l1-4 8.8-8.8Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

@@ -756,12 +756,59 @@ $mobile: 640px;
     box-shadow: 0 20px 48px -24px rgba(35, 39, 47, 0.25);
   }
 
+  &__card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #f2eee2;
+  }
+
+  &__entity {
+    font: 800 12px/16px #{$font-code};
+    letter-spacing: 0.5px;
+    color: $ink;
+    background: $code-chip;
+    padding: 3px 9px;
+    border-radius: 6px;
+  }
+
+  &__card-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  &__icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 26px;
+    padding: 0 9px;
+    font: 700 11px/16px #{$font-code};
+    color: $muted;
+    background: none;
+    border: 1px solid $border;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+
+    &:hover {
+      color: $ink;
+      border-color: $faded;
+    }
+  }
+
   &__row {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     padding: 10px 0;
     border-bottom: 1px solid #f2eee2;
     font-size: 14px;
+    gap: 12px;
 
     &:last-child {
       border-bottom: none;
@@ -772,20 +819,83 @@ $mobile: 640px;
     font: 700 12px/16px #{$font-code};
     color: $faded;
     align-self: center;
+    flex: none;
   }
 
   &__row-value {
     font: 700 14px/16px #{$font-code};
     color: $ink;
     transition: color 0.2s ease;
+    text-align: right;
 
     &--masked {
       color: $green;
     }
   }
 
-  &__toggle {
+  &__input {
+    font: 700 14px/16px #{$font-code};
+    color: $ink;
+    background: $code-chip;
+    border: 1px solid $border;
+    border-radius: 6px;
+    padding: 4px 8px;
+    text-align: right;
+    min-width: 0;
+    flex: 1;
+
+    &:focus {
+      outline: 2px solid $orange;
+      outline-offset: 1px;
+    }
+  }
+
+  &__edit-actions {
+    display: flex;
+    gap: 8px;
+    padding-top: 12px;
+  }
+
+  &__save-btn {
+    height: 26px;
+    padding: 0 12px;
+    font: 800 11px/16px #{$font-code};
+    color: #fff;
+    background: $green;
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+  }
+
+  &__override {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px dashed $border;
+  }
+
+  &__arm-btn {
+    height: 26px;
+    padding: 0 14px;
+    font: 800 11px/16px #{$font-code};
+    color: $muted;
+    background: none;
+    border: 1px solid $border;
+    border-radius: 99px;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+
+    &--armed {
+      color: $amber;
+      border-color: $yellow;
+      background: #fff8e1;
+    }
+  }
+
+  &__toggle {
     display: flex;
     align-items: center;
     gap: 12px;
