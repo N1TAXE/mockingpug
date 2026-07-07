@@ -102,12 +102,18 @@ Both default to `0` (disabled). Edit them live without a restart via
 
 `errorRate` lives on the server process (`ctx.runtime`), not in the
 browser, so setting it to `1` in `mockingpug/next`'s `<MockDevtools>` can
-lock you out of the very page that renders the panel: if the page does any
-server-side data fetching and your app has no error boundary around it, the
-whole route fails to render, `<MockDevtools>` never mounts, and there's no
-UI left to dial `errorRate` back down. If this happens, just **restart the
-dev server** (or redeploy) — `ctx.runtime` is in-memory only, so the next
+lock you out of the very *page* that renders the panel: if the page does
+any server-side data fetching and your app has no error boundary around
+it, the whole route fails to render, `<MockDevtools>` never mounts, and
+there's no UI left to dial `errorRate` back down. This isn't the panel
+itself being blocked — every devtools sub-API call is a guaranteed
+exception to `errorRate`/`delay`, covered by a regression test — it's the
+host page crashing around it. If this happens, just **restart the dev
+server** (or redeploy) — `ctx.runtime` is in-memory only, so the next
 process start reloads `errorRate: 0` (or whatever `mock.config.js` sets)
 from scratch; nothing is corrupted or persisted. This doesn't affect
 `mockingpug/react`: the panel lives entirely client-side there, so it keeps
-rendering regardless of `errorRate`.
+rendering regardless of `errorRate`. For testing one specific
+error/loading state without this risk at all, prefer the panel's per-entity
+one-shot "Fail next request"/"Delay next" override over the global
+`errorRate`/`delay` — see [Devtools](/docs/guides/devtools).

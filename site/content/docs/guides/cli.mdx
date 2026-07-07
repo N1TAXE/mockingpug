@@ -15,6 +15,24 @@ npx mpug <command>
 The binary is also registered as `mockingpug` (`npx mockingpug <command>`),
 kept as an alternative for anyone who prefers the full name.
 
+Every example on this page uses `npx mpug <command>`; substitute your
+package manager's own one-off-execute command if you're not on npm — same
+`<command>`/flags either way, verified in CI against every manager listed:
+
+| Package manager | Install | Run |
+|---|---|---|
+| npm | `npm install -D mockingpug` | `npx mpug <command>` |
+| pnpm | `pnpm add -D mockingpug` | `pnpm exec mpug <command>` (or `pnpm dlx mpug <command>` for a one-off run with nothing installed) |
+| yarn (berry) | `yarn add -D mockingpug` | `yarn exec mpug <command>` (or `yarn dlx mpug <command>` for a one-off run with nothing installed) |
+| bun | `bun add -D mockingpug` | `bunx mpug <command>` |
+| deno | `deno add npm:mockingpug` | `deno run -A npm:mockingpug <command>` (needs `-A`/broad permissions: the CLI reads/writes `mock/`, `.mockingpug/`, and `mock.config.js`) |
+
+`pnpm dlx`/`yarn dlx`/plain `npx` without a prior install all fetch fresh
+from the registry each time rather than using a project-local install —
+fine for a quick one-off `doctor` check, but slower and not what you want
+in a script that runs on every `dev`/`build`; install as a dev dependency
+first for those.
+
 ## `init`
 
 ```bash

@@ -25,6 +25,13 @@ export interface MockDevtoolsProps {
  * floating window. Meant to be rendered only behind the same dev-only import
  * gate as `startMocking()` itself (see `react/README.md`); never shipped to
  * production.
+ *
+ * Invariant: every action this panel takes (reset, record edit, snapshot
+ * export/import, request-log read) calls into `ctx`/the query layer
+ * directly, never through `fetch()`/MSW — so unlike the app's own mocked
+ * requests, none of it is ever subject to `runtime.errorRate`/`delay`,
+ * regardless of how they're configured. Covered by a regression test in
+ * `tests/react/MockDevtools.test.tsx`.
  */
 export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
   const { mode, setMode, ctx, runtime, setRuntime, bypass, unbypass, isBypassed } = useMockContext();

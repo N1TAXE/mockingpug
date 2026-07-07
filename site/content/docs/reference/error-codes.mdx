@@ -53,10 +53,10 @@ generation happens).
 | Code | Cause |
 |---|---|
 | `MP-GEN-000` | Internal exhaustiveness guard, should be unreachable for any valid schema; report it as a bug if you see it. |
-| `MP-GEN-001` | A `crossRef` field reached the low-level value generator directly instead of going through the dependency-graph resolver. An internal invariant violation, not a user-facing scenario. |
+| `MP-GEN-001` | A `crossRef` field reached the low-level value generator directly instead of going through the dependency-graph resolver. This is user-reachable today via `array[data.<entity>...].N` — a `crossRef` as an array's inner type isn't supported yet (see [Schema DSL → Arrays](/docs/concepts/schema-dsl#arrays)); everywhere else it's an internal invariant violation, report it as a bug. |
 | `MP-GEN-002` / `MP-GEN-003` | A custom dictionary is empty, or every entry has already hit its `max` cap and there's nothing left to pick from. |
 | `MP-GEN-004` / `MP-GEN-005` | A field-level reference (`data.user.id`) couldn't resolve because the target entity has zero generated records, or the referenced field doesn't exist on it. |
-| `MP-GEN-006` | A `slugify` field reached the low-level value generator directly instead of going through `recordGenerator.ts`. An internal invariant violation, not a user-facing scenario. |
+| `MP-GEN-006` | A `slugify` field reached the low-level value generator directly instead of going through `recordGenerator.ts`. Same `array[slugify[...]].N` caveat as `MP-GEN-001` applies; everywhere else it's an internal invariant violation, report it as a bug. |
 | `MP-GEN-007` | A `slugify` field's source field is missing or not a string on the record being generated (shouldn't happen for a schema that passed `MP-SCHEMA-016`/`017` validation). |
 
 ## `MP-STORE-*`: persistent store failures

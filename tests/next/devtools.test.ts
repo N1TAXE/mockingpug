@@ -309,6 +309,102 @@ describe('devtools sub-API (`{baseUrl}/__mockingpug/*`)', () => {
     expect(await ctx.store.listEntities()).not.toContain('nonexistent');
   });
 
+  it('invariant: no devtools sub-route is ever subject to runtime.errorRate/delay', async () => {
+    // A high delay makes the assertion meaningful (a bypassed route returns
+    // near-instantly) without actually waiting that long in a passing run.
+    const ctx = await makeContext(2);
+    ctx.runtime = { errorRate: 1, delay: 2000 };
+    const handlers = createNextHandlers(ctx);
+    const stored = await ctx.store.load('user');
+    const id = String(stored!.records[0]!.id);
+
+    const calls: Array<{ label: string; run: () => Promise<Response> }> = [
+      { label: 'GET __mockingpug', run: () => handlers.GET(new Request('http://localhost/api/__mockingpug'), plainParams(['__mockingpug'])) },
+      {
+        label: 'POST __mockingpug/runtime',
+        run: () =>
+          handlers.POST(
+            new Request('http://localhost/api/__mockingpug/runtime', { method: 'POST', body: '{}' }),
+            plainParams(['__mockingpug', 'runtime']),
+          ),
+      },
+      {
+        label: 'GET __mockingpug/records/:entity',
+        run: () =>
+          handlers.GET(
+            new Request('http://localhost/api/__mockingpug/records/user'),
+            plainParams(['__mockingpug', 'records', 'user']),
+          ),
+      },
+      {
+        label: 'PUT __mockingpug/records/:entity/:id',
+        run: () =>
+          handlers.PUT(
+            new Request(`http://localhost/api/__mockingpug/records/user/${id}`, { method: 'PUT', body: '{}' }),
+            plainParams(['__mockingpug', 'records', 'user', id]),
+          ),
+      },
+      {
+        label: 'POST __mockingpug/reset/:entity',
+        run: () =>
+          handlers.POST(
+            new Request('http://localhost/api/__mockingpug/reset/user', { method: 'POST' }),
+            plainParams(['__mockingpug', 'reset', 'user']),
+          ),
+      },
+      {
+        label: 'GET __mockingpug/requests',
+        run: () =>
+          handlers.GET(new Request('http://localhost/api/__mockingpug/requests'), plainParams(['__mockingpug', 'requests'])),
+      },
+      {
+        label: 'POST __mockingpug/requests/clear',
+        run: () =>
+          handlers.POST(
+            new Request('http://localhost/api/__mockingpug/requests/clear', { method: 'POST' }),
+            plainParams(['__mockingpug', 'requests', 'clear']),
+          ),
+      },
+      {
+        label: 'GET __mockingpug/override/:entity',
+        run: () =>
+          handlers.GET(
+            new Request('http://localhost/api/__mockingpug/override/user'),
+            plainParams(['__mockingpug', 'override', 'user']),
+          ),
+      },
+      {
+        label: 'POST __mockingpug/override/:entity',
+        run: () =>
+          handlers.POST(
+            new Request('http://localhost/api/__mockingpug/override/user', { method: 'POST', body: '{}' }),
+            plainParams(['__mockingpug', 'override', 'user']),
+          ),
+      },
+      {
+        label: 'GET __mockingpug/snapshot',
+        run: () =>
+          handlers.GET(new Request('http://localhost/api/__mockingpug/snapshot'), plainParams(['__mockingpug', 'snapshot'])),
+      },
+      {
+        label: 'POST __mockingpug/snapshot',
+        run: () =>
+          handlers.POST(
+            new Request('http://localhost/api/__mockingpug/snapshot', { method: 'POST', body: '{}' }),
+            plainParams(['__mockingpug', 'snapshot']),
+          ),
+      },
+    ];
+
+    for (const { label, run } of calls) {
+      const startedAt = Date.now();
+      const res = await run();
+      const elapsedMs = Date.now() - startedAt;
+      expect(res.status, `${label} should never fail from runtime.errorRate`).toBeLessThan(500);
+      expect(elapsedMs, `${label} should never wait for runtime.delay`).toBeLessThan(2000);
+    }
+  });
+
   it('devtools snapshot calls are never written to ctx.requestLog', async () => {
     const { RequestLog } = await import('../../src/query/index.js');
     const ctx = await makeContext(1);

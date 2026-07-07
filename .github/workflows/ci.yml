@@ -25,3 +25,130 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  verify-package-managers:
+    name: cli smoke test (${{ matrix.manager }})
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        manager: [npm, pnpm, yarn, bun, deno]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Always via Node/npm: this is what builds the tarball under test,
+      # independent of which package manager the matrix leg is verifying as
+      # a *consumer*.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm pack --pack-destination /tmp
+      - name: Resolve packed tarball path
+        run: echo "TARBALL=$(ls /tmp/mockingpug-*.tgz)" >> "$GITHUB_ENV"
+
+      - if: matrix.manager == 'pnpm'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - if: matrix.manager == 'yarn'
+        run: corepack enable && corepack prepare yarn@stable --activate
+
+      - if: matrix.manager == 'bun'
+        uses: oven-sh/setup-bun@v2
+
+      - if: matrix.manager == 'deno'
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      # A minimal consumer project: one entity schema is enough to exercise
+      # the full `init`(implicit via schema present)/`doctor`/`generate`/
+      # `types` sequence documented in each transport's README.
+      - name: Scaffold a minimal consumer project
+        run: |
+          mkdir -p /tmp/consumer/mock/api/user
+          cd /tmp/consumer
+          cat > package.json <<'EOF'
+          { "name": "mockingpug-cli-smoke-test", "version": "0.0.0", "private": true }
+          EOF
+          cat > mock.config.js <<'EOF'
+          module.exports = { dir: 'mock', seed: 'ci-smoke-test' };
+          EOF
+          cat > mock/api/user/schema.json <<'EOF'
+          { "amount": 5, "data": { "id": "number.increment", "name": "username.FS" } }
+          EOF
+
+      - name: npm — install tarball + doctor/generate/types
+        if: matrix.manager == 'npm'
+        working-directory: /tmp/consumer
+        run: |
+          npm install "$TARBALL"
+          npx mpug doctor --strict
+          npx mpug generate
+          npx mpug types
+          test -f .mockingpug/db/user.json
+          test -f .mockingpug/types/index.d.ts
+
+      # `pnpm dlx`/`yarn dlx` are ad-hoc "fetch fresh from the registry and
+      # run" commands — they deliberately ignore whatever's installed
+      # locally, so they can't be used to verify an unpublished local
+      # tarball (they'd either 404 or silently run an unrelated published
+      # package). `exec`/direct invocation runs the dependency this project
+      # actually has installed instead, which is what this smoke test needs.
+      - name: pnpm — install tarball + doctor/generate/types
+        if: matrix.manager == 'pnpm'
+        working-directory: /tmp/consumer
+        run: |
+          pnpm install "$TARBALL"
+          pnpm exec mpug doctor --strict
+          pnpm exec mpug generate
+          pnpm exec mpug types
+          test -f .mockingpug/db/user.json
+          test -f .mockingpug/types/index.d.ts
+
+      - name: yarn — install tarball + doctor/generate/types
+        if: matrix.manager == 'yarn'
+        working-directory: /tmp/consumer
+        run: |
+          yarn add "file:$TARBALL"
+          yarn exec mpug doctor --strict
+          yarn exec mpug generate
+          yarn exec mpug types
+          test -f .mockingpug/db/user.json
+          test -f .mockingpug/types/index.d.ts
+
+      - name: bun — install tarball + doctor/generate/types
+        if: matrix.manager == 'bun'
+        working-directory: /tmp/consumer
+        run: |
+          bun add "$TARBALL"
+          bunx mpug doctor --strict
+          bunx mpug generate
+          bunx mpug types
+          test -f .mockingpug/db/user.json
+          test -f .mockingpug/types/index.d.ts
+
+      # Deno's `npm:` specifier resolves against the real npm registry, not
+      # a local tarball, so it can't verify an unpublished build the same
+      # way as the other four. Instead: let Deno manage a node_modules dir
+      # from a `file:` dependency in package.json (Deno's documented path
+      # for npm-compatible local packages), then run the bin the same way.
+      - name: deno — install tarball via package.json + doctor/generate/types
+        if: matrix.manager == 'deno'
+        working-directory: /tmp/consumer
+        run: |
+          cat > package.json <<EOF
+          { "name": "mockingpug-cli-smoke-test", "version": "0.0.0", "private": true, "dependencies": { "mockingpug": "file:$TARBALL" } }
+          EOF
+          deno install --allow-scripts --node-modules-dir=auto
+          deno run -A npm:mockingpug doctor --strict
+          deno run -A npm:mockingpug generate
+          deno run -A npm:mockingpug types
+          test -f .mockingpug/db/user.json
+          test -f .mockingpug/types/index.d.ts

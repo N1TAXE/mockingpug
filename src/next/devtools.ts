@@ -37,6 +37,13 @@ function runtimeSnapshot(ctx: QueryContext): { delay: number; errorRate: number 
  * `ctx.runtime` is mutated in place (not replaced) so the change is visible
  * to every subsequent request handled by this same process, the same object
  * reference `createNextHandlers` reads `runtime`/`errorRate` from.
+ *
+ * Invariant, covered by a regression test (`tests/next/devtools.test.ts`):
+ * this function never calls `simulateRuntime`/`simulateRuntimeForEntity`,
+ * so no devtools sub-route is ever subject to `runtime.errorRate`/`delay`,
+ * regardless of how it's configured — the panel itself can't be locked out
+ * by a synthetic error/delay it's the one meant to control. Don't add a
+ * runtime-simulation call to this function or anything it calls.
  */
 export async function handleDevtoolsRequest(
   segments: string[],

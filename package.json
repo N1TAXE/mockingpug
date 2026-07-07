@@ -1,6 +1,6 @@
 {
   "name": "mockingpug",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Declarative JSON-schema mock data generation and REST-like mocking for React/Next.js — no separate server.",
   "keywords": [
     "mock",

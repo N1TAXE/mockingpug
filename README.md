@@ -60,6 +60,10 @@ npm install -D mockingpug
 npx mpug init
 ```
 
+Works the same under pnpm, yarn, bun, and deno — see
+[`src/cli/README.md`](src/cli/README.md#install) for the equivalent
+install/run command on each, verified in CI.
+
 See the full documentation at **[mockingpug.vercel.app](https://mockingpug.vercel.app/)**
 (source under [`site/content/docs`](site/content/docs)) for the schema DSL,
 framework guides (React, Next.js, Vite), the CLI reference, and the

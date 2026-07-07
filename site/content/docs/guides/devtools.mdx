@@ -233,14 +233,22 @@ mock/real decision in the Route Handler itself) and
 your own UI and `middleware.ts`, no rebuild needed).
 
 <Callout type="warn" title="errorRate: 1 can hide the panel itself">
-`ctx.runtime.errorRate` lives on the server process, not in the browser. If
-you set it to `1` and the page that renders `<MockDevtools>` does any
-server-side data fetching without an error boundary around it, that whole
-route fails to render, so the panel never mounts, there's nothing left in
-the UI to dial `errorRate` back down. Just restart the dev server (or
-redeploy): `ctx.runtime` is in-memory only, so the fresh process reloads
-`errorRate: 0` (or your `mock.config.js` default) from scratch, nothing is
-persisted or corrupted. See [`mock.config.js` reference →
+The devtools sub-API (`{baseUrl}/__mockingpug/*`, every request the panel
+itself makes) is a guaranteed invariant, covered by a regression test: it
+is **never** subject to `runtime.errorRate`/`delay`, no matter how it's
+configured. So `errorRate: 1` never blocks the panel directly. What it
+*can* do is take down the page around it: `ctx.runtime.errorRate` lives on
+the server process, not in the browser, and if the page that renders
+`<MockDevtools>` does any of its own server-side data fetching (a normal
+request to a mocked entity, not a devtools call) without an error boundary
+around it, that whole route fails to render — the panel never gets a
+chance to mount, even though it was never itself in danger. Wrap that data
+fetching in an error boundary (or a `try`/`catch` for a Server Component)
+to keep the route rendering regardless of `errorRate`, or as a fallback,
+restart the dev server (or redeploy): `ctx.runtime` is in-memory only, so
+the fresh process reloads `errorRate: 0` (or your `mock.config.js`
+default) from scratch, nothing is persisted or corrupted. See
+[`mock.config.js` reference →
 `runtime.errorRate`](/docs/reference/mock-config#runtimeerrorrate--runtimedelay)
 for more.
 </Callout>

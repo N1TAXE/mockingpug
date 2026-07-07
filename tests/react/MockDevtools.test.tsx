@@ -232,6 +232,25 @@ describe('MockDevtools', () => {
     });
   });
 
+  it('invariant: the panel\'s own actions (reset) are unaffected by runtime.errorRate/delay, since it reads ctx in-process, not over fetch/MSW', async () => {
+    const ctx = await renderDevtools();
+    ctx.runtime = { errorRate: 1, delay: 2000 };
+    const before = await ctx.store.load('user');
+
+    openPanel();
+    await openList();
+    fireEvent.click(screen.getByRole('button', { name: 'Open user records' }));
+
+    const startedAt = Date.now();
+    fireEvent.click(await screen.findByRole('button', { name: 'Reset user' }));
+
+    await waitFor(async () => {
+      const after = await ctx.store.load('user');
+      expect(after!.records).toHaveLength(before!.records.length);
+    });
+    expect(Date.now() - startedAt).toBeLessThan(2000);
+  });
+
   it('"reset all entities" in the list header regenerates every entity', async () => {
     const ctx = await renderDevtools();
     openPanel();

@@ -29,6 +29,22 @@ empty for any other reason), resolving the reference fails with a
 `GenerationError` (`MP-GEN-004`)/(`MP-GEN-005`) rather than silently
 emitting `null` or `undefined`.
 
+<Callout type="warn" title="Two field-level refs to the same entity pick independently">
+```json title="mock/api/order/schema.json"
+{ "productId": "data.product.id", "productName": "data.product.name" }
+```
+This does **not** guarantee `productId` and `productName` come from the
+same `product` record. Each field resolves with its own RNG stream (seeded
+including the field name), so `productId` and `productName` are two
+independent random picks — they'll often point at two different products.
+If you need several fields pulled from the *same* related record, there's
+no dedicated syntax for that yet; the current workaround is to only
+reference the id (`"data.product.id"`) and resolve the rest with an extra
+lookup at read/request time in your app, or duplicate the value into a
+custom dictionary keyed the way you need it. Track the roadmap if you need
+a native multi-field pick.
+</Callout>
+
 ## Bare relations (`data.<entity>`, no field)
 
 ```json title="mock/api/user/schema.json"
