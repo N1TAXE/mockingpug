@@ -12,3 +12,4 @@ export { jsonResponse, errorResponse, readJsonBody, buildListResponse } from './
 export { simulateRuntime, simulateRuntimeForEntity, DEFAULT_RUNTIME } from './runtime.js';
 export { RequestLog, recordRequest, DEFAULT_REQUEST_LOG_SIZE, type RequestLogEntry } from './requestLog.js';
 export { OneShotOverrides, hasArmedOverride, type OneShotOverrideEntry } from './oneShotOverride.js';
+export { exportSnapshot, importSnapshot, type StoreSnapshot } from './snapshot.js';

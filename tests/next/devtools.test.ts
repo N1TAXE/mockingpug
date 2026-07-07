@@ -257,4 +257,73 @@ describe('devtools sub-API (`{baseUrl}/__mockingpug/*`)', () => {
 
     expect(ctx.requestLog.list()).toHaveLength(0);
   });
+
+  it('GET __mockingpug/snapshot returns every entity as { meta, records }', async () => {
+    const ctx = await makeContext(2);
+    const handlers = createNextHandlers(ctx);
+
+    const res = await handlers.GET(
+      new Request('http://localhost/api/__mockingpug/snapshot'),
+      plainParams(['__mockingpug', 'snapshot']),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { snapshot: Record<string, { records: unknown[] }> };
+    expect(body.snapshot.user!.records).toHaveLength(2);
+  });
+
+  it('POST __mockingpug/snapshot restores entities and returns updated entity counts', async () => {
+    const ctx = await makeContext(2);
+    const handlers = createNextHandlers(ctx);
+
+    const exportRes = await handlers.GET(
+      new Request('http://localhost/api/__mockingpug/snapshot'),
+      plainParams(['__mockingpug', 'snapshot']),
+    );
+    const { snapshot } = (await exportRes.json()) as { snapshot: Record<string, { meta: unknown; records: unknown[] }> };
+    snapshot.user!.records = [{ id: 1, name: 'Imported' }, { id: 2, name: 'Imported Too' }, { id: 3, name: 'Extra' }];
+
+    const importRes = await handlers.POST(
+      new Request('http://localhost/api/__mockingpug/snapshot', { method: 'POST', body: JSON.stringify(snapshot) }),
+      plainParams(['__mockingpug', 'snapshot']),
+    );
+    expect(importRes.status).toBe(200);
+    expect((await importRes.json()) as { entities: Record<string, number> }).toEqual({ entities: { user: 3 } });
+
+    const stored = await ctx.store.load('user');
+    expect(stored!.records).toHaveLength(3);
+    expect(stored!.records[2]).toMatchObject({ name: 'Extra' });
+  });
+
+  it('POST __mockingpug/snapshot silently skips entity names not in ctx.schemas', async () => {
+    const ctx = await makeContext(1);
+    const handlers = createNextHandlers(ctx);
+
+    const res = await handlers.POST(
+      new Request('http://localhost/api/__mockingpug/snapshot', {
+        method: 'POST',
+        body: JSON.stringify({ nonexistent: { meta: {}, records: [{ id: 1 }] } }),
+      }),
+      plainParams(['__mockingpug', 'snapshot']),
+    );
+    expect(res.status).toBe(200);
+    expect(await ctx.store.listEntities()).not.toContain('nonexistent');
+  });
+
+  it('devtools snapshot calls are never written to ctx.requestLog', async () => {
+    const { RequestLog } = await import('../../src/query/index.js');
+    const ctx = await makeContext(1);
+    ctx.requestLog = new RequestLog();
+    const handlers = createNextHandlers(ctx);
+
+    await handlers.GET(
+      new Request('http://localhost/api/__mockingpug/snapshot'),
+      plainParams(['__mockingpug', 'snapshot']),
+    );
+    await handlers.POST(
+      new Request('http://localhost/api/__mockingpug/snapshot', { method: 'POST', body: '{}' }),
+      plainParams(['__mockingpug', 'snapshot']),
+    );
+
+    expect(ctx.requestLog.list()).toHaveLength(0);
+  });
 });

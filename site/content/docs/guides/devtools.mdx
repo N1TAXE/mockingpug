@@ -91,7 +91,15 @@ A floating collapsed button that expands into a settings panel with:
 - A "Mock Data" row that navigates to a second page listing every entity,
   its record count, and a per-entity bypass switch (the runtime half of
   [bypass](/docs/guides/react#per-entity-bypass)), plus a "reset all"
-  button in that page's header.
+  button in that page's header, and "Export"/"Import" buttons right below
+  it. "Export" downloads the entire store (every entity's `{ meta,
+  records }`) as one JSON file; "Import" reads such a file back in and
+  restores it via `store.save()` per entity, refreshing the record counts
+  shown in the list. Useful for capturing the exact data a bug reproduces
+  on and handing it to a teammate, instead of describing "seed it like
+  this" in words. An entity name in the file that doesn't match a current
+  schema is silently skipped (no create-arbitrary-entity support here);
+  invalid JSON shows an inline error instead of failing silently.
 
 Clicking an entity in that list opens its stored records (reads
 `ctx.store.load()` directly, not over HTTP) in a separate floating window
@@ -186,10 +194,16 @@ a context directly:
   override currently armed for that entity, if any (without consuming it).
 - `POST {baseUrl}/__mockingpug/override/:entity`: arms a one-shot
   `failNext`/`delayNext` override for that entity's very next request.
+- `GET {baseUrl}/__mockingpug/snapshot`: the entire store as `{ entity: {
+  meta, records } }`, for the "Export" button.
+- `POST {baseUrl}/__mockingpug/snapshot`: restores entities from a
+  previously exported snapshot, for the "Import" button; returns the
+  updated entity counts.
 
 Same panel, same "Mock Data" list page/draggable floating record windows,
 same editable JSON viewer, same request log, and the same one-shot
-fail/delay override controls as the React version.
+fail/delay override and Export/Import snapshot controls as the React
+version.
 There's no mock-network toggle or
 per-entity bypass switch built into this panel: both are React/MSW-specific
 concepts, and a Route Handler *is* the real

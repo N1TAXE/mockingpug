@@ -337,4 +337,61 @@ describe('MockDevtools', () => {
 
     await waitFor(() => expect(ctx.oneShotOverrides?.peek('user')).toMatchObject({ delayNext: 250 }));
   });
+
+  it('"Export" downloads the current store as a JSON snapshot file', async () => {
+    const ctx = await renderDevtools();
+    openPanel();
+    await openList();
+
+    let capturedBlob: Blob | null = null;
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+      capturedBlob = blob as Blob;
+      return 'blob:mock';
+    });
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+      await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
+
+      const snapshot = JSON.parse(await capturedBlob!.text()) as { user: { records: unknown[] } };
+      const stored = await ctx.store.load('user');
+      expect(snapshot.user.records).toEqual(stored!.records);
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock');
+    } finally {
+      createObjectURL.mockRestore();
+      revokeObjectURL.mockRestore();
+    }
+  });
+
+  it('"Import" restores entities from a selected snapshot file and refreshes counts', async () => {
+    const ctx = await renderDevtools();
+    openPanel();
+    await openList();
+
+    const file = new File(
+      [JSON.stringify({ user: { meta: { fields: {} }, records: [{ id: 1, name: 'Imported User' }] } })],
+      'snapshot.json',
+      { type: 'application/json' },
+    );
+    const input = screen.getByLabelText('Import snapshot file') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(async () => {
+      const stored = await ctx.store.load('user');
+      expect(stored!.records).toEqual([{ id: 1, name: 'Imported User' }]);
+    });
+    await waitFor(() => expect(screen.getByTestId('entity-row-user').textContent).toContain('(1)'));
+  });
+
+  it('"Import" shows an error for a file that is not valid JSON', async () => {
+    await renderDevtools();
+    openPanel();
+    await openList();
+
+    const file = new File(['not valid json'], 'snapshot.json', { type: 'application/json' });
+    const input = screen.getByLabelText('Import snapshot file') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => expect(screen.getByText('Invalid snapshot file.')).toBeTruthy());
+  });
 });

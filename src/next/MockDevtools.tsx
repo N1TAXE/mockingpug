@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { OneShotOverrideEntry, RequestLogEntry } from '../query/index.js';
+import type { OneShotOverrideEntry, RequestLogEntry, StoreSnapshot } from '../query/index.js';
 import { DevtoolsPanel } from '../shared/devtoolsUI.js';
 import { DEVTOOLS_SEGMENT } from './devtoolsPath.js';
 
@@ -107,6 +107,22 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
     return override;
   }
 
+  async function fetchStoreSnapshot(): Promise<StoreSnapshot> {
+    const res = await fetch(`${apiBase}/snapshot`);
+    const { snapshot: stored } = (await res.json()) as { snapshot: StoreSnapshot };
+    return stored;
+  }
+
+  async function importStoreSnapshot(stored: StoreSnapshot): Promise<void> {
+    const res = await fetch(`${apiBase}/snapshot`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(stored),
+    });
+    const { entities } = (await res.json()) as { entities: Record<string, number> };
+    setSnapshot((prev) => ({ ...prev, entities }));
+  }
+
   return (
     <DevtoolsPanel
       title="mockingpug (next)"
@@ -120,6 +136,8 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
       onClearRequestLog={clearRequestLog}
       onArmOneShotOverride={armOneShotOverride}
       onPeekOneShotOverride={peekOneShotOverride}
+      onExportSnapshot={fetchStoreSnapshot}
+      onImportSnapshot={importStoreSnapshot}
       onOpen={() => void refresh()}
     />
   );

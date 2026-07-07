@@ -1,5 +1,14 @@
 import { generateAll } from '../generator/index.js';
-import { jsonResponse, readJsonBody, updateRecord, type OneShotOverrideEntry, type QueryContext } from '../query/index.js';
+import {
+  exportSnapshot,
+  importSnapshot,
+  jsonResponse,
+  readJsonBody,
+  updateRecord,
+  type OneShotOverrideEntry,
+  type QueryContext,
+  type StoreSnapshot,
+} from '../query/index.js';
 import { DEVTOOLS_SEGMENT } from './devtoolsPath.js';
 
 export { DEVTOOLS_SEGMENT };
@@ -92,6 +101,19 @@ export async function handleDevtoolsRequest(
     const body = (await readJsonBody(request)) as OneShotOverrideEntry;
     ctx.oneShotOverrides?.set(entity, body);
     return jsonResponse({ override: ctx.oneShotOverrides?.peek(entity) ?? {} });
+  }
+
+  // Export/import the entire store as one JSON snapshot, for sharing an
+  // exact reproduction of a bug's data instead of describing it in words
+  // (see `<MockDevtools>`'s "Export"/"Import" buttons).
+  if (action === 'snapshot' && !entity && method === 'GET') {
+    return jsonResponse({ snapshot: await exportSnapshot(ctx) });
+  }
+
+  if (action === 'snapshot' && !entity && method === 'POST') {
+    const body = (await readJsonBody(request)) as StoreSnapshot;
+    await importSnapshot(ctx, body);
+    return jsonResponse({ entities: await entityCounts(ctx) });
   }
 
   return jsonResponse({ error: { message: 'not found' } }, { status: 404 });

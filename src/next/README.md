@@ -143,6 +143,12 @@ explicitly if `mock.config.js` sets a different one. It gives you:
   fail-or-delay for that entity's very next request only, then disarms
   itself, so you can test one error/loading state on demand without
   touching `runtime.errorRate`/`delay` globally.
+- "Export"/"Import" buttons in the "Mock Data" list, via
+  `GET`/`POST {baseUrl}/__mockingpug/snapshot`: download the whole store
+  as one JSON file (`{ entity: { meta, records } }`), or restore it from
+  one — handy for sharing an exact repro of a bug instead of describing
+  the test data in words. An entity name in the file that doesn't match a
+  current schema is silently skipped.
 
 There's no "mock network" toggle or per-entity `bypass` checkbox built
 into this panel: both are React/MSW-specific concepts that don't apply to

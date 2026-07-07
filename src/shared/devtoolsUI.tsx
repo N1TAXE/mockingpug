@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import type { OneShotOverrideEntry, RequestLogEntry } from '../query/index.js';
+import type { OneShotOverrideEntry, RequestLogEntry, StoreSnapshot } from '../query/index.js';
 import { BackIcon, CheckIcon, ChevronIcon, CrossIcon, DirIcon, EditIcon, LogoIcon, RefreshIcon } from './devtoolsIcons.js';
 
 const FONT_UI = "'Nunito', system-ui, sans-serif";
@@ -36,6 +36,27 @@ const numberInputStyle: CSSProperties = {
   fontSize: 14,
   color: TEXT,
   padding: 0,
+};
+
+// Windowed virtualization of the "Mock Data" entity list: both the row
+// height and the scroll container's height are fixed/known ahead of time,
+// so the visible index range is a plain arithmetic computation and doesn't
+// need a virtual-scroll dependency.
+const ENTITY_ROW_HEIGHT = 49; // Row's `minHeight: 48` + its `1px` bottom border.
+const ENTITY_LIST_HEIGHT = 221;
+const ENTITY_LIST_OVERSCAN = 3;
+
+const filterInputStyle: CSSProperties = {
+  width: '100%',
+  boxSizing: 'border-box',
+  border: `1px solid ${BORDER}`,
+  borderRadius: 6,
+  padding: '6px 8px',
+  fontFamily: FONT_UI,
+  fontSize: 13,
+  fontWeight: 600,
+  color: TEXT,
+  outline: 'none',
 };
 
 const smallButtonStyle: CSSProperties = {
@@ -409,6 +430,15 @@ export interface DevtoolsPanelProps {
   onArmOneShotOverride: (entity: string, patch: OneShotOverrideEntry) => Promise<void> | void;
   /** Reads the currently-armed override for `entity` without consuming it, so a re-opened `DataWindow` can reflect what's actually armed. */
   onPeekOneShotOverride: (entity: string) => Promise<OneShotOverrideEntry | undefined>;
+  /** Reads the full current store as `{ entity: { meta, records } }`, for the "Export" button in the "Mock Data" list. */
+  onExportSnapshot: () => Promise<StoreSnapshot>;
+  /**
+   * Restores entities from a previously exported snapshot, for the
+   * "Import" button. Implementations apply it via `store.save()` and are
+   * responsible for refreshing their own `entities` counts afterward (this
+   * component treats `entities` as fully controlled, same as `onResetEntity`).
+   */
+  onImportSnapshot: (snapshot: StoreSnapshot) => Promise<void> | void;
   /** Called every time the panel transitions from closed to open, so the caller can refresh `entities`/`runtime`. */
   onOpen?: () => void;
   /** React/MSW-only: worker on/off. Omit entirely for transports (like Next.js) with nothing to intercept. */
@@ -883,6 +913,8 @@ export function DevtoolsPanel({
   onClearRequestLog,
   onArmOneShotOverride,
   onPeekOneShotOverride,
+  onExportSnapshot,
+  onImportSnapshot,
   onOpen,
   mockNetwork,
   bypass,
@@ -892,6 +924,11 @@ export function DevtoolsPanel({
   const [windows, setWindows] = useState<WindowState[]>([]);
   const [order, setOrder] = useState<string[]>([]);
   const [requests, setRequests] = useState<RequestLogEntry[]>([]);
+  const [importError, setImportError] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [entityFilter, setEntityFilter] = useState('');
+  const [entityScrollTop, setEntityScrollTop] = useState(0);
+  const entityListRef = useRef<HTMLDivElement>(null);
 
   function openPanel() {
     setOpen(true);
@@ -944,6 +981,38 @@ export function DevtoolsPanel({
 
   async function resetAllEntities() {
     for (const entity of Object.keys(entities)) await onResetEntity(entity);
+  }
+
+  /** Resets scroll to the top so a shorter, filtered list can't leave the virtualized window pointed past its own end. */
+  function handleFilterChange(value: string) {
+    setEntityFilter(value);
+    setEntityScrollTop(0);
+    if (entityListRef.current) entityListRef.current.scrollTop = 0;
+  }
+
+  /** Downloads the current store as a JSON file, so it can be shared to reproduce a bug exactly instead of describing the data in words. */
+  async function handleExport() {
+    const snapshot = await onExportSnapshot();
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'mockingpug-snapshot.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // reset so re-selecting the same file still fires onChange
+    if (!file) return;
+    setImportError(null);
+    try {
+      const parsed = JSON.parse(await file.text()) as StoreSnapshot;
+      await onImportSnapshot(parsed);
+    } catch {
+      setImportError('Invalid snapshot file.');
+    }
   }
 
   const entityCount = Object.keys(entities).length;
@@ -1048,48 +1117,123 @@ export function DevtoolsPanel({
                 onReset={() => void resetAllEntities()}
                 resetLabel="Reset all entities"
               />
-              <div style={{ position: 'relative', width: '100%' }}>
-                <div style={{ maxHeight: 221, overflowY: 'auto' }}>
-                  {Object.entries(entities).map(([entity, count]) => (
-                    <Row key={entity} onClick={() => openEntity(entity)} testId={`entity-row-${entity}`}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                        <DirIcon />
-                        <span style={rowLabelStyle}>
-                          {entity} <span style={fadedStyle}>({count})</span>
-                        </span>
-                      </div>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {bypass && (
-                          <Switch
-                            small
-                            label={`Bypass ${entity}`}
-                            checked={bypass.isBypassed(entity)}
-                            onChange={() => bypass.onToggle(entity)}
-                          />
-                        )}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openEntity(entity);
-                          }}
-                          aria-label={`Open ${entity} records`}
-                          style={{
-                            boxSizing: 'border-box',
-                            display: 'flex',
-                            padding: 0,
-                            margin: 0,
-                            border: 'none',
-                            background: 'transparent',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <ChevronIcon />
-                        </button>
-                      </span>
-                    </Row>
-                  ))}
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '8px 16px',
+                  borderBottom: `1px solid ${BORDER}`,
+                  flex: 'none',
+                }}
+              >
+                <button type="button" onClick={() => void handleExport()} style={smallButtonStyle}>
+                  Export
+                </button>
+                <button type="button" onClick={() => importInputRef.current?.click()} style={smallButtonStyle}>
+                  Import
+                </button>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept="application/json"
+                  aria-label="Import snapshot file"
+                  onChange={(e) => void handleImportFile(e)}
+                  style={{ display: 'none' }}
+                />
+              </div>
+              {importError && (
+                <div
+                  style={{
+                    padding: '4px 16px 8px',
+                    fontFamily: FONT_UI,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: '#c0392b',
+                    flex: 'none',
+                  }}
+                >
+                  {importError}
                 </div>
+              )}
+              <div style={{ padding: '8px 16px', borderBottom: `1px solid ${BORDER}`, flex: 'none' }}>
+                <input
+                  type="text"
+                  placeholder="Filter entities…"
+                  aria-label="Filter entities"
+                  value={entityFilter}
+                  onChange={(e) => handleFilterChange(e.target.value)}
+                  style={filterInputStyle}
+                />
+              </div>
+              <div style={{ position: 'relative', width: '100%' }}>
+                {(() => {
+                  const filteredEntities = Object.entries(entities).filter(([entity]) =>
+                    entity.toLowerCase().includes(entityFilter.trim().toLowerCase()),
+                  );
+                  const visibleRowCount = Math.ceil(ENTITY_LIST_HEIGHT / ENTITY_ROW_HEIGHT) + ENTITY_LIST_OVERSCAN * 2;
+                  const startIndex = Math.max(0, Math.floor(entityScrollTop / ENTITY_ROW_HEIGHT) - ENTITY_LIST_OVERSCAN);
+                  const visibleEntities = filteredEntities.slice(startIndex, startIndex + visibleRowCount);
+
+                  return (
+                    <div
+                      ref={entityListRef}
+                      style={{ maxHeight: ENTITY_LIST_HEIGHT, overflowY: 'auto' }}
+                      onScroll={(e) => setEntityScrollTop(e.currentTarget.scrollTop)}
+                    >
+                      {filteredEntities.length === 0 ? (
+                        <Row hoverable={false}>
+                          <span style={fadedStyle}>No matching entities.</span>
+                        </Row>
+                      ) : (
+                        <div style={{ position: 'relative', height: filteredEntities.length * ENTITY_ROW_HEIGHT }}>
+                          <div style={{ position: 'absolute', top: startIndex * ENTITY_ROW_HEIGHT, left: 0, right: 0 }}>
+                            {visibleEntities.map(([entity, count]) => (
+                              <Row key={entity} onClick={() => openEntity(entity)} testId={`entity-row-${entity}`}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                                  <DirIcon />
+                                  <span style={rowLabelStyle}>
+                                    {entity} <span style={fadedStyle}>({count})</span>
+                                  </span>
+                                </div>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  {bypass && (
+                                    <Switch
+                                      small
+                                      label={`Bypass ${entity}`}
+                                      checked={bypass.isBypassed(entity)}
+                                      onChange={() => bypass.onToggle(entity)}
+                                    />
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openEntity(entity);
+                                    }}
+                                    aria-label={`Open ${entity} records`}
+                                    style={{
+                                      boxSizing: 'border-box',
+                                      display: 'flex',
+                                      padding: 0,
+                                      margin: 0,
+                                      border: 'none',
+                                      background: 'transparent',
+                                      cursor: 'pointer',
+                                    }}
+                                  >
+                                    <ChevronIcon />
+                                  </button>
+                                </span>
+                              </Row>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div
                   style={{
                     position: 'absolute',
