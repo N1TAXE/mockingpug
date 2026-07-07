@@ -12,7 +12,9 @@ export type FieldSpec =
   | { kind: 'array'; item: FieldSpec; count: number }
   | { kind: 'custom'; name: string }
   | { kind: 'crossRef'; entity: string; field?: string; fields?: readonly string[] }
-  | { kind: 'slugify'; field: string; separator: string };
+  | { kind: 'slugify'; field: string; separator: string }
+  | { kind: 'literal'; value: string | number | boolean | null }
+  | { kind: 'conditional'; when: Record<string, string | number | boolean | null>; then: FieldSpec; else: FieldSpec };
 
 /** One entry of a custom dictionary file under `mock/data/*.json`. */
 export interface CustomDictionaryEntry {

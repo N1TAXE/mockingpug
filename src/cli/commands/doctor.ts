@@ -61,6 +61,13 @@ function expectedJsType(spec: FieldSpec): 'string' | 'number' | 'boolean' | 'arr
   if (spec.kind === 'boolean') return 'boolean';
   if (spec.kind === 'array') return 'array';
   if (STRING_KINDS.has(spec.kind)) return 'string';
+  // `null` isn't one of the four checkable types this doctor pass models,
+  // so a null-valued literal (the common case, `then: null`) is skipped —
+  // same "not statically checkable" treatment as `conditional` below.
+  if (spec.kind === 'literal' && spec.value !== null) {
+    const valueType = typeof spec.value;
+    if (valueType === 'string' || valueType === 'number' || valueType === 'boolean') return valueType;
+  }
   return undefined;
 }
 

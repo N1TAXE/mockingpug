@@ -735,6 +735,184 @@ describe('generateAll : crossRef inside array[...]', () => {
   });
 });
 
+/** article: status-driven conditional field(s), the "bestOffer.publishedAt" real-world case. */
+function articleConditionalSchemas(amount: number): SchemaBundle {
+  return {
+    article: {
+      name: 'article',
+      file: 'mock/api/article/schema.json',
+      amount,
+      data: {
+        status: { kind: 'enumInline', values: ['scheduled', 'published'] },
+        publishedAt: {
+          kind: 'conditional',
+          when: { status: 'scheduled' },
+          then: { kind: 'literal', value: null },
+          else: { kind: 'date', range: 'past' },
+        },
+      },
+    },
+  };
+}
+
+describe('generateAll : conditional fields', () => {
+  it('resolves "then" when "when" matches and "else" otherwise', async () => {
+    const store = new MemoryStoreAdapter();
+    await generateAll(articleConditionalSchemas(50), store, { seed: 's' });
+    const records = (await store.load('article'))!.records;
+
+    expect(records.length).toBeGreaterThan(0);
+    // Both branches must actually occur across 50 records for this to be a
+    // meaningful assertion, not a coincidence.
+    expect(records.some((r) => r.status === 'scheduled')).toBe(true);
+    expect(records.some((r) => r.status === 'published')).toBe(true);
+    for (const r of records) {
+      if (r.status === 'scheduled') {
+        expect(r.publishedAt).toBeNull();
+      } else {
+        expect(typeof r.publishedAt).toBe('string');
+      }
+    }
+  });
+
+  it('supports a nested conditional (more than two outcomes)', async () => {
+    const store = new MemoryStoreAdapter();
+    const schemas: SchemaBundle = {
+      order: {
+        name: 'order',
+        file: 'mock/api/order/schema.json',
+        amount: 60,
+        data: {
+          status: { kind: 'enumInline', values: ['a', 'b', 'c'] },
+          note: {
+            kind: 'conditional',
+            when: { status: 'a' },
+            then: lorem,
+            else: {
+              kind: 'conditional',
+              when: { status: 'b' },
+              then: { kind: 'literal', value: true },
+              else: { kind: 'literal', value: null },
+            },
+          },
+        },
+      },
+    };
+    await generateAll(schemas, store, { seed: 's' });
+    const records = (await store.load('order'))!.records;
+
+    for (const r of records) {
+      if (r.status === 'a') expect(typeof r.note).toBe('string');
+      else if (r.status === 'b') expect(r.note).toBe(true);
+      else expect(r.note).toBeNull();
+    }
+  });
+
+  it('resolves a crossRef inside a "then"/"else" branch (respecting generation order)', async () => {
+    const store = new MemoryStoreAdapter();
+    const schemas: SchemaBundle = {
+      user: {
+        name: 'user',
+        file: 'mock/api/user/schema.json',
+        amount: 10,
+        data: { id: increment },
+      },
+      order: {
+        name: 'order',
+        file: 'mock/api/order/schema.json',
+        amount: 20,
+        data: {
+          status: { kind: 'enumInline', values: ['assigned', 'unassigned'] },
+          ownerId: {
+            kind: 'conditional',
+            when: { status: 'assigned' },
+            then: { kind: 'crossRef', entity: 'user', field: 'id' },
+            else: { kind: 'literal', value: null },
+          },
+        },
+      },
+    };
+    await generateAll(schemas, store, { seed: 's' });
+    const userIds = new Set((await store.load('user'))!.records.map((r) => r.id));
+    const orders = (await store.load('order'))!.records;
+
+    for (const order of orders) {
+      if (order.status === 'assigned') expect(userIds.has(order.ownerId)).toBe(true);
+      else expect(order.ownerId).toBeNull();
+    }
+  });
+
+  it('continues an increment counter nested inside a conditional branch, not colliding on regeneration', async () => {
+    const store = new MemoryStoreAdapter();
+    const schemas: SchemaBundle = {
+      order: {
+        name: 'order',
+        file: 'mock/api/order/schema.json',
+        amount: 10,
+        data: {
+          status: { kind: 'enumInline', values: ['a', 'b'] },
+          ticketNumber: {
+            kind: 'conditional',
+            when: { status: 'a' },
+            then: increment,
+            else: { kind: 'literal', value: null },
+          },
+        },
+      },
+    };
+    await generateAll(schemas, store, { seed: 's' });
+    const before = (await store.load('order'))!.records;
+
+    const grown: SchemaBundle = { order: { ...schemas.order!, amount: 20 } };
+    await generateAll(grown, store, { seed: 's' });
+    const after = (await store.load('order'))!.records;
+
+    expect(after).toHaveLength(20);
+    expect(after.slice(0, 10)).toEqual(before);
+    const ticketNumbers = after.map((r) => r.ticketNumber).filter((n): n is number => typeof n === 'number');
+    // No collisions: every non-null ticket number across the whole set is unique.
+    expect(new Set(ticketNumbers).size).toBe(ticketNumbers.length);
+  });
+
+  it('regenerates only the conditional field when its own spec changes, leaving unrelated fields untouched', async () => {
+    const store = new MemoryStoreAdapter();
+    const base = articleConditionalSchemas(10);
+    await generateAll(base, store, { seed: 's' });
+    const before = (await store.load('article'))!.records;
+
+    const changed: SchemaBundle = {
+      article: {
+        ...base.article!,
+        data: {
+          ...base.article!.data,
+          publishedAt: {
+            kind: 'conditional',
+            when: { status: 'scheduled' },
+            then: { kind: 'literal', value: null },
+            else: { kind: 'literal', value: 'FIXED' },
+          },
+        },
+      },
+    };
+    await generateAll(changed, store, { seed: 's' });
+    const after = (await store.load('article'))!.records;
+
+    expect(after[0]!.status).toBe(before[0]!.status);
+    for (const r of after) {
+      if (r.status === 'scheduled') expect(r.publishedAt).toBeNull();
+      else expect(r.publishedAt).toBe('FIXED');
+    }
+  });
+
+  it('is reproducible for the same seed', async () => {
+    const storeA = new MemoryStoreAdapter();
+    const storeB = new MemoryStoreAdapter();
+    await generateAll(articleConditionalSchemas(20), storeA, { seed: 'fixed' });
+    await generateAll(articleConditionalSchemas(20), storeB, { seed: 'fixed' });
+    expect((await storeA.load('article'))!.records).toEqual((await storeB.load('article'))!.records);
+  });
+});
+
 describe('generateAll : end-to-end with the real FileStoreAdapter', () => {
   let dir: string;
 

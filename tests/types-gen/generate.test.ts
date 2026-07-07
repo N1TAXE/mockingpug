@@ -65,6 +65,51 @@ describe('generateTypeDefinitions : field type mapping', () => {
     expect(generateTypeDefinitions(schemas)).toContain('relatedProductIds: Array<number>;');
   });
 
+  it('renders a literal field as its exact TS literal type', () => {
+    const schemas: Record<string, EntitySchema> = {
+      article: { name: 'article', file: 'x', amount: 1, data: { flag: { kind: 'literal', value: null } } },
+    };
+    expect(generateTypeDefinitions(schemas)).toContain('flag: null;');
+  });
+
+  it('renders a conditional field as the union of its two branch types', () => {
+    const schemas: Record<string, EntitySchema> = {
+      article: {
+        name: 'article',
+        file: 'x',
+        amount: 1,
+        data: {
+          publishedAt: {
+            kind: 'conditional',
+            when: { status: 'scheduled' },
+            then: { kind: 'literal', value: null },
+            else: { kind: 'date' },
+          },
+        },
+      },
+    };
+    expect(generateTypeDefinitions(schemas)).toContain('publishedAt: null | string;');
+  });
+
+  it('dedupes identical branch types in a conditional union', () => {
+    const schemas: Record<string, EntitySchema> = {
+      article: {
+        name: 'article',
+        file: 'x',
+        amount: 1,
+        data: {
+          note: {
+            kind: 'conditional',
+            when: { status: 'a' },
+            then: { kind: 'lorem' },
+            else: { kind: 'username', style: 'FS' },
+          },
+        },
+      },
+    };
+    expect(generateTypeDefinitions(schemas)).toContain('note: string;');
+  });
+
   it('renders an all-string-literal custom dictionary as a union', () => {
     const schemas: Record<string, EntitySchema> = {
       user: { name: 'user', file: 'x', amount: 1, data: { role: { kind: 'custom', name: 'role' } } },

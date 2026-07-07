@@ -20,12 +20,15 @@ function isForwardRef(ref: FieldRef): boolean {
   return ref.targetField !== undefined || (ref.targetFields !== undefined && ref.targetFields.length > 0);
 }
 
-/** Recursively visits a field spec, including nested `array` item specs. */
+/** Recursively visits a field spec, including nested `array` items and both branches of a `conditional`. */
 function walkFieldSpec(spec: FieldSpec, visit: (ref: FieldSpec & { kind: 'crossRef' }) => void): void {
   if (spec.kind === 'crossRef') {
     visit(spec);
   } else if (spec.kind === 'array') {
     walkFieldSpec(spec.item, visit);
+  } else if (spec.kind === 'conditional') {
+    walkFieldSpec(spec.then, visit);
+    walkFieldSpec(spec.else, visit);
   }
 }
 

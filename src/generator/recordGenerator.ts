@@ -84,6 +84,16 @@ export async function generateFieldValue(
     }
     return values;
   }
+  if (spec.kind === 'conditional') {
+    const matches = Object.entries(spec.when).every(([key, expected]) => partialRecord?.[key] === expected);
+    const branch = matches ? spec.then : spec.else;
+    // Recurse with the chosen branch's spec — entity/index/fieldName stay
+    // the same, so this is still deterministic per record, and the branch
+    // gets the exact same handling (crossRef, array-of-crossRef, slugify,
+    // a nested conditional, or a plain generated/literal value) as if it
+    // had been declared directly on this field.
+    return generateFieldValue(entity, index, fieldName, branch, seed, increments, resolveCustom, resolveTargetRecords, partialRecord);
+  }
   if (spec.kind === 'slugify') {
     const sourceValue = partialRecord?.[spec.field];
     if (typeof sourceValue !== 'string') {
@@ -161,6 +171,13 @@ export async function generateFullRecord(
   return record;
 }
 
+/** True if `spec` is a `number.increment`, either directly or behind a conditional's `then`/`else` (possibly nested). */
+function isIncrementField(spec: FieldSpec): boolean {
+  if (spec.kind === 'number' && spec.mode === 'increment') return true;
+  if (spec.kind === 'conditional') return isIncrementField(spec.then) || isIncrementField(spec.else);
+  return false;
+}
+
 /** Fast-forwards `increments` from the highest `number.increment` value already present among `records`, so newly appended/created records continue counting instead of restarting. */
 export function seedIncrementCounters(
   entity: string,
@@ -169,7 +186,10 @@ export function seedIncrementCounters(
   increments: IncrementCounters,
 ): void {
   for (const [fieldName, spec] of Object.entries(fields)) {
-    if (spec.kind === 'number' && spec.mode === 'increment') {
+    if (isIncrementField(spec)) {
+      // A conditional's non-increment branch (e.g. `else: null`) stores a
+      // non-number for that record; the `typeof v === 'number'` guard
+      // below already skips those when finding the existing max.
       const maxExisting = records.reduce((max, r) => {
         const v = r[fieldName];
         return typeof v === 'number' && v > max ? v : max;

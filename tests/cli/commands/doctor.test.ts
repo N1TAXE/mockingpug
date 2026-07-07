@@ -208,6 +208,38 @@ describe('doctor', () => {
     expect(result.warnings.some((w) => w.includes('literal[0]') && w.includes('"name"'))).toBe(true);
   });
 
+  it('does not require a literal record to carry a conditional field\'s literal-typed value', async () => {
+    await writeFiles({
+      'mock/api/article/schema.json': JSON.stringify({
+        amount: 3,
+        data: {
+          status: 'enum[scheduled,published]',
+          publishedAt: { when: { status: 'scheduled' }, then: null, else: 'date.past' },
+        },
+        literal: [{ status: 'scheduled', publishedAt: null }],
+      }),
+    });
+    const result = await doctor(dir);
+    expect(result.ok).toBe(true);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('warns when a literal record is missing a conditional field', async () => {
+    await writeFiles({
+      'mock/api/article/schema.json': JSON.stringify({
+        amount: 3,
+        data: {
+          status: 'enum[scheduled,published]',
+          publishedAt: { when: { status: 'scheduled' }, then: null, else: 'date.past' },
+        },
+        literal: [{ status: 'scheduled' }],
+      }),
+    });
+    const result = await doctor(dir);
+    expect(result.ok).toBe(true);
+    expect(result.warnings.some((w) => w.includes('literal[0]') && w.includes('"publishedAt"'))).toBe(true);
+  });
+
   it('rejects literal.length greater than amount', async () => {
     await writeFiles({
       'mock/api/category/schema.json': JSON.stringify({

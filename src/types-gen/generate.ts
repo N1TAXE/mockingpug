@@ -74,6 +74,13 @@ function fieldType(
       visiting.delete(cycleKey);
       return resolved;
     }
+    case 'literal':
+      return spec.value === null ? 'null' : JSON.stringify(spec.value);
+    case 'conditional': {
+      const thenType = fieldType(spec.then, schemas, customDictionaries, visiting);
+      const elseType = fieldType(spec.else, schemas, customDictionaries, visiting);
+      return [...new Set([thenType, elseType])].join(' | ');
+    }
   }
 }
 

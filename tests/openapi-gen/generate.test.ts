@@ -86,6 +86,47 @@ describe('generateOpenApiSpec : field type mapping', () => {
     });
   });
 
+  it('renders a literal field as a const schema', () => {
+    const entities: Record<string, EntitySchema> = {
+      article: { name: 'article', file: 'x', amount: 1, data: { flag: { kind: 'literal', value: null } } },
+    };
+    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const article = schemas(spec).Article as { properties: Record<string, unknown> };
+    expect(article.properties.flag).toEqual({ type: 'null' });
+  });
+
+  it('renders a non-null literal field with a const value', () => {
+    const entities: Record<string, EntitySchema> = {
+      article: { name: 'article', file: 'x', amount: 1, data: { flag: { kind: 'literal', value: true } } },
+    };
+    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const article = schemas(spec).Article as { properties: Record<string, unknown> };
+    expect(article.properties.flag).toEqual({ type: 'boolean', const: true });
+  });
+
+  it('renders a conditional field as oneOf its two branch schemas', () => {
+    const entities: Record<string, EntitySchema> = {
+      article: {
+        name: 'article',
+        file: 'x',
+        amount: 1,
+        data: {
+          publishedAt: {
+            kind: 'conditional',
+            when: { status: 'scheduled' },
+            then: { kind: 'literal', value: null },
+            else: { kind: 'date' },
+          },
+        },
+      },
+    };
+    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const article = schemas(spec).Article as { properties: Record<string, unknown> };
+    expect(article.properties.publishedAt).toEqual({
+      oneOf: [{ type: 'null' }, { type: 'string', format: 'date-time' }],
+    });
+  });
+
   it('renders an all-primitive custom dictionary as a typed enum', () => {
     const entities: Record<string, EntitySchema> = {
       user: { name: 'user', file: 'x', amount: 1, data: { role: { kind: 'custom', name: 'role' } } },

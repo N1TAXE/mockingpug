@@ -159,6 +159,16 @@ export function generateValue(spec: FieldSpec, rng: Rng, ctx: GenerateContext): 
         { hint: 'resolve slugify fields in recordGenerator.ts, where the sibling record is available' },
       );
 
+    case 'literal':
+      return spec.value;
+
+    case 'conditional':
+      throw new GenerationError(
+        'MP-GEN-008',
+        `a conditional field ("when"/"then"/"else") cannot be resolved by generateValue() directly`,
+        { hint: 'resolve conditional fields in recordGenerator.ts, where the sibling record needed to evaluate "when" is available' },
+      );
+
     /* v8 ignore next 4 -- exhaustiveness guard, unreachable for any valid FieldSpec */
     default: {
       const exhaustive: never = spec;

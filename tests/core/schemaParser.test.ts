@@ -288,4 +288,185 @@ describe('parseEntitySchema : validation', () => {
       expect((error as SchemaError).code).toBe('MP-SCHEMA-022');
     }
   });
+
+  it('parses a conditional field onto the returned schema', () => {
+    const schema = parseEntitySchema('order', 'x', {
+      amount: 5,
+      data: {
+        status: 'enum[scheduled,published]',
+        publishedAt: { when: { status: 'scheduled' }, then: null, else: 'date.past' },
+      },
+    });
+    expect(schema.data.publishedAt).toEqual({
+      kind: 'conditional',
+      when: { status: 'scheduled' },
+      then: { kind: 'literal', value: null },
+      else: { kind: 'date', range: 'past' },
+    });
+  });
+
+  it('parses non-null JSON literal then/else branches', () => {
+    const schema = parseEntitySchema('order', 'x', {
+      amount: 5,
+      data: {
+        status: 'enum[a,b]',
+        flag: { when: { status: 'a' }, then: true, else: 42 },
+      },
+    });
+    expect(schema.data.flag).toEqual({
+      kind: 'conditional',
+      when: { status: 'a' },
+      then: { kind: 'literal', value: true },
+      else: { kind: 'literal', value: 42 },
+    });
+  });
+
+  it('parses a nested conditional in a branch', () => {
+    const schema = parseEntitySchema('order', 'x', {
+      amount: 5,
+      data: {
+        status: 'enum[a,b,c]',
+        note: {
+          when: { status: 'a' },
+          then: 'lorem.16',
+          else: { when: { status: 'b' }, then: true, else: null },
+        },
+      },
+    });
+    expect(schema.data.note).toEqual({
+      kind: 'conditional',
+      when: { status: 'a' },
+      then: { kind: 'lorem', length: 16 },
+      else: {
+        kind: 'conditional',
+        when: { status: 'b' },
+        then: { kind: 'literal', value: true },
+        else: { kind: 'literal', value: null },
+      },
+    });
+  });
+
+  it('supports multiple keys in "when" (AND semantics)', () => {
+    const schema = parseEntitySchema('order', 'x', {
+      amount: 5,
+      data: {
+        status: 'enum[a,b]',
+        kind: 'enum[x,y]',
+        note: { when: { status: 'a', kind: 'x' }, then: 'lorem', else: null },
+      },
+    });
+    expect((schema.data.note as { when: unknown }).when).toEqual({ status: 'a', kind: 'x' });
+  });
+
+  it('throws SchemaError MP-SCHEMA-023 when "when" is missing or empty', () => {
+    try {
+      parseEntitySchema('order', 'x', {
+        amount: 5,
+        data: { status: 'enum[a]', note: { when: {}, then: null, else: null } },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-023');
+    }
+  });
+
+  it('throws SchemaError MP-SCHEMA-023 when "then" or "else" is missing', () => {
+    try {
+      parseEntitySchema('order', 'x', {
+        amount: 5,
+        data: { status: 'enum[a]', note: { when: { status: 'a' }, then: null } },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-023');
+    }
+  });
+
+  it('throws SchemaError MP-SCHEMA-024 when a branch value has an unsupported type', () => {
+    try {
+      parseEntitySchema('order', 'x', {
+        amount: 5,
+        data: { status: 'enum[a]', note: { when: { status: 'a' }, then: [1, 2], else: null } },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-024');
+    }
+  });
+
+  it('throws SchemaError MP-SCHEMA-025 when a branch resolves to a bare relation', () => {
+    try {
+      parseEntitySchema('order', 'x', {
+        amount: 5,
+        data: { status: 'enum[a]', owner: { when: { status: 'a' }, then: 'data.user', else: null } },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-025');
+    }
+  });
+
+  it('throws SchemaError MP-SCHEMA-025 when a branch resolves to a multi-pick', () => {
+    try {
+      parseEntitySchema('order', 'x', {
+        amount: 5,
+        data: { status: 'enum[a]', product: { when: { status: 'a' }, then: 'data.product.[id,name]', else: null } },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-025');
+    }
+  });
+
+  it('throws SchemaError MP-SCHEMA-026 when "when" references an unknown field', () => {
+    try {
+      parseEntitySchema('order', 'x', {
+        amount: 5,
+        data: { status: 'enum[a]', note: { when: { sttaus: 'a' }, then: null, else: null } },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-026');
+    }
+  });
+
+  it('throws SchemaError MP-SCHEMA-027 when "when" references a field declared later', () => {
+    try {
+      parseEntitySchema('order', 'x', {
+        amount: 5,
+        data: { note: { when: { status: 'a' }, then: null, else: null }, status: 'enum[a]' },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-027');
+    }
+  });
+
+  it('throws SchemaError MP-SCHEMA-027 on a "when" self-reference', () => {
+    try {
+      parseEntitySchema('order', 'x', {
+        amount: 5,
+        data: { note: { when: { note: 'a' }, then: null, else: null } },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-027');
+    }
+  });
+
+  it('throws SchemaError MP-SCHEMA-027 when a nested conditional\'s "when" references a field declared later (outer "when" is valid)', () => {
+    try {
+      parseEntitySchema('order', 'x', {
+        amount: 5,
+        data: {
+          a: 'number',
+          note: { when: { a: 1 }, then: null, else: { when: { kind: 'x' }, then: null, else: null } },
+          kind: 'enum[x]',
+        },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect((error as SchemaError).code).toBe('MP-SCHEMA-027');
+    }
+  });
 });

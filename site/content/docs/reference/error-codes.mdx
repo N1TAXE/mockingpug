@@ -40,6 +40,11 @@ Thrown while parsing `mock/api/**/schema.json` / `mock/data/*.json`.
 | `MP-SCHEMA-020` | A multi-pick `"data.<entity>.[...]"` lists fewer than two fields, an invalid field name, or the same field twice. |
 | `MP-SCHEMA-021` | Two fields on the same entity produce the same output field name (a multi-pick's projected name collides with another declared/projected field). |
 | `MP-SCHEMA-022` | An `array[...]` item is a bare or multi-pick `crossRef`; only a field-level pick (`array[data.<entity>.<field>].N`) is a valid array item. |
+| `MP-SCHEMA-023` | A conditional field's `{when,then,else}` object is malformed: `"when"` isn't a non-empty object of literal values, or `"then"`/`"else"` is missing. |
+| `MP-SCHEMA-024` | A conditional field's `"then"`/`"else"` has an unsupported raw type — must be a DSL string, a JSON literal (`null`/boolean/number), or a nested `{when,then,else}` object. |
+| `MP-SCHEMA-025` | A conditional field's `"then"`/`"else"` resolved to a bare relation or multi-pick `crossRef`, neither of which produces one concrete value for a single branch. |
+| `MP-SCHEMA-026` | A conditional field's `"when"` references a field that doesn't exist on the same entity. |
+| `MP-SCHEMA-027` | A conditional field's `"when"` references a field declared at the same position or later in `data` (including a self-reference). |
 
 ## `MP-DEP-*`: cross-entity reference graph
 
@@ -63,6 +68,7 @@ generation happens).
 | `MP-GEN-004` / `MP-GEN-005` | A field-level reference (`data.user.id`) couldn't resolve because the target entity has zero generated records, or the referenced field doesn't exist on it. |
 | `MP-GEN-006` | A `slugify` field reached the low-level value generator directly instead of going through `recordGenerator.ts`. Same `array[slugify[...]].N` caveat as `MP-GEN-001` applies; everywhere else it's an internal invariant violation, report it as a bug. |
 | `MP-GEN-007` | A `slugify` field's source field is missing or not a string on the record being generated (shouldn't happen for a schema that passed `MP-SCHEMA-016`/`017` validation). |
+| `MP-GEN-008` | A `conditional` field (`{when,then,else}`) reached the low-level value generator directly instead of going through `recordGenerator.ts`, where the sibling record needed to evaluate `"when"` is available — an internal invariant violation, report it as a bug. |
 
 ## `MP-STORE-*`: persistent store failures
 

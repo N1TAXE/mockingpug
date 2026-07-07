@@ -94,6 +94,10 @@ export function fieldSchema(
       visiting.delete(cycleKey);
       return resolved;
     }
+    case 'literal':
+      return spec.value === null ? { type: 'null' } : { type: typeof spec.value, const: spec.value };
+    case 'conditional':
+      return { oneOf: [fieldSchema(spec.then, schemas, customDictionaries, visiting), fieldSchema(spec.else, schemas, customDictionaries, visiting)] };
   }
 }
 
