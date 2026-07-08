@@ -584,4 +584,45 @@ describe('MockDevtools', () => {
     await waitFor(() => expect(preContains('text')).toBeTruthy());
     expect(screen.queryByRole('button', { name: /Copy curl for note/ })).toBeNull();
   });
+
+  it('toggling a logged request\'s "Use real data" switch arms/disarms ctx.requestBypass for exactly that method+pathname', async () => {
+    const ctx = await renderDevtools();
+    ctx.requestLog!.record({ method: 'GET', path: '/api/user/1', status: 200, durationMs: 5, timestamp: 1 });
+
+    openPanel();
+    fireEvent.click(screen.getByRole('button', { name: 'Requests' }));
+    await waitFor(() => expect(screen.getByText('/api/user/1')).toBeTruthy());
+
+    const toggle = screen.getByRole('switch', { name: 'Use real data for GET /api/user/1' });
+    expect(ctx.requestBypass?.isBypassed('GET', '/api/user/1')).toBe(false);
+
+    fireEvent.click(toggle);
+    await waitFor(() => expect(ctx.requestBypass?.isBypassed('GET', '/api/user/1')).toBe(true));
+
+    fireEvent.click(toggle);
+    await waitFor(() => expect(ctx.requestBypass?.isBypassed('GET', '/api/user/1')).toBe(false));
+  });
+
+  it('the Requests view reflects request bypass state already armed before it was opened, ignoring the query string', async () => {
+    const ctx = await makeCtx();
+    const { RequestBypass } = await import('../../src/query/index.js');
+    ctx.requestBypass = new RequestBypass();
+    ctx.requestBypass.set('GET', '/api/user', true);
+
+    render(
+      <MockProvider worker={fakeWorker()} ctx={ctx} storageKey={null}>
+        <MockDevtools />
+      </MockProvider>,
+    );
+    ctx.requestLog!.record({ method: 'GET', path: '/api/user?page=2', status: 200, durationMs: 5, timestamp: 1 });
+
+    openPanel();
+    fireEvent.click(screen.getByRole('button', { name: 'Requests' }));
+    await waitFor(() => expect(screen.getByText('/api/user?page=2')).toBeTruthy());
+
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: 'Use real data for GET /api/user' }).getAttribute('aria-checked')).toBe('true'),
+    );
+  });
+
 });

@@ -27,6 +27,7 @@ interface Snapshot {
   entities: Record<string, number>;
   runtime: { delay: number; errorRate: number };
   docsEnabled: boolean;
+  requestBypassAvailable: boolean;
 }
 
 /**
@@ -39,11 +40,19 @@ interface Snapshot {
  * No "mock network" toggle and no per-entity bypass here, both are
  * React/MSW-specific concepts that don't apply to a Route Handler, which
  * *is* the real server (see `next/README.md`). Use the `rewrites()` recipe
- * there to route a specific path around the mock entirely.
+ * there to route a specific path around the mock entirely. Per-request
+ * bypass is the one exception — it works here too (forwarding to
+ * `mock.config.js`'s `target`), shown only once `target` is configured
+ * (`snapshot.requestBypassAvailable`, reported by the server).
  */
 export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
   const apiBase = `${baseUrl}/${DEVTOOLS_SEGMENT}`;
-  const [snapshot, setSnapshot] = useState<Snapshot>({ entities: {}, runtime: { delay: 0, errorRate: 0 }, docsEnabled: true });
+  const [snapshot, setSnapshot] = useState<Snapshot>({
+    entities: {},
+    runtime: { delay: 0, errorRate: 0 },
+    docsEnabled: true,
+    requestBypassAvailable: false,
+  });
 
   async function refresh() {
     const res = await fetch(apiBase);
@@ -110,6 +119,20 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
     return override;
   }
 
+  async function setRequestBypass(method: string, pathname: string, isBypassed: boolean): Promise<void> {
+    await fetch(`${apiBase}/requestBypass`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ method, pathname, bypassed: isBypassed }),
+    });
+  }
+
+  async function listRequestBypass(): Promise<string[]> {
+    const res = await fetch(`${apiBase}/requestBypass`);
+    const { keys } = (await res.json()) as { keys: string[] };
+    return keys;
+  }
+
   async function fetchStoreSnapshot(): Promise<StoreSnapshot> {
     const res = await fetch(`${apiBase}/snapshot`);
     const { snapshot: stored } = (await res.json()) as { snapshot: StoreSnapshot };
@@ -154,6 +177,11 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
       onCopyRecordCurl={copyRecordCurl}
       onOpenDocs={snapshot.docsEnabled ? openDocs : undefined}
       onOpen={() => void refresh()}
+      requestBypass={{
+        isAvailable: snapshot.requestBypassAvailable,
+        onSet: setRequestBypass,
+        onList: listRequestBypass,
+      }}
     />
   );
 }

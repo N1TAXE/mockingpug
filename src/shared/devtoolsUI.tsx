@@ -401,6 +401,21 @@ export interface BypassControl {
   onToggle: (entity: string) => void;
 }
 
+export interface RequestBypassControl {
+  /**
+   * Gates whether the "Use real data" toggle renders at all in the
+   * "Requests" view. Always `true` for React/MSW (`passthrough()` needs no
+   * extra config); for `mockingpug/next`, only `true` once
+   * `mock.config.js`'s `target` is configured — otherwise there's nowhere
+   * to forward a bypassed request to.
+   */
+  isAvailable: boolean;
+  /** Arms/disarms bypass for one exact `METHOD pathname` (e.g. `"GET" "/api/faqCategory"` for a list route, independent of `"GET" "/api/faqCategory/1"`). */
+  onSet: (method: string, pathname: string, isBypassed: boolean) => Promise<void> | void;
+  /** Reads every currently-bypassed `"METHOD pathname"` key, so the "Requests" view reflects real state instead of assuming "nothing bypassed". */
+  onList: () => Promise<string[]>;
+}
+
 export interface DevtoolsPanelProps {
   title: string;
   entities: Record<string, number>;
@@ -458,6 +473,8 @@ export interface DevtoolsPanelProps {
   mockNetwork?: ToggleControl;
   /** React/MSW-only: per-entity request bypass. Omit for transports where a mock IS the real server. */
   bypass?: BypassControl;
+  /** Per-request bypass, shown per-row in the "Requests" view. Omit entirely to hide the feature (e.g. `mockingpug/next` with no `target` configured). */
+  requestBypass?: RequestBypassControl;
 }
 
 interface WindowState {
@@ -900,9 +917,34 @@ const METHOD_COLORS: Record<string, string> = {
   DELETE: '#c0392b',
 };
 
-/** One row in the "Requests" view: method, path, status (colored by 2xx/4xx/5xx), duration, and wall-clock time. */
-function RequestRow({ entry }: { entry: RequestLogEntry }) {
+/** `"/api/faqCategory?page=2"` -> `"/api/faqCategory"` — the bypass key ignores query strings, so `?page=2`/`?page=3` toggle together as "the same request". */
+function pathnameOnly(path: string): string {
+  const questionMark = path.indexOf('?');
+  return questionMark === -1 ? path : path.slice(0, questionMark);
+}
+
+/**
+ * One row in the "Requests" view: method, path, status (colored by
+ * 2xx/4xx/5xx), duration, wall-clock time, and (when `requestBypass` is
+ * available) a "Use real data" toggle keyed by this row's exact
+ * `METHOD pathname` — a list route (`GET /api/faqCategory`) and an item
+ * route (`GET /api/faqCategory/1`) bypass independently, matching however
+ * the app under test actually calls the mock, not a stored record's
+ * identity.
+ */
+function RequestRow({
+  entry,
+  bypassAvailable,
+  isBypassed,
+  onToggleBypass,
+}: {
+  entry: RequestLogEntry;
+  bypassAvailable: boolean;
+  isBypassed: boolean;
+  onToggleBypass: (method: string, pathname: string) => void;
+}) {
   const statusColor = entry.status >= 500 ? '#c0392b' : entry.status >= 400 ? '#a06600' : '#1d9e4b';
+  const pathname = pathnameOnly(entry.path);
   return (
     <Row hoverable={false}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, width: '100%' }}>
@@ -931,9 +973,19 @@ function RequestRow({ entry }: { entry: RequestLogEntry }) {
           </span>
           <span style={{ ...rowLabelStyle, color: statusColor, flex: 'none' }}>{entry.status}</span>
         </div>
-        <span style={{ ...fadedStyle, fontSize: 11 }}>
-          {entry.durationMs}ms · {new Date(entry.timestamp).toLocaleTimeString()}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <span style={{ ...fadedStyle, fontSize: 11 }}>
+            {entry.durationMs}ms · {new Date(entry.timestamp).toLocaleTimeString()}
+          </span>
+          {bypassAvailable && (
+            <Switch
+              small
+              label={`Use real data for ${entry.method} ${pathname}`}
+              checked={isBypassed}
+              onChange={() => onToggleBypass(entry.method, pathname)}
+            />
+          )}
+        </div>
       </div>
     </Row>
   );
@@ -958,12 +1010,14 @@ export function DevtoolsPanel({
   onOpen,
   mockNetwork,
   bypass,
+  requestBypass,
 }: DevtoolsPanelProps) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<'main' | 'list' | 'requests'>('main');
   const [windows, setWindows] = useState<WindowState[]>([]);
   const [order, setOrder] = useState<string[]>([]);
   const [requests, setRequests] = useState<RequestLogEntry[]>([]);
+  const [bypassedRequestKeys, setBypassedRequestKeys] = useState<Set<string>>(new Set());
   const [importError, setImportError] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [entityFilter, setEntityFilter] = useState('');
@@ -978,12 +1032,18 @@ export function DevtoolsPanel({
   // Polls the request log at 1s while the "Requests" view is open, since
   // (unlike the entity list, which only changes on user action) new requests
   // can arrive continuously from whatever the app under test is doing.
+  // Bypass state is polled the same way, so a toggle armed from another tab
+  // (or another window of this same panel) still shows up here.
   useEffect(() => {
     if (view !== 'requests') return;
     let cancelled = false;
     async function poll() {
       const list = await onFetchRequestLog();
       if (!cancelled) setRequests(list);
+      if (requestBypass?.isAvailable) {
+        const keys = await requestBypass.onList();
+        if (!cancelled) setBypassedRequestKeys(new Set(keys));
+      }
     }
     void poll();
     const interval = setInterval(() => void poll(), 1000);
@@ -991,11 +1051,24 @@ export function DevtoolsPanel({
       cancelled = true;
       clearInterval(interval);
     };
-  }, [view, onFetchRequestLog]);
+  }, [view, onFetchRequestLog, requestBypass]);
 
   async function clearRequests() {
     await onClearRequestLog?.();
     setRequests(await onFetchRequestLog());
+  }
+
+  async function toggleRequestBypass(method: string, pathname: string) {
+    if (!requestBypass?.isAvailable) return;
+    const key = `${method.toUpperCase()} ${pathname}`;
+    const next = !bypassedRequestKeys.has(key);
+    await requestBypass.onSet(method, pathname, next);
+    setBypassedRequestKeys((prev) => {
+      const updated = new Set(prev);
+      if (next) updated.add(key);
+      else updated.delete(key);
+      return updated;
+    });
   }
 
   function focusWindow(id: string) {
@@ -1324,7 +1397,15 @@ export function DevtoolsPanel({
                     <span style={fadedStyle}>No requests yet.</span>
                   </Row>
                 ) : (
-                  requests.map((entry, i) => <RequestRow key={`${entry.timestamp}-${i}`} entry={entry} />)
+                  requests.map((entry, i) => (
+                    <RequestRow
+                      key={`${entry.timestamp}-${i}`}
+                      entry={entry}
+                      bypassAvailable={requestBypass?.isAvailable ?? false}
+                      isBypassed={bypassedRequestKeys.has(`${entry.method.toUpperCase()} ${pathnameOnly(entry.path)}`)}
+                      onToggleBypass={(method, pathname) => void toggleRequestBypass(method, pathname)}
+                    />
+                  ))
                 )}
               </div>
             </>

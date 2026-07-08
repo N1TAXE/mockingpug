@@ -143,7 +143,13 @@ explicitly if `mock.config.js` sets a different one. It gives you:
   answered (method, path, status, duration, time), via
   `GET {baseUrl}/__mockingpug/requests`, polled once a second while open.
   `POST {baseUrl}/__mockingpug/requests/clear` empties it. The devtools
-  sub-API's own calls are never logged.
+  sub-API's own calls are never logged. Each distinct request (deduped by
+  `METHOD` + path, ignoring the query string) also gets a "Use real data"
+  switch, via `GET`/`POST {baseUrl}/__mockingpug/requestBypass`: forwards
+  that exact request — list `GET`, item `GET`, `POST`, `PUT`, `PATCH`, or
+  `DELETE` — to `mock.config.js`'s `target` (a real backend base URL)
+  instead of answering with the mock. Hidden until `target` is configured
+  — see below.
 - A "Fail next request"/"Delay next" one-shot override per entity, via
   `GET`/`POST {baseUrl}/__mockingpug/override/:entity`: arms a single
   fail-or-delay for that entity's very next request only, then disarms
@@ -167,6 +173,20 @@ into this panel: both are React/MSW-specific concepts that don't apply to
 a Route Handler, which *is* the real server. Use the `rewrites()` recipe
 below to route a specific path around the mock entirely at build time, or
 Recipe B/C further down for a per-request or cookie-driven alternative.
+Per-request bypass (above, in the "Requests" view) is the one exception —
+it works here too, by forwarding to `target` rather than MSW's
+`passthrough()`:
+
+```js
+// mock.config.js
+module.exports = {
+  target: 'https://api.example.com', // no trailing slash; enables the per-request bypass switch
+};
+```
+
+If a request is bypassed but `target` is unset when a request actually
+hits it, the mock answers instead (with a console warning), rather than
+failing the request outright.
 
 ## Switching mock ↔ real API
 

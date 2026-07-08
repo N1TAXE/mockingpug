@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createNextHandlers, type NextRouteContext } from '../../src/next/handler.js';
 import { generateAll, type SchemaBundle } from '../../src/generator/index.js';
 import { MemoryStoreAdapter } from '../../src/store/index.js';
@@ -37,6 +37,10 @@ function plainParams(mock: string[]): NextRouteContext {
 }
 
 describe('devtools sub-API (`{baseUrl}/__mockingpug/*`)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('GET __mockingpug lists entity counts, the current runtime config, and docsEnabled (default true)', async () => {
     const ctx = await makeContext(5);
     const handlers = createNextHandlers(ctx);
@@ -242,6 +246,104 @@ describe('devtools sub-API (`{baseUrl}/__mockingpug/*`)', () => {
     expect(userRes.status).toBe(500);
   });
 
+  it('GET __mockingpug reports requestBypassAvailable: false when no "target" is configured', async () => {
+    const ctx = await makeContext(1);
+    const handlers = createNextHandlers(ctx);
+    const res = await handlers.GET(new Request('http://localhost/api/__mockingpug'), plainParams(['__mockingpug']));
+    const body = (await res.json()) as { requestBypassAvailable: boolean };
+    expect(body.requestBypassAvailable).toBe(false);
+  });
+
+  it('GET __mockingpug reports requestBypassAvailable: true once "target" is configured', async () => {
+    const ctx = await makeContext(1);
+    ctx.target = 'https://real.example.com';
+    const handlers = createNextHandlers(ctx);
+    const res = await handlers.GET(new Request('http://localhost/api/__mockingpug'), plainParams(['__mockingpug']));
+    const body = (await res.json()) as { requestBypassAvailable: boolean };
+    expect(body.requestBypassAvailable).toBe(true);
+  });
+
+  it('GET __mockingpug/requestBypass returns [] when nothing is bypassed', async () => {
+    const ctx = await makeContext(1);
+    const handlers = createNextHandlers(ctx);
+    const res = await handlers.GET(
+      new Request('http://localhost/api/__mockingpug/requestBypass'),
+      plainParams(['__mockingpug', 'requestBypass']),
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { keys: string[] }).toEqual({ keys: [] });
+  });
+
+  it('POST __mockingpug/requestBypass arms bypass, visible to a later GET list and to real requests', async () => {
+    const { RequestBypass } = await import('../../src/query/index.js');
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ real: true }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const ctx = await makeContext(1);
+    ctx.requestBypass = new RequestBypass();
+    ctx.target = 'https://real.example.com';
+    const handlers = createNextHandlers(ctx);
+
+    const postRes = await handlers.POST(
+      new Request('http://localhost/api/__mockingpug/requestBypass', {
+        method: 'POST',
+        body: JSON.stringify({ method: 'GET', pathname: '/api/user/1', bypassed: true }),
+      }),
+      plainParams(['__mockingpug', 'requestBypass']),
+    );
+    expect(postRes.status).toBe(200);
+    expect((await postRes.json()) as { bypassed: boolean }).toEqual({ bypassed: true });
+
+    const listRes = await handlers.GET(
+      new Request('http://localhost/api/__mockingpug/requestBypass'),
+      plainParams(['__mockingpug', 'requestBypass']),
+    );
+    expect((await listRes.json()) as { keys: string[] }).toEqual({ keys: ['GET /api/user/1'] });
+
+    const realRes = await handlers.GET(new Request('http://localhost/api/user/1'), plainParams(['user', '1']));
+    expect(await realRes.json()).toEqual({ real: true });
+  });
+
+  it('POST __mockingpug/requestBypass with bypassed: false un-bypasses the request', async () => {
+    const { RequestBypass } = await import('../../src/query/index.js');
+    const ctx = await makeContext(1);
+    ctx.requestBypass = new RequestBypass();
+    ctx.requestBypass.set('GET', '/api/user/1', true);
+    const handlers = createNextHandlers(ctx);
+
+    const res = await handlers.POST(
+      new Request('http://localhost/api/__mockingpug/requestBypass', {
+        method: 'POST',
+        body: JSON.stringify({ method: 'GET', pathname: '/api/user/1', bypassed: false }),
+      }),
+      plainParams(['__mockingpug', 'requestBypass']),
+    );
+    expect((await res.json()) as { bypassed: boolean }).toEqual({ bypassed: false });
+    expect(ctx.requestBypass.isBypassed('GET', '/api/user/1')).toBe(false);
+  });
+
+  it('devtools requestBypass calls are never written to ctx.requestLog', async () => {
+    const { RequestBypass, RequestLog } = await import('../../src/query/index.js');
+    const ctx = await makeContext(1);
+    ctx.requestLog = new RequestLog();
+    ctx.requestBypass = new RequestBypass();
+    const handlers = createNextHandlers(ctx);
+
+    await handlers.GET(
+      new Request('http://localhost/api/__mockingpug/requestBypass'),
+      plainParams(['__mockingpug', 'requestBypass']),
+    );
+    await handlers.POST(
+      new Request('http://localhost/api/__mockingpug/requestBypass', {
+        method: 'POST',
+        body: JSON.stringify({ method: 'GET', pathname: '/api/user/1', bypassed: true }),
+      }),
+      plainParams(['__mockingpug', 'requestBypass']),
+    );
+
+    expect(ctx.requestLog.list()).toHaveLength(0);
+  });
+
   it('devtools override calls are never written to ctx.requestLog', async () => {
     const { RequestLog } = await import('../../src/query/index.js');
     const ctx = await makeContext(1);
@@ -384,6 +486,22 @@ describe('devtools sub-API (`{baseUrl}/__mockingpug/*`)', () => {
           handlers.POST(
             new Request('http://localhost/api/__mockingpug/override/user', { method: 'POST', body: '{}' }),
             plainParams(['__mockingpug', 'override', 'user']),
+          ),
+      },
+      {
+        label: 'GET __mockingpug/requestBypass',
+        run: () =>
+          handlers.GET(
+            new Request('http://localhost/api/__mockingpug/requestBypass'),
+            plainParams(['__mockingpug', 'requestBypass']),
+          ),
+      },
+      {
+        label: 'POST __mockingpug/requestBypass',
+        run: () =>
+          handlers.POST(
+            new Request(`http://localhost/api/__mockingpug/requestBypass`, { method: 'POST', body: JSON.stringify({ method: 'GET', pathname: `/api/user/${id}`, bypassed: true }) }),
+            plainParams(['__mockingpug', 'requestBypass']),
           ),
       },
       {

@@ -1,4 +1,5 @@
-import { errorResponse, type QueryContext } from '../query/index.js';
+import type { QueryContext } from '../query/index.js';
+import { forwardToTarget } from './forward.js';
 import { createNextHandlers, type NextRouteContext, type NextRouteHandlers } from './handler.js';
 
 export interface CreateProxyHandlerOptions {
@@ -16,58 +17,9 @@ export interface CreateProxyHandlerOptions {
   shouldMock?: (request: Request) => boolean;
 }
 
-const HOP_BY_HOP_REQUEST_HEADERS = [
-  'host',
-  'connection',
-  'keep-alive',
-  'proxy-authenticate',
-  'proxy-authorization',
-  'te',
-  'trailer',
-  'transfer-encoding',
-  'upgrade',
-] as const;
-
-// Response is re-serialized from a buffered arrayBuffer(), so the original
-// content-encoding/content-length would no longer describe the bytes sent.
-const HOP_BY_HOP_RESPONSE_HEADERS = [...HOP_BY_HOP_REQUEST_HEADERS, 'content-encoding', 'content-length'] as const;
-
-function withoutHeaders(headers: Headers, drop: readonly string[]): Headers {
-  const filtered = new Headers(headers);
-  for (const key of drop) filtered.delete(key);
-  return filtered;
-}
-
 async function resolveSegments(routeCtx: NextRouteContext): Promise<string[]> {
   const resolved = await routeCtx.params;
   return resolved.mock ?? [];
-}
-
-// The Fetch spec forbids passing a body (even an empty one) alongside these
-// statuses: the `Response` constructor throws "Invalid response status code"
-// otherwise, since 204/205/304 are defined as always having a null body.
-const NULL_BODY_STATUSES = new Set([204, 205, 304]);
-
-async function forwardToTarget(request: Request, target: string, segments: string[]): Promise<Response> {
-  const { search } = new URL(request.url);
-  const targetUrl = `${target}/${segments.join('/')}${search}`;
-  const hasBody = request.method !== 'GET' && request.method !== 'HEAD' && request.body !== null;
-
-  try {
-    const upstream = await fetch(targetUrl, {
-      method: request.method,
-      headers: withoutHeaders(request.headers, HOP_BY_HOP_REQUEST_HEADERS),
-      body: hasBody ? await request.arrayBuffer() : undefined,
-    });
-    const responseBody = NULL_BODY_STATUSES.has(upstream.status) ? null : await upstream.arrayBuffer();
-    return new Response(responseBody, {
-      status: upstream.status,
-      statusText: upstream.statusText,
-      headers: withoutHeaders(upstream.headers, HOP_BY_HOP_RESPONSE_HEADERS),
-    });
-  } catch (error) {
-    return errorResponse(error);
-  }
 }
 
 /**

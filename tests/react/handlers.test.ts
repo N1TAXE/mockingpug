@@ -316,6 +316,83 @@ describe('createMockHandlers : end-to-end over msw/node + real fetch', () => {
     }
   });
 
+  it('request bypass passes through GET/:id, PUT, PATCH, DELETE for exactly that method+pathname', async () => {
+    const { RequestBypass } = await import('../../src/query/index.js');
+    const ctx = await makeContext(3, 0);
+    ctx.requestBypass = new RequestBypass();
+    ctx.requestBypass.set('GET', '/api/user/1', true);
+    ctx.requestBypass.set('PUT', '/api/user/1', true);
+    ctx.requestBypass.set('DELETE', '/api/user/1', true);
+    const handlers = createMockHandlers(ctx, '/api');
+
+    const getBypassed = await resolveAgainstHandlers(handlers, new Request('http://localhost:3000/api/user/1'));
+    expect(isPassthroughResponse(getBypassed)).toBe(true);
+
+    const getUnaffected = await resolveAgainstHandlers(handlers, new Request('http://localhost:3000/api/user/2'));
+    expect(isPassthroughResponse(getUnaffected)).toBe(false);
+    expect(getUnaffected?.status).toBe(200);
+
+    const putBypassed = await resolveAgainstHandlers(
+      handlers,
+      new Request('http://localhost:3000/api/user/1', { method: 'PUT', body: '{}', headers: { 'content-type': 'application/json' } }),
+    );
+    expect(isPassthroughResponse(putBypassed)).toBe(true);
+
+    const deleteBypassed = await resolveAgainstHandlers(handlers, new Request('http://localhost:3000/api/user/1', { method: 'DELETE' }));
+    expect(isPassthroughResponse(deleteBypassed)).toBe(true);
+  });
+
+  it('bypassing an item route does not affect the collection GET/POST for that entity', async () => {
+    const { RequestBypass } = await import('../../src/query/index.js');
+    const ctx = await makeContext(3, 0);
+    ctx.requestBypass = new RequestBypass();
+    ctx.requestBypass.set('GET', '/api/user/1', true);
+    const handlers = createMockHandlers(ctx, '/api');
+
+    const list = await resolveAgainstHandlers(handlers, new Request('http://localhost:3000/api/user'));
+    expect(isPassthroughResponse(list)).toBe(false);
+    expect(list?.status).toBe(200);
+  });
+
+  it('bypassing the collection GET (list route) passes it through, independent of any item route', async () => {
+    const { RequestBypass } = await import('../../src/query/index.js');
+    const ctx = await makeContext(3, 0);
+    ctx.requestBypass = new RequestBypass();
+    ctx.requestBypass.set('GET', '/api/user', true);
+    const handlers = createMockHandlers(ctx, '/api');
+
+    const list = await resolveAgainstHandlers(handlers, new Request('http://localhost:3000/api/user'));
+    expect(isPassthroughResponse(list)).toBe(true);
+
+    const item = await resolveAgainstHandlers(handlers, new Request('http://localhost:3000/api/user/1'));
+    expect(isPassthroughResponse(item)).toBe(false);
+    expect(item?.status).toBe(200);
+  });
+
+  it('bypassing the collection GET ignores the query string (?page=2 vs ?page=3 is "the same request")', async () => {
+    const { RequestBypass } = await import('../../src/query/index.js');
+    const ctx = await makeContext(3, 0);
+    ctx.requestBypass = new RequestBypass();
+    ctx.requestBypass.set('GET', '/api/user', true);
+    const handlers = createMockHandlers(ctx, '/api');
+
+    const res = await resolveAgainstHandlers(handlers, new Request('http://localhost:3000/api/user?page=2'));
+    expect(isPassthroughResponse(res)).toBe(true);
+  });
+
+  it('un-bypassing a request restores normal mock responses', async () => {
+    const { RequestBypass } = await import('../../src/query/index.js');
+    const ctx = await makeContext(2, 0);
+    ctx.requestBypass = new RequestBypass();
+    ctx.requestBypass.set('GET', '/api/user/1', true);
+    ctx.requestBypass.set('GET', '/api/user/1', false);
+    const handlers = createMockHandlers(ctx, '/api');
+
+    const res = await resolveAgainstHandlers(handlers, new Request('http://localhost:3000/api/user/1'));
+    expect(isPassthroughResponse(res)).toBe(false);
+    expect(res?.status).toBe(200);
+  });
+
   it('POST tolerates a malformed JSON body instead of crashing', async () => {
     const ctx = await makeContext(1, 0);
     server = setupServer(...createMockHandlers(ctx, '/api'));

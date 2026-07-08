@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createNextHandlers, type NextRouteContext } from '../../src/next/handler.js';
 import { generateAll, type SchemaBundle } from '../../src/generator/index.js';
 import { MemoryStoreAdapter } from '../../src/store/index.js';
@@ -41,6 +41,10 @@ function promiseParams(mock: string[]): NextRouteContext {
 }
 
 describe('createNextHandlers', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('GET list works with both the pre-15 (plain) and 15+ (Promise) params shapes', async () => {
     const ctx = await makeContext(25, 0);
     const handlers = createNextHandlers(ctx);
@@ -260,5 +264,109 @@ describe('createNextHandlers', () => {
 
     const userRes = await handlers.GET(new Request('http://localhost/api/user'), plainParams(['user']));
     expect(userRes.status).toBe(500);
+  });
+
+  it('a bypassed item route forwards GET/PUT/PATCH/DELETE to "target" instead of answering with the mock', async () => {
+    const { RequestBypass } = await import('../../src/query/index.js');
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ real: true }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const ctx = await makeContext(3, 0);
+    ctx.requestBypass = new RequestBypass();
+    ctx.requestBypass.set('GET', '/api/user/1', true);
+    ctx.requestBypass.set('PUT', '/api/user/1', true);
+    ctx.requestBypass.set('DELETE', '/api/user/1', true);
+    ctx.target = 'https://real.example.com';
+    const handlers = createNextHandlers(ctx);
+
+    const get = await handlers.GET(new Request('http://localhost/api/user/1'), plainParams(['user', '1']));
+    expect(await get.json()).toEqual({ real: true });
+    expect(fetchMock).toHaveBeenLastCalledWith('https://real.example.com/user/1', expect.objectContaining({ method: 'GET' }));
+
+    const put = await handlers.PUT(new Request('http://localhost/api/user/1', { method: 'PUT' }), plainParams(['user', '1']));
+    expect(await put.json()).toEqual({ real: true });
+
+    const del = await handlers.DELETE(new Request('http://localhost/api/user/1', { method: 'DELETE' }), plainParams(['user', '1']));
+    expect(await del.json()).toEqual({ real: true });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('a bypassed collection GET (list route) forwards to "target" too, independent of any item route', async () => {
+    const { RequestBypass } = await import('../../src/query/index.js');
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ real: true }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const ctx = await makeContext(3, 0);
+    ctx.requestBypass = new RequestBypass();
+    ctx.requestBypass.set('GET', '/api/user', true);
+    ctx.target = 'https://real.example.com';
+    const handlers = createNextHandlers(ctx);
+
+    const list = await handlers.GET(new Request('http://localhost/api/user'), plainParams(['user']));
+    expect(await list.json()).toEqual({ real: true });
+    expect(fetchMock).toHaveBeenLastCalledWith('https://real.example.com/user', expect.objectContaining({ method: 'GET' }));
+
+    const item = await handlers.GET(new Request('http://localhost/api/user/1'), plainParams(['user', '1']));
+    expect(item.status).toBe(200);
+    const itemBody = (await item.json()) as { id: unknown };
+    expect(itemBody.id).toBe(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not bypass a request that was not armed, even to the same entity', async () => {
+    const { RequestBypass } = await import('../../src/query/index.js');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const ctx = await makeContext(3, 0);
+    ctx.requestBypass = new RequestBypass();
+    ctx.requestBypass.set('GET', '/api/user/1', true);
+    ctx.target = 'https://real.example.com';
+    const handlers = createNextHandlers(ctx);
+
+    const res = await handlers.GET(new Request('http://localhost/api/user/2'), plainParams(['user', '2']));
+    expect(res.status).toBe(200);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not bypass the collection GET/POST route when only an item route is bypassed', async () => {
+    const { RequestBypass } = await import('../../src/query/index.js');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const ctx = await makeContext(3, 0);
+    ctx.requestBypass = new RequestBypass();
+    ctx.requestBypass.set('GET', '/api/user/1', true);
+    ctx.target = 'https://real.example.com';
+    const handlers = createNextHandlers(ctx);
+
+    const res = await handlers.GET(new Request('http://localhost/api/user'), plainParams(['user']));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: unknown[] };
+    expect(body.data).toHaveLength(3);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to serving the mock (with a console warning) when a request is bypassed but no "target" is configured', async () => {
+    const { RequestBypass } = await import('../../src/query/index.js');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const ctx = await makeContext(2, 0);
+    ctx.requestBypass = new RequestBypass();
+    ctx.requestBypass.set('GET', '/api/user/1', true);
+    // ctx.target intentionally left unset.
+    const handlers = createNextHandlers(ctx);
+
+    const res = await handlers.GET(new Request('http://localhost/api/user/1'), plainParams(['user', '1']));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { id: unknown };
+    expect(body.id).toBe(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('/api/user/1'));
+
+    warnSpy.mockRestore();
   });
 });

@@ -24,9 +24,14 @@ export interface MockDevtoolsProps {
  * Floating dev-only panel: mock/off toggle, live `delay`/`errorRate`
  * editing, and a "Mock Data" list of every entity (record count + per-entity
  * bypass). Clicking an entity opens its records in a separate, draggable
- * floating window. Meant to be rendered only behind the same dev-only import
- * gate as `startMocking()` itself (see `react/README.md`); never shipped to
- * production.
+ * floating window. The "Requests" view lists the last 50 requests the mock
+ * actually answered, each with its own "Use real data" toggle — keyed by
+ * the exact `METHOD pathname` (e.g. a list fetch and a by-id fetch to the
+ * same entity toggle independently), matching however your app code
+ * actually calls the mock, narrower than flipping the whole entity to real
+ * with per-entity bypass. Meant to be rendered only behind the same dev-only
+ * import gate as `startMocking()` itself (see `react/README.md`); never
+ * shipped to production.
  *
  * Invariant: every action this panel takes (reset, record edit, snapshot
  * export/import, request-log read) calls into `ctx`/the query layer
@@ -75,6 +80,14 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
 
   async function armOneShotOverride(entity: string, patch: OneShotOverrideEntry): Promise<void> {
     ctx.oneShotOverrides?.set(entity, patch);
+  }
+
+  async function setRequestBypass(method: string, pathname: string, isBypassed: boolean): Promise<void> {
+    ctx.requestBypass?.set(method, pathname, isBypassed);
+  }
+
+  async function listRequestBypass(): Promise<string[]> {
+    return ctx.requestBypass?.list() ?? [];
   }
 
   async function peekOneShotOverride(entity: string): Promise<OneShotOverrideEntry | undefined> {
@@ -134,6 +147,11 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
       bypass={{
         isBypassed,
         onToggle: (entity) => (isBypassed(entity) ? unbypass(entity) : bypass(entity)),
+      }}
+      requestBypass={{
+        isAvailable: true,
+        onSet: setRequestBypass,
+        onList: listRequestBypass,
       }}
     />
   );

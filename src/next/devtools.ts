@@ -52,8 +52,11 @@ function baseUrlFromRequest(request: Request): string {
  * Next.js transport, where there's no client-side store to read directly.
  * This is what `<MockDevtools>` from `mockingpug/next` talks to over
  * `fetch()`. Unlike the React/MSW devtools, there's no "mock network"
- * toggle or per-entity bypass here: a Route Handler *is* the real server,
- * so there's nothing to intercept (see `next/README.md`).
+ * toggle here: a Route Handler *is* the real server, so there's nothing to
+ * intercept at that level (see `next/README.md`). Per-request bypass is the
+ * one exception — it works here too, but by forwarding to `mock.config.js`'s
+ * `target` (see `bypassedResponse()` in `handler.ts`) rather than MSW's
+ * `passthrough()`, and only when `target` is actually configured.
  *
  * `ctx.runtime` is mutated in place (not replaced) so the change is visible
  * to every subsequent request handled by this same process, the same object
@@ -75,7 +78,12 @@ export async function handleDevtoolsRequest(
   const [action, entity, id] = segments;
 
   if (!action && method === 'GET') {
-    return jsonResponse({ entities: await entityCounts(ctx), runtime: runtimeSnapshot(ctx), docsEnabled: docsEnabled(ctx) });
+    return jsonResponse({
+      entities: await entityCounts(ctx),
+      runtime: runtimeSnapshot(ctx),
+      docsEnabled: docsEnabled(ctx),
+      requestBypassAvailable: Boolean(ctx.target),
+    });
   }
 
   if (action === 'runtime' && method === 'POST') {
@@ -129,6 +137,25 @@ export async function handleDevtoolsRequest(
     const body = (await readJsonBody(request)) as OneShotOverrideEntry;
     ctx.oneShotOverrides?.set(entity, body);
     return jsonResponse({ override: ctx.oneShotOverrides?.peek(entity) ?? {} });
+  }
+
+  // Per-request bypass: which exact "METHOD pathname" combinations currently
+  // forward to `target` instead of being answered by the mock (a list route
+  // and an item route bypass independently — see `requestBypass.ts`). GET
+  // reflects current state (e.g. when the "Requests" view opens); POST
+  // arms/disarms one "METHOD pathname" key.
+  if (action === 'requestBypass' && !entity && method === 'GET') {
+    return jsonResponse({ keys: ctx.requestBypass?.list() ?? [] });
+  }
+
+  if (action === 'requestBypass' && !entity && method === 'POST') {
+    const body = (await readJsonBody(request)) as { method?: string; pathname?: string; bypassed?: boolean };
+    if (body.method && body.pathname) {
+      ctx.requestBypass?.set(body.method, body.pathname, body.bypassed === true);
+    }
+    return jsonResponse({
+      bypassed: body.method && body.pathname ? (ctx.requestBypass?.isBypassed(body.method, body.pathname) ?? false) : false,
+    });
   }
 
   // Export/import the entire store as one JSON snapshot, for sharing an

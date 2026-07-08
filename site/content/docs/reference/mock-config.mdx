@@ -32,6 +32,7 @@ module.exports = {
   docs: {
     enabled: true,                 // mpug docs + <MockDevtools>'s "API Docs" button
   },
+  // target: 'https://api.example.com', // mockingpug/next only, no default — needed for <MockDevtools>'s per-request bypass
 };
 ```
 
@@ -131,3 +132,14 @@ auto-generated description of your mock's exact shape sitting around, or
 if you already publish your own API docs and don't want a second,
 generated one. See [Devtools](/docs/guides/devtools) for what the button
 does.
+
+### `target`
+
+Base URL of a real backend, e.g. `'https://api.example.com'` (no trailing
+slash) — **`mockingpug/next` only**. No default: unset means
+`<MockDevtools>`'s per-request "Use real data" switch stays hidden for that
+transport, since there's nowhere to forward a bypassed request's requests
+to. `mockingpug/react` doesn't need this — MSW's `passthrough()` already
+knows the real absolute URL the browser's own `fetch()` used. See
+[Devtools → per-request bypass for
+Next.js](/docs/guides/devtools#per-request-bypass-for-nextjs).

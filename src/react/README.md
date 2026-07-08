@@ -231,7 +231,13 @@ entities stay responsive to filter and scroll), a "Requests" view
 listing the last 50 requests the mock actually answered
 (method, path, status, duration, time) so you don't have to switch to the
 Network tab to
-see whether a `fetch()` reached the mock, and an "API Docs" row that opens
+see whether a `fetch()` reached the mock — each distinct request (deduped
+by `METHOD` + path, ignoring the query string) also gets its own "Use real
+data" switch there, unlike the per-entity bypass checkboxes below this
+bypasses just that exact request (list `GET`, item `GET`, `POST`, `PUT`,
+`PATCH`, or `DELETE`) via MSW's `passthrough()`, useful when the real
+backend only diverges from the mock's shape for one specific endpoint —
+and an "API Docs" row that opens
 a generated OpenAPI-based HTML reference of the whole REST surface in a
 new tab — built entirely client-side from `ctx.schemas`, no server needed.
 Hidden when `mock.config.js`'s `docs.enabled` is `false` (defaults `true`):

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { RuntimeConfig } from '../cli/mockConfig.js';
-import { DEFAULT_RUNTIME, OneShotOverrides, RequestLog, type QueryContext } from '../query/index.js';
+import { DEFAULT_RUNTIME, OneShotOverrides, RequestBypass, RequestLog, type QueryContext } from '../query/index.js';
 import { bypass as bypassEntity, isRuntimeBypassed, unbypass as unbypassEntity } from './bypassState.js';
 
 export type MockMode = 'mock' | 'off';
@@ -80,6 +80,13 @@ export function MockProvider({
   if (!oneShotOverridesRef.current) {
     oneShotOverridesRef.current = ctx.oneShotOverrides ?? new OneShotOverrides();
     ctx.oneShotOverrides = oneShotOverridesRef.current;
+  }
+
+  // Same synchronous ref-guard as above, for per-request bypass state.
+  const requestBypassRef = useRef<RequestBypass | null>(null);
+  if (!requestBypassRef.current) {
+    requestBypassRef.current = ctx.requestBypass ?? new RequestBypass();
+    ctx.requestBypass = requestBypassRef.current;
   }
 
   useEffect(() => {

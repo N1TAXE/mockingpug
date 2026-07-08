@@ -4,7 +4,7 @@ import { loadConfig } from '../cli/mockConfig.js';
 import { loadProject } from '../cli/schemaLoader.js';
 import { generateAll } from '../generator/index.js';
 import { FileStoreAdapter, MemoryStoreAdapter, type StoreAdapter } from '../store/index.js';
-import { OneShotOverrides, RequestLog, type QueryContext } from '../query/index.js';
+import { OneShotOverrides, RequestBypass, RequestLog, type QueryContext } from '../query/index.js';
 
 export interface MockContext {
   ctx: QueryContext;
@@ -49,6 +49,8 @@ export async function createMockContext(projectDir: string): Promise<MockContext
     requestLog: new RequestLog(),
     oneShotOverrides: new OneShotOverrides(),
     docs: config.docs,
+    requestBypass: new RequestBypass(),
+    ...(config.target !== undefined ? { target: config.target } : {}),
   };
 
   return { ctx, baseUrl: config.baseUrl, dir: join(projectDir, config.dir) };

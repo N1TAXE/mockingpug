@@ -21,6 +21,7 @@ import type { DocsConfig, PaginationConfig, RuntimeConfig } from '../cli/mockCon
 import { filterRecords } from './filter.js';
 import type { OneShotOverrides } from './oneShotOverride.js';
 import { paginate, type PaginatedResult } from './pagination.js';
+import type { RequestBypass } from './requestBypass.js';
 import type { RequestLog } from './requestLog.js';
 import { searchRecords } from './search.js';
 import { sortRecords } from './sort.js';
@@ -43,6 +44,16 @@ export interface QueryContext {
   oneShotOverrides?: OneShotOverrides;
   /** Controls `<MockDevtools>`'s "API Docs" button/`mpug docs`'s CLI output. Omit to default to enabled, matching `mock.config.js`'s `docs.enabled: true` default. */
   docs?: DocsConfig;
+  /** Per-request bypass state (exact `METHOD pathname`, not a stored record's identity) armed by `<MockDevtools>`. Omit to disable the feature entirely. */
+  requestBypass?: RequestBypass;
+  /**
+   * Base URL of a real backend to forward a bypassed request to —
+   * `mockingpug/next` only (React/MSW's `passthrough()` doesn't need one; it
+   * already knows the absolute URL the browser's own `fetch()` used). Unset
+   * means request bypass has nowhere to forward to, so `<MockDevtools>`
+   * won't offer the toggle for `mockingpug/next`.
+   */
+  target?: string;
 }
 
 /** What a consumer actually sees: internal bookkeeping fields stripped. */

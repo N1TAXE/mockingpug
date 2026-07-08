@@ -224,4 +224,21 @@ describe('loadConfig', () => {
     await writeFile(join(dir, 'mock.config.js'), 'module.exports = { docs: { enabled: "yes" } };', 'utf-8');
     await expect(loadConfig(dir)).rejects.toMatchObject({ code: 'MP-CONFIG-021' });
   });
+
+  it('leaves "target" undefined when omitted', async () => {
+    await writeFile(join(dir, 'mock.config.js'), 'module.exports = {};', 'utf-8');
+    const config = await loadConfig(dir);
+    expect(config.target).toBeUndefined();
+  });
+
+  it('merges a "target" override over the defaults', async () => {
+    await writeFile(join(dir, 'mock.config.js'), 'module.exports = { target: "https://api.example.com" };', 'utf-8');
+    const config = await loadConfig(dir);
+    expect(config.target).toBe('https://api.example.com');
+  });
+
+  it('throws ConfigError on a non-string "target"', async () => {
+    await writeFile(join(dir, 'mock.config.js'), 'module.exports = { target: 42 };', 'utf-8');
+    await expect(loadConfig(dir)).rejects.toMatchObject({ code: 'MP-CONFIG-022' });
+  });
 });

@@ -77,6 +77,13 @@ export interface MockConfig {
   limits: LimitsConfig;
   runtime: RuntimeConfig;
   docs: DocsConfig;
+  /**
+   * Base URL of a real backend, e.g. `"https://api.example.com"` — `mockingpug/next`
+   * only. Required for `<MockDevtools>`'s per-request bypass toggle to work
+   * there (React/MSW's equivalent uses `passthrough()` instead, no `target`
+   * needed). No default: unset means the toggle stays hidden for `mockingpug/next`.
+   */
+  target?: string;
 }
 
 export const DEFAULT_CONFIG: MockConfig = {
@@ -106,7 +113,7 @@ function validate(config: unknown, configPath: string): asserts config is Partia
       location: { file: configPath },
     });
   }
-  const { dir, seed, baseUrl, persist, pagination, limits, runtime, docs } = config as Record<string, unknown>;
+  const { dir, seed, baseUrl, persist, pagination, limits, runtime, docs, target } = config as Record<string, unknown>;
 
   if (dir !== undefined && typeof dir !== 'string') {
     throw new ConfigError('MP-CONFIG-002', '"dir" must be a string', {
@@ -220,6 +227,11 @@ function validate(config: unknown, configPath: string): asserts config is Partia
       });
     }
   }
+  if (target !== undefined && typeof target !== 'string') {
+    throw new ConfigError('MP-CONFIG-022', '"target" must be a string', {
+      location: { file: configPath, path: 'target' },
+    });
+  }
 }
 
 /** Loads and validates `mock.config.js`, falling back to defaults if it doesn't exist yet. */
@@ -273,5 +285,6 @@ export async function loadConfig(projectDir: string): Promise<MockConfig> {
     docs: {
       enabled: userConfig.docs?.enabled ?? DEFAULT_CONFIG.docs.enabled,
     },
+    ...(userConfig.target !== undefined ? { target: userConfig.target } : {}),
   };
 }

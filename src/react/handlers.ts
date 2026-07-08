@@ -29,6 +29,17 @@ function joinUrl(baseUrl: string, ...segments: string[]): string {
 export function createMockHandlers(ctx: QueryContext, baseUrl: string): RequestHandler[] {
   const handlers: RequestHandler[] = [];
 
+  // Per-request bypass (`<MockDevtools>`-armed, exact `METHOD pathname`,
+  // e.g. "GET /api/faqCategory" for the list route or
+  // "GET /api/faqCategory/1" for one record — independent toggles). MSW's
+  // `passthrough()` here needs no extra config: the browser's own
+  // `fetch()` already has the real absolute URL, so letting the request
+  // through is enough, no `target` to forward to.
+  function isRequestBypassed(request: Request): boolean {
+    const pathname = new URL(request.url).pathname;
+    return ctx.requestBypass?.isBypassed(request.method, pathname) ?? false;
+  }
+
   for (const entity of Object.keys(ctx.schemas)) {
     const collectionUrl = joinUrl(baseUrl, entity);
     const itemUrl = joinUrl(baseUrl, entity, ':id');
@@ -43,7 +54,7 @@ export function createMockHandlers(ctx: QueryContext, baseUrl: string): RequestH
 
     handlers.push(
       http.get(collectionUrl, async ({ request }) => {
-        if (isBypassed()) return passthrough();
+        if (isBypassed() || isRequestBypassed(request)) return passthrough();
         const startedAt = Date.now();
         let response: Response;
         try {
@@ -61,7 +72,7 @@ export function createMockHandlers(ctx: QueryContext, baseUrl: string): RequestH
 
     handlers.push(
       http.get(itemUrl, async ({ request, params }) => {
-        if (isBypassed()) return passthrough();
+        if (isBypassed() || isRequestBypassed(request)) return passthrough();
         const startedAt = Date.now();
         let response: Response;
         try {
@@ -77,7 +88,7 @@ export function createMockHandlers(ctx: QueryContext, baseUrl: string): RequestH
 
     handlers.push(
       http.post(collectionUrl, async ({ request }) => {
-        if (isBypassed()) return passthrough();
+        if (isBypassed() || isRequestBypassed(request)) return passthrough();
         const startedAt = Date.now();
         let response: Response;
         try {
@@ -95,7 +106,7 @@ export function createMockHandlers(ctx: QueryContext, baseUrl: string): RequestH
     for (const method of ['put', 'patch'] as const) {
       handlers.push(
         http[method](itemUrl, async ({ request, params }) => {
-          if (isBypassed()) return passthrough();
+          if (isBypassed() || isRequestBypassed(request)) return passthrough();
           const startedAt = Date.now();
           let response: Response;
           try {
@@ -113,7 +124,7 @@ export function createMockHandlers(ctx: QueryContext, baseUrl: string): RequestH
 
     handlers.push(
       http.delete(itemUrl, async ({ request, params }) => {
-        if (isBypassed()) return passthrough();
+        if (isBypassed() || isRequestBypassed(request)) return passthrough();
         const startedAt = Date.now();
         let response: Response;
         try {

@@ -13,6 +13,7 @@ import {
   type QueryContext,
 } from '../query/index.js';
 import { DEVTOOLS_SEGMENT, handleDevtoolsRequest } from './devtools.js';
+import { forwardToTarget } from './forward.js';
 
 /**
  * Matches both the App Router's pre-15 shape (`params` as a plain object)
@@ -41,6 +42,28 @@ function notFound(): Response {
 }
 
 /**
+ * If `<MockDevtools>` armed a per-request bypass for this exact
+ * `METHOD pathname` (e.g. "GET /api/faqCategory" for a list route, or
+ * "GET /api/faqCategory/1" for one record — independent toggles, list and
+ * item routes bypass separately), forwards to `mock.config.js`'s `target`
+ * and returns that response; otherwise `undefined`, meaning "answer with
+ * the mock as usual". Falls back to the mock (with a console warning, not a
+ * hard failure — a misconfigured `target` shouldn't take down every
+ * bypassed request) if the bypass is armed but no `target` is configured.
+ */
+async function bypassedResponse(ctx: QueryContext, request: Request, segments: readonly string[]): Promise<Response | undefined> {
+  const pathname = new URL(request.url).pathname;
+  if (!ctx.requestBypass?.isBypassed(request.method, pathname)) return undefined;
+  if (!ctx.target) {
+    console.warn(
+      `[mockingpug] request bypass armed for "${request.method} ${pathname}" but no "target" is configured in mock.config.js; serving mock instead`,
+    );
+    return undefined;
+  }
+  return forwardToTarget(request, ctx.target, segments);
+}
+
+/**
  * Builds `GET`/`POST`/`PUT`/`PATCH`/`DELETE` handlers for a single Next.js
  * App Router catch-all Route Handler
  * (`app/api/[[...mock]]/route.ts`), backed by the exact same
@@ -63,8 +86,13 @@ export function createNextHandlers(ctx: QueryContext): NextRouteHandlers {
     const startedAt = Date.now();
     let response: Response;
     try {
-      await simulateRuntimeForEntity(ctx, entity);
-      response = jsonResponse(await updateRecord(entity, id, await readJsonBody(request), ctx));
+      const bypassed = await bypassedResponse(ctx, request, segments);
+      if (bypassed) {
+        response = bypassed;
+      } else {
+        await simulateRuntimeForEntity(ctx, entity);
+        response = jsonResponse(await updateRecord(entity, id, await readJsonBody(request), ctx));
+      }
     } catch (error) {
       response = errorResponse(error);
     }
@@ -87,13 +115,18 @@ export function createNextHandlers(ctx: QueryContext): NextRouteHandlers {
       const startedAt = Date.now();
       let response: Response;
       try {
-        await simulateRuntimeForEntity(ctx, entity);
-        if (id !== undefined) {
-          response = jsonResponse(await getRecordById(entity, id, ctx));
+        const bypassed = await bypassedResponse(ctx, request, segments);
+        if (bypassed) {
+          response = bypassed;
         } else {
-          const url = new URL(request.url);
-          const { data, meta } = await listRecords(entity, url.searchParams, ctx);
-          response = buildListResponse(data, meta, ctx.pagination.strategy !== false && ctx.pagination.envelope);
+          await simulateRuntimeForEntity(ctx, entity);
+          if (id !== undefined) {
+            response = jsonResponse(await getRecordById(entity, id, ctx));
+          } else {
+            const url = new URL(request.url);
+            const { data, meta } = await listRecords(entity, url.searchParams, ctx);
+            response = buildListResponse(data, meta, ctx.pagination.strategy !== false && ctx.pagination.envelope);
+          }
         }
       } catch (error) {
         response = errorResponse(error);
@@ -116,9 +149,14 @@ export function createNextHandlers(ctx: QueryContext): NextRouteHandlers {
       const startedAt = Date.now();
       let response: Response;
       try {
-        await simulateRuntimeForEntity(ctx, entity);
-        const created = await createRecord(entity, await readJsonBody(request), ctx);
-        response = jsonResponse(created, { status: 201 });
+        const bypassed = await bypassedResponse(ctx, request, segments);
+        if (bypassed) {
+          response = bypassed;
+        } else {
+          await simulateRuntimeForEntity(ctx, entity);
+          const created = await createRecord(entity, await readJsonBody(request), ctx);
+          response = jsonResponse(created, { status: 201 });
+        }
       } catch (error) {
         response = errorResponse(error);
       }
@@ -143,9 +181,14 @@ export function createNextHandlers(ctx: QueryContext): NextRouteHandlers {
       const startedAt = Date.now();
       let response: Response;
       try {
-        await simulateRuntimeForEntity(ctx, entity);
-        await deleteRecord(entity, id, ctx);
-        response = new Response(null, { status: 204 });
+        const bypassed = await bypassedResponse(ctx, request, segments);
+        if (bypassed) {
+          response = bypassed;
+        } else {
+          await simulateRuntimeForEntity(ctx, entity);
+          await deleteRecord(entity, id, ctx);
+          response = new Response(null, { status: 204 });
+        }
       } catch (error) {
         response = errorResponse(error);
       }
