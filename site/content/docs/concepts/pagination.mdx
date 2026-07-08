@@ -26,7 +26,7 @@ Set via `pagination.strategy`:
 Customizable per-project via `pagination.params`, the defaults:
 
 ```js
-params: { page: 'page', limit: 'limit', offset: 'offset', cursor: 'cursor' }
+params: { page: 'page', limit: 'limit', offset: 'offset', cursor: 'cursor', groupBy: 'groupBy', limitPerGroup: 'limitPerGroup' }
 ```
 
 Rename `limit` to `perPage`, for instance, if that's your existing API's
@@ -35,6 +35,35 @@ convention:
 ```js
 pagination: { params: { limit: 'perPage' } }
 ```
+
+## Per-group limit for batch requests
+
+A batch request like `?group_id=1,2,3&limit=20` (the comma-separated OR
+filter from [Filtering](/docs/concepts/filtering-and-sorting#filtering),
+not a dedicated "batch" feature) applies `limit` once to the flattened
+result across all
+three groups — 20 records total, however they happen to split across
+`group_id`s 1, 2, and 3, not 20 *per* group. If your real API instead
+guarantees N records for *each* id in a batch fetch (a common shape for
+something like `getProductsByGroupIds`), add `groupBy` (naming the field
+to group by) and `limitPerGroup` alongside your filter:
+
+```
+GET /api/product?group_id=1,2,3&groupBy=group_id&limitPerGroup=5
+```
+
+This returns up to 5 products for *each* of groups 1, 2, and 3 (up to 15
+total), applying the cap after grouping instead of once to the whole
+list. It replaces the normal `page`/`offset`/`cursor` slicing for that
+request — filtering, search, and sort still run first, same as always —
+and the response `meta` switches shape to
+`{ strategy: 'group', groupBy, limitPerGroup, totalGroups, total }`
+(`envelope: false` sets `X-Limit-Per-Group`, `X-Total-Groups`, and
+`X-Group-By` headers instead of `X-Limit`/`X-Page`/etc). Only activates
+when **both** `groupBy` and `limitPerGroup` are present in the query
+string — `groupBy` alone (or `limitPerGroup` alone) is ignored and normal
+pagination applies. Not available when `pagination.strategy` is `false`,
+same as the rest of pagination.
 
 ## Bounds and fallbacks
 

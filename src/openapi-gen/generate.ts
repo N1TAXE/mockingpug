@@ -197,6 +197,19 @@ function listParameters(
       params.push(stringParam(p.cursor, "Opaque cursor from a previous response's meta.nextCursor."));
     }
     params.push(intParam(p.limit, `Max records per page (default ${pagination.defaultLimit}, capped at ${pagination.maxLimit}).`, pagination.defaultLimit));
+    params.push(
+      stringParam(
+        p.groupBy,
+        `Field name to group by. Combined with "${p.limitPerGroup}", applies the limit per distinct value of this field instead of once to the whole batch — e.g. "?${p.groupBy}=category_id&${p.limitPerGroup}=5" returns up to 5 records for *each* category, not 5 total. Response meta switches to {strategy:"group",...} instead of the usual pagination meta when both params are set.`,
+      ),
+    );
+    params.push(
+      intParam(
+        p.limitPerGroup,
+        `Max records per distinct "${p.groupBy}" value; only applies when "${p.groupBy}" is also set (default ${pagination.defaultLimit}, capped at ${pagination.maxLimit}).`,
+        undefined,
+      ),
+    );
   }
   params.push(stringParam('sort', 'Comma-separated "field:asc|desc" clauses, e.g. "price:asc,name:desc".'));
   params.push(stringParam('q', 'Case-insensitive substring search across every string field (or just the fields in `searchFields`).'));

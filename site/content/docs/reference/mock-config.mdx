@@ -16,7 +16,7 @@ module.exports = {
   },
   pagination: {
     strategy: 'page',            // 'page' | 'offset' | 'cursor' | false
-    params: { page: 'page', limit: 'limit', offset: 'offset', cursor: 'cursor' },
+    params: { page: 'page', limit: 'limit', offset: 'offset', cursor: 'cursor', groupBy: 'groupBy', limitPerGroup: 'limitPerGroup' },
     defaultLimit: 20,
     maxLimit: 100,
     envelope: true,               // true -> { data, meta } body; false -> raw array + X-* headers

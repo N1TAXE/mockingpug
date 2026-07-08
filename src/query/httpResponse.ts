@@ -50,10 +50,16 @@ export function buildListResponse(data: unknown[], meta: PaginationMeta | null, 
     const headers = new Headers();
     if (meta) {
       headers.set('X-Total-Count', String(meta.total));
-      headers.set('X-Limit', String(meta.limit));
-      if (meta.strategy === 'page') headers.set('X-Page', String(meta.page));
-      if (meta.strategy === 'offset') headers.set('X-Offset', String(meta.offset));
-      if (meta.strategy === 'cursor' && meta.nextCursor !== null) headers.set('X-Next-Cursor', meta.nextCursor);
+      if (meta.strategy === 'group') {
+        headers.set('X-Limit-Per-Group', String(meta.limitPerGroup));
+        headers.set('X-Total-Groups', String(meta.totalGroups));
+        headers.set('X-Group-By', meta.groupBy);
+      } else {
+        headers.set('X-Limit', String(meta.limit));
+        if (meta.strategy === 'page') headers.set('X-Page', String(meta.page));
+        if (meta.strategy === 'offset') headers.set('X-Offset', String(meta.offset));
+        if (meta.strategy === 'cursor' && meta.nextCursor !== null) headers.set('X-Next-Cursor', meta.nextCursor);
+      }
     }
     return jsonResponse(data, { headers });
   }

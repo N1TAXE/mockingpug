@@ -40,7 +40,7 @@ async function importConfigModule(href: string): Promise<{ default: unknown }> {
 
 export interface PaginationConfig {
   strategy: 'page' | 'offset' | 'cursor' | false;
-  params: { page: string; limit: string; offset: string; cursor: string };
+  params: { page: string; limit: string; offset: string; cursor: string; groupBy: string; limitPerGroup: string };
   defaultLimit: number;
   maxLimit: number;
   envelope: boolean;
@@ -93,7 +93,7 @@ export const DEFAULT_CONFIG: MockConfig = {
   persist: { adapter: 'file', strategy: 'always' },
   pagination: {
     strategy: 'page',
-    params: { page: 'page', limit: 'limit', offset: 'offset', cursor: 'cursor' },
+    params: { page: 'page', limit: 'limit', offset: 'offset', cursor: 'cursor', groupBy: 'groupBy', limitPerGroup: 'limitPerGroup' },
     defaultLimit: 20,
     maxLimit: 100,
     envelope: true,
@@ -269,6 +269,8 @@ export async function loadConfig(projectDir: string): Promise<MockConfig> {
         limit: userConfig.pagination?.params?.limit ?? DEFAULT_CONFIG.pagination.params.limit,
         offset: userConfig.pagination?.params?.offset ?? DEFAULT_CONFIG.pagination.params.offset,
         cursor: userConfig.pagination?.params?.cursor ?? DEFAULT_CONFIG.pagination.params.cursor,
+        groupBy: userConfig.pagination?.params?.groupBy ?? DEFAULT_CONFIG.pagination.params.groupBy,
+        limitPerGroup: userConfig.pagination?.params?.limitPerGroup ?? DEFAULT_CONFIG.pagination.params.limitPerGroup,
       },
       defaultLimit: userConfig.pagination?.defaultLimit ?? DEFAULT_CONFIG.pagination.defaultLimit,
       maxLimit: userConfig.pagination?.maxLimit ?? DEFAULT_CONFIG.pagination.maxLimit,

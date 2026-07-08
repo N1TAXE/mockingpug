@@ -99,3 +99,68 @@ describe('paginate - strategy: cursor', () => {
     expect(result.data).toEqual(records.slice(0, 20));
   });
 });
+
+describe('paginate - group mode (groupBy + limitPerGroup)', () => {
+  const grouped = [
+    { id: 1, group_id: 'a' },
+    { id: 2, group_id: 'a' },
+    { id: 3, group_id: 'a' },
+    { id: 4, group_id: 'b' },
+    { id: 5, group_id: 'b' },
+    { id: 6, group_id: 'c' },
+  ];
+
+  it('caps records per distinct group value, not the whole batch', () => {
+    const result = paginate(grouped, new URLSearchParams('groupBy=group_id&limitPerGroup=2'), baseConfig);
+    expect(result.data).toEqual([
+      { id: 1, group_id: 'a' },
+      { id: 2, group_id: 'a' },
+      { id: 4, group_id: 'b' },
+      { id: 5, group_id: 'b' },
+      { id: 6, group_id: 'c' },
+    ]);
+    expect(result.meta).toEqual({ strategy: 'group', groupBy: 'group_id', limitPerGroup: 2, totalGroups: 3, total: 6 });
+  });
+
+  it('a group with fewer records than the cap keeps all of them', () => {
+    const result = paginate(grouped, new URLSearchParams('groupBy=group_id&limitPerGroup=10'), baseConfig);
+    expect(result.data).toHaveLength(6);
+  });
+
+  it('is not activated by groupBy alone, without limitPerGroup', () => {
+    const result = paginate(grouped, new URLSearchParams('groupBy=group_id'), baseConfig);
+    expect(result.meta).toMatchObject({ strategy: 'page' });
+  });
+
+  it('is not activated by limitPerGroup alone, without groupBy', () => {
+    const result = paginate(grouped, new URLSearchParams('limitPerGroup=2'), baseConfig);
+    expect(result.meta).toMatchObject({ strategy: 'page' });
+  });
+
+  it('falls back to defaultLimit for a non-numeric limitPerGroup, and clamps to maxLimit', () => {
+    const nonNumeric = paginate(grouped, new URLSearchParams('groupBy=group_id&limitPerGroup=abc'), baseConfig);
+    expect(nonNumeric.meta).toMatchObject({ limitPerGroup: baseConfig.defaultLimit });
+
+    const clamped = paginate(grouped, new URLSearchParams('groupBy=group_id&limitPerGroup=999999'), baseConfig);
+    expect(clamped.meta).toMatchObject({ limitPerGroup: baseConfig.maxLimit });
+  });
+
+  it('respects custom param names', () => {
+    const config = { ...baseConfig, params: { ...baseConfig.params, groupBy: 'by', limitPerGroup: 'perGroup' } };
+    const result = paginate(grouped, new URLSearchParams('by=group_id&perGroup=1'), config);
+    expect(result.data.map((r) => r.id)).toEqual([1, 4, 6]);
+  });
+
+  it('is disabled entirely under strategy: false, same as normal pagination', () => {
+    const result = paginate(grouped, new URLSearchParams('groupBy=group_id&limitPerGroup=1'), { ...baseConfig, strategy: false });
+    expect(result.data).toHaveLength(6);
+    expect(result.meta).toBeNull();
+  });
+
+  it('groups by a missing/undefined field as a single "" group', () => {
+    const noField = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    const result = paginate(noField, new URLSearchParams('groupBy=group_id&limitPerGroup=2'), baseConfig);
+    expect(result.data).toHaveLength(2);
+    expect(result.meta).toMatchObject({ totalGroups: 1 });
+  });
+});

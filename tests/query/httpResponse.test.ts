@@ -76,4 +76,14 @@ describe('buildListResponse', () => {
     expect(await res.json()).toEqual([{ id: 1 }]);
     expect(res.headers.get('x-total-count')).toBeNull();
   });
+
+  it('group strategy sets X-Limit-Per-Group/X-Total-Groups/X-Group-By instead of X-Limit', async () => {
+    const meta: PaginationMeta = { strategy: 'group', groupBy: 'category_id', limitPerGroup: 5, totalGroups: 3, total: 12 };
+    const res = buildListResponse([{ id: 1 }], meta, false);
+    expect(res.headers.get('x-total-count')).toBe('12');
+    expect(res.headers.get('x-limit-per-group')).toBe('5');
+    expect(res.headers.get('x-total-groups')).toBe('3');
+    expect(res.headers.get('x-group-by')).toBe('category_id');
+    expect(res.headers.get('x-limit')).toBeNull();
+  });
 });

@@ -219,6 +219,31 @@ describe('listRecords', () => {
     expect(result.data).toHaveLength(5);
     expect(result.meta).toMatchObject({ total: 25 });
   });
+
+  it('groupBy + limitPerGroup caps per-author blogposts instead of the whole batch', async () => {
+    const ctx = await makeContext(3, 30);
+    const authorIds = [...new Set((await listRecords('blogpost', new URLSearchParams('limit=100'), ctx)).data.map((r) => r.author))];
+    expect(authorIds.length).toBeGreaterThan(1);
+
+    const result = await listRecords(
+      'blogpost',
+      new URLSearchParams(`author=${authorIds.join(',')}&groupBy=author&limitPerGroup=2`),
+      ctx,
+    );
+    expect(result.meta).toMatchObject({ strategy: 'group', groupBy: 'author', limitPerGroup: 2 });
+    for (const authorId of authorIds) {
+      expect(result.data.filter((r) => r.author === authorId).length).toBeLessThanOrEqual(2);
+    }
+    // The whole-batch flat limit would have capped total results at defaultLimit (20);
+    // per-group capping instead allows up to 2 * authorIds.length.
+    expect(result.data.length).toBeGreaterThan(2);
+  });
+
+  it('groupBy/limitPerGroup param names are excluded from filterRecords, same as other pagination params', async () => {
+    const ctx = await makeContext(1, 5);
+    const result = await listRecords('blogpost', new URLSearchParams('groupBy=author&limitPerGroup=1'), ctx);
+    expect(result.data.length).toBeGreaterThan(0);
+  });
 });
 
 describe('getRecordById', () => {

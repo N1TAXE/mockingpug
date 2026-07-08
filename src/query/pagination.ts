@@ -22,7 +22,59 @@ export interface CursorMeta {
   nextCursor: string | null;
 }
 
-export type PaginationMeta = PageMeta | OffsetMeta | CursorMeta;
+export interface GroupMeta {
+  strategy: 'group';
+  /** The field records were grouped by, e.g. `"group_id"` from `?groupBy=group_id`. */
+  groupBy: string;
+  /** The resolved per-group cap actually applied (after clamping to `maxLimit`). */
+  limitPerGroup: number;
+  /** How many distinct group values appeared in the (filtered/searched/sorted) result set. */
+  totalGroups: number;
+  /** Total records across all groups, before the per-group cap was applied. */
+  total: number;
+}
+
+export type PaginationMeta = PageMeta | OffsetMeta | CursorMeta | GroupMeta;
+
+function stringifyGroupValue(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  return String(value);
+}
+
+/**
+ * Groups `records` by `record[groupByField]` and keeps at most
+ * `limitPerGroup` records per distinct value, preserving the relative
+ * order records already had within each group (and each group's own
+ * first-appearance order in the output). Unlike the page/offset/cursor
+ * strategies, this doesn't slice a flat list — a batch request like
+ * `?group_id=1,2,3&limitPerGroup=5` wants up to 5 records for *each* of
+ * groups 1, 2, and 3, not 5 records total across all three.
+ */
+function groupLimit<T extends Record<string, unknown>>(
+  records: readonly T[],
+  groupByField: string,
+  rawLimitPerGroup: string,
+  config: PaginationConfig,
+): PaginatedResult<T> {
+  let limitPerGroup = Number(rawLimitPerGroup);
+  if (!Number.isFinite(limitPerGroup) || limitPerGroup <= 0) limitPerGroup = config.defaultLimit;
+  limitPerGroup = Math.min(limitPerGroup, config.maxLimit);
+
+  const counts = new Map<string, number>();
+  const data: T[] = [];
+  for (const record of records) {
+    const key = stringifyGroupValue(record[groupByField]);
+    const count = counts.get(key) ?? 0;
+    if (count >= limitPerGroup) continue;
+    data.push(record);
+    counts.set(key, count + 1);
+  }
+
+  return {
+    data,
+    meta: { strategy: 'group', groupBy: groupByField, limitPerGroup, totalGroups: counts.size, total: records.length },
+  };
+}
 
 export interface PaginatedResult<T> {
   data: T[];
@@ -41,13 +93,19 @@ function resolveLimit(searchParams: URLSearchParams, config: PaginationConfig): 
  * and the request's query params. Pure and synchronous: no I/O, easy to
  * unit test independently of any HTTP transport.
  */
-export function paginate<T>(
+export function paginate<T extends Record<string, unknown>>(
   records: readonly T[],
   searchParams: URLSearchParams,
   config: PaginationConfig,
 ): PaginatedResult<T> {
   if (config.strategy === false) {
     return { data: [...records], meta: null };
+  }
+
+  const groupBy = searchParams.get(config.params.groupBy);
+  const rawLimitPerGroup = searchParams.get(config.params.limitPerGroup);
+  if (groupBy && rawLimitPerGroup !== null) {
+    return groupLimit(records, groupBy, rawLimitPerGroup, config);
   }
 
   const limit = resolveLimit(searchParams, config);
