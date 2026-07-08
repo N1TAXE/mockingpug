@@ -163,6 +163,23 @@ The devtools sub-API (`{baseUrl}/__mockingpug/*`) isn't part of this
 output — it's an internal channel, not part of the contract being mocked.
 Same one-shot model as `types`: regenerate after changing `mock/api/**`.
 
+## `generators`
+
+```bash
+npx mpug generators
+```
+
+Prints every DSL form the parser recognizes — `uuid`, `number`/`number.<min>-<max>`/
+`number.float.<min>-<max>.<precision>`/`number.increment`, `username.FS`/`.NN`,
+`email`, `hash`, `lorem`, `date`, `boolean`, `enum[...]`, `array[...].<count>`,
+`slugify[...]`, custom dictionaries, conditionals, and `data.<entity>`
+relations — grouped by category, each with a one-line description and a
+runnable example where the form fits in a single string. It's generated
+straight from the same catalog a test pipes through the real parser, so
+it can't drift out of sync with what a given release actually accepts,
+unlike this page. Doesn't touch `mock.config.js` or the filesystem, so it
+works from any directory, without a project scaffolded yet.
+
 ## Logs and errors
 
 Every message is prefixed `[mockingpug]`; warnings are prefixed

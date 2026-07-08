@@ -82,6 +82,13 @@ describe('run: CLI dispatch and exit codes', () => {
     logSpy.mockRestore();
   });
 
+  it('generators prints the DSL catalog and exits 0 without needing a project', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    expect(await run(['generators'], dir)).toBe(0);
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('number.float.<min>-<max>.<precision>'));
+    logSpy.mockRestore();
+  });
+
   it('doctor --assert-prod-safe exits 1 when the build dir contains mock markers', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});

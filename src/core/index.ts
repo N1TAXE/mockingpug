@@ -29,8 +29,10 @@ export {
 
 export { expandDataFields } from './expandFields.js';
 
-export { createRng, hashString, mulberry32, randomInt, pick, type Rng } from './rng.js';
+export { createRng, hashString, mulberry32, randomInt, randomFloat, pick, type Rng } from './rng.js';
 
 export { closestMatch, levenshtein } from './levenshtein.js';
 
 export type { FieldSpec, CustomDictionaryEntry, EntitySchema } from './types.js';
+
+export { GENERATOR_CATALOG, type GeneratorCatalogEntry } from './generatorCatalog.js';

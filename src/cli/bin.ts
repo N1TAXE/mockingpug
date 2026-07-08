@@ -8,6 +8,7 @@ import { reset } from './commands/reset.js';
 import { prune } from './commands/prune.js';
 import { types } from './commands/types.js';
 import { docs } from './commands/docs.js';
+import { generators } from './commands/generators.js';
 import type { CommandResult } from './commandResult.js';
 
 const USAGE = `Usage: mockingpug <command> [flags]
@@ -22,6 +23,7 @@ Commands:
   prune     Delete orphaned entities from the store (--yes required)
   types     Write .mockingpug/types/index.d.ts (one TS interface per entity)
   docs      Write .mockingpug/docs/{index.html,openapi.json} (REST API reference)
+  generators  Print every DSL generator the parser supports, with syntax + examples
 `;
 
 /** Reads the value following a `--flag <value>` pair out of the raw argv, or undefined if the flag wasn't passed. */
@@ -80,6 +82,10 @@ export async function run(argv: string[], cwd: string): Promise<number> {
         const result = await docs(cwd);
         printResult(result);
         return result.ok ? 0 : 1;
+      }
+      case 'generators': {
+        printResult(generators());
+        return 0;
       }
       default:
         console.log(USAGE);
