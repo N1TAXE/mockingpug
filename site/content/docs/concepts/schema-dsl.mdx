@@ -41,6 +41,7 @@ between transports.
 | `uuid` | `string` | Seeded UUID v4, **not** `crypto.randomUUID()`. Deterministic from the seed, and dependency-free in a browser bundle. |
 | `number` | `number` | Random integer in `[0, 1_000_000]` by default. |
 | `number.<min>-<max>` | `number` | Random integer in `[min, max]`, e.g. `number.1-100`. Negative bounds are allowed: `number.-50-50`. |
+| `number.float.<min>-<max>.<precision>` | `number` | Random float in `[min, max]`, rounded to `precision` decimal places, e.g. `number.float.4-5.1` for a one-decimal rating like `4.8`. Replaces the old trick of generating `number.35-50` and dividing by 10 in the API layer. |
 | `number.increment` | `number` | Auto-incrementing counter, starting at 1, scoped per entity+field. Continues past the existing max when more records are appended to an entity later (not restarted at 1). |
 | `username.FS` | `string` | `"First Last"`: a real first + last name pair. |
 | `username.NN` | `string` | `"AdjectiveNoun123"`: an adjective + noun + number nickname. |

@@ -118,6 +118,16 @@ export function parseFieldType(raw: string, options: ParseFieldTypeOptions = {})
   if (value === 'number.increment') {
     return { kind: 'number', mode: 'increment' };
   }
+  const numberFloatMatch = /^number\.float\.(-?\d+)-(-?\d+)\.(\d+)$/.exec(value);
+  if (numberFloatMatch) {
+    return {
+      kind: 'number',
+      mode: 'random',
+      min: Number(numberFloatMatch[1]),
+      max: Number(numberFloatMatch[2]),
+      precision: Number(numberFloatMatch[3]),
+    };
+  }
   const numberRangeMatch = /^number\.(-?\d+)-(-?\d+)$/.exec(value);
   if (numberRangeMatch) {
     return {

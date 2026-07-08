@@ -21,6 +21,23 @@ describe('parseFieldType', () => {
     });
   });
 
+  it('parses number.float.min-max.precision', () => {
+    expect(parseFieldType('number.float.4-5.1')).toEqual({
+      kind: 'number',
+      mode: 'random',
+      min: 4,
+      max: 5,
+      precision: 1,
+    });
+    expect(parseFieldType('number.float.-10-10.2')).toEqual({
+      kind: 'number',
+      mode: 'random',
+      min: -10,
+      max: 10,
+      precision: 2,
+    });
+  });
+
   it('parses username.FS and username.NN', () => {
     expect(parseFieldType('username.FS')).toEqual({ kind: 'username', style: 'FS' });
     expect(parseFieldType('username.NN')).toEqual({ kind: 'username', style: 'NN' });

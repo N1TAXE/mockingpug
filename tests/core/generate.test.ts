@@ -67,6 +67,22 @@ describe('generateValue', () => {
     }
   });
 
+  it('number.float.min-max.precision stays within bounds and rounds to precision', () => {
+    const rng = createRng('float-bounds');
+    for (let i = 0; i < 100; i++) {
+      const value = generateValue({ kind: 'number', mode: 'random', min: 4, max: 5, precision: 1 }, rng, makeCtx()) as number;
+      expect(value).toBeGreaterThanOrEqual(4);
+      expect(value).toBeLessThanOrEqual(5);
+      expect(value).toBeCloseTo(Math.round(value * 10) / 10, 10);
+    }
+  });
+
+  it('number.float with precision 0 rounds to a whole number but stays a float-capable path', () => {
+    const rng = createRng('float-zero');
+    const value = generateValue({ kind: 'number', mode: 'random', min: 1, max: 10, precision: 0 }, rng, makeCtx());
+    expect(Number.isInteger(value)).toBe(true);
+  });
+
   it('username.FS produces "First Last"', () => {
     const value = generateValue({ kind: 'username', style: 'FS' }, createRng('s'), makeCtx());
     expect(value).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);

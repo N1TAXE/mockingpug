@@ -38,6 +38,12 @@ export function randomInt(rng: Rng, min: number, max: number): number {
   return Math.floor(rng() * (max - min + 1)) + min;
 }
 
+/** Random float in `[min, max]`, rounded to `precision` decimal places. */
+export function randomFloat(rng: Rng, min: number, max: number, precision: number): number {
+  const factor = 10 ** precision;
+  return Math.round((rng() * (max - min) + min) * factor) / factor;
+}
+
 export function pick<T>(rng: Rng, items: readonly T[]): T {
   if (items.length === 0) {
     throw new RangeError('pick() called with an empty array');

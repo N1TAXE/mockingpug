@@ -1,5 +1,5 @@
 import { GenerationError } from './errors.js';
-import { pick, randomInt, type Rng } from './rng.js';
+import { pick, randomFloat, randomInt, type Rng } from './rng.js';
 import type { FieldSpec } from './types.js';
 import {
   EMAIL_DOMAINS,
@@ -102,6 +102,9 @@ export function generateValue(spec: FieldSpec, rng: Rng, ctx: GenerateContext): 
     case 'number':
       if (spec.mode === 'increment') {
         return ctx.increments.next(ctx.incrementKey);
+      }
+      if (spec.precision !== undefined) {
+        return randomFloat(rng, spec.min ?? 0, spec.max ?? 1_000_000, spec.precision);
       }
       return randomInt(rng, spec.min ?? 0, spec.max ?? 1_000_000);
 

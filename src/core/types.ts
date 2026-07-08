@@ -1,7 +1,7 @@
 /** Parsed representation of a single `data` field value from a schema JSON file. */
 export type FieldSpec =
   | { kind: 'uuid' }
-  | { kind: 'number'; mode: 'random' | 'increment'; min?: number; max?: number }
+  | { kind: 'number'; mode: 'random' | 'increment'; min?: number; max?: number; precision?: number }
   | { kind: 'username'; style: 'FS' | 'NN' }
   | { kind: 'email'; domain?: string }
   | { kind: 'hash'; algorithm: 'generic' | 'md5' | 'sha256' }
