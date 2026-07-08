@@ -9,7 +9,7 @@ export {
   type PublicRecord,
 } from './resolver.js';
 export { jsonResponse, htmlResponse, errorResponse, readJsonBody, buildListResponse } from './httpResponse.js';
-export { simulateRuntime, simulateRuntimeForEntity, DEFAULT_RUNTIME } from './runtime.js';
+export { simulateRuntime, simulateRuntimeForEntity, isRuntimeBypassRequested, DEFAULT_RUNTIME } from './runtime.js';
 export { RequestLog, recordRequest, DEFAULT_REQUEST_LOG_SIZE, type RequestLogEntry } from './requestLog.js';
 export { OneShotOverrides, hasArmedOverride, type OneShotOverrideEntry } from './oneShotOverride.js';
 export { exportSnapshot, importSnapshot, type StoreSnapshot } from './snapshot.js';

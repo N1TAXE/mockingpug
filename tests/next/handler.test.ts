@@ -190,6 +190,25 @@ describe('createNextHandlers', () => {
     expect(Date.now() - start).toBeGreaterThanOrEqual(55);
   });
 
+  it('?mpug-bypass=1 lets GET through despite runtime.errorRate: 1', async () => {
+    const ctx = await makeContext(1, 0);
+    ctx.runtime = { errorRate: 1, delay: 0 };
+    const handlers = createNextHandlers(ctx);
+    const res = await handlers.GET(new Request('http://localhost/api/user?mpug-bypass=1'), plainParams(['user']));
+    expect(res.status).toBe(200);
+  });
+
+  it('X-Mockingpug-Bypass: 1 header lets GET through despite runtime.errorRate: 1', async () => {
+    const ctx = await makeContext(1, 0);
+    ctx.runtime = { errorRate: 1, delay: 0 };
+    const handlers = createNextHandlers(ctx);
+    const res = await handlers.GET(
+      new Request('http://localhost/api/user', { headers: { 'X-Mockingpug-Bypass': '1' } }),
+      plainParams(['user']),
+    );
+    expect(res.status).toBe(200);
+  });
+
   it('records answered requests into ctx.requestLog, most-recent-first', async () => {
     const { RequestLog } = await import('../../src/query/index.js');
     const ctx = await makeContext(2, 0);

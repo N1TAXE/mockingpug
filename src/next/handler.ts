@@ -90,7 +90,7 @@ export function createNextHandlers(ctx: QueryContext): NextRouteHandlers {
       if (bypassed) {
         response = bypassed;
       } else {
-        await simulateRuntimeForEntity(ctx, entity);
+        await simulateRuntimeForEntity(ctx, entity, request);
         response = jsonResponse(await updateRecord(entity, id, await readJsonBody(request), ctx));
       }
     } catch (error) {
@@ -119,7 +119,7 @@ export function createNextHandlers(ctx: QueryContext): NextRouteHandlers {
         if (bypassed) {
           response = bypassed;
         } else {
-          await simulateRuntimeForEntity(ctx, entity);
+          await simulateRuntimeForEntity(ctx, entity, request);
           if (id !== undefined) {
             response = jsonResponse(await getRecordById(entity, id, ctx));
           } else {
@@ -153,7 +153,7 @@ export function createNextHandlers(ctx: QueryContext): NextRouteHandlers {
         if (bypassed) {
           response = bypassed;
         } else {
-          await simulateRuntimeForEntity(ctx, entity);
+          await simulateRuntimeForEntity(ctx, entity, request);
           const created = await createRecord(entity, await readJsonBody(request), ctx);
           response = jsonResponse(created, { status: 201 });
         }
@@ -185,7 +185,7 @@ export function createNextHandlers(ctx: QueryContext): NextRouteHandlers {
         if (bypassed) {
           response = bypassed;
         } else {
-          await simulateRuntimeForEntity(ctx, entity);
+          await simulateRuntimeForEntity(ctx, entity, request);
           await deleteRecord(entity, id, ctx);
           response = new Response(null, { status: 204 });
         }

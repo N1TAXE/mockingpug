@@ -277,6 +277,16 @@ describe('createMockHandlers : end-to-end over msw/node + real fetch', () => {
     }
   });
 
+  it('?mpug-bypass=1 lets a request through despite runtime.errorRate: 1', async () => {
+    const ctx = await makeContext(3, 0);
+    ctx.runtime = { errorRate: 1, delay: 0 };
+    server = setupServer(...createMockHandlers(ctx, '/api'));
+    server.listen({ onUnhandledRequest: 'error' });
+
+    const res = await fetch('http://localhost:3000/api/user?mpug-bypass=1');
+    expect(res.status).toBe(200);
+  });
+
   it('runtime.delay adds real latency to a response', async () => {
     const ctx = await makeContext(1, 0);
     ctx.runtime = { errorRate: 0, delay: 60 };

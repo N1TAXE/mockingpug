@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { OneShotOverrides } from '../../src/query/oneShotOverride.js';
-import { simulateRuntime, simulateRuntimeForEntity } from '../../src/query/runtime.js';
+import { isRuntimeBypassRequested, simulateRuntime, simulateRuntimeForEntity } from '../../src/query/runtime.js';
 import type { QueryContext } from '../../src/query/resolver.js';
 
 describe('simulateRuntime', () => {
@@ -116,5 +116,59 @@ describe('simulateRuntimeForEntity', () => {
     const ctx = makeCtx(overrides);
     ctx.runtime = { delay: 0, errorRate: 1 };
     await expect(simulateRuntimeForEntity(ctx, 'user')).rejects.toThrow(/runtime.errorRate/);
+  });
+
+  it('?mpug-bypass=1 skips runtime.errorRate: 1 entirely', async () => {
+    const ctx = makeCtx(new OneShotOverrides());
+    ctx.runtime = { delay: 0, errorRate: 1 };
+    const request = new Request('https://example.com/api/user?mpug-bypass=1');
+    await expect(simulateRuntimeForEntity(ctx, 'user', request)).resolves.toBeUndefined();
+  });
+
+  it('X-Mockingpug-Bypass: 1 header skips runtime.errorRate: 1 entirely', async () => {
+    const ctx = makeCtx(new OneShotOverrides());
+    ctx.runtime = { delay: 0, errorRate: 1 };
+    const request = new Request('https://example.com/api/user', { headers: { 'X-Mockingpug-Bypass': '1' } });
+    await expect(simulateRuntimeForEntity(ctx, 'user', request)).resolves.toBeUndefined();
+  });
+
+  it('bypass also skips an armed one-shot "fail next" override, and does not consume it', async () => {
+    const overrides = new OneShotOverrides();
+    overrides.set('user', { failNext: true });
+    const ctx = makeCtx(overrides);
+    const bypassed = new Request('https://example.com/api/user?mpug-bypass=1');
+    await expect(simulateRuntimeForEntity(ctx, 'user', bypassed)).resolves.toBeUndefined();
+    // The override is still armed for the next, non-bypassed request.
+    await expect(simulateRuntimeForEntity(ctx, 'user')).rejects.toThrow(/one-shot "fail next"/);
+  });
+
+  it('a request without the bypass param/header is unaffected', async () => {
+    const ctx = makeCtx(new OneShotOverrides());
+    ctx.runtime = { delay: 0, errorRate: 1 };
+    const request = new Request('https://example.com/api/user?mpug-bypass=0');
+    await expect(simulateRuntimeForEntity(ctx, 'user', request)).rejects.toThrow(/runtime.errorRate/);
+  });
+});
+
+describe('isRuntimeBypassRequested', () => {
+  it('is true for ?mpug-bypass=1', () => {
+    expect(isRuntimeBypassRequested(new Request('https://example.com/api/user?mpug-bypass=1'))).toBe(true);
+  });
+
+  it('is true for an X-Mockingpug-Bypass: 1 header', () => {
+    expect(isRuntimeBypassRequested(new Request('https://example.com/api/user', { headers: { 'X-Mockingpug-Bypass': '1' } }))).toBe(
+      true,
+    );
+  });
+
+  it('is false with neither the param nor the header', () => {
+    expect(isRuntimeBypassRequested(new Request('https://example.com/api/user'))).toBe(false);
+  });
+
+  it('is false for any value other than exactly "1"', () => {
+    expect(isRuntimeBypassRequested(new Request('https://example.com/api/user?mpug-bypass=true'))).toBe(false);
+    expect(
+      isRuntimeBypassRequested(new Request('https://example.com/api/user', { headers: { 'X-Mockingpug-Bypass': 'true' } })),
+    ).toBe(false);
   });
 });

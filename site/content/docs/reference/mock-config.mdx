@@ -112,10 +112,17 @@ it, the whole route fails to render, `<MockDevtools>` never mounts, and
 there's no UI left to dial `errorRate` back down. This isn't the panel
 itself being blocked — every devtools sub-API call is a guaranteed
 exception to `errorRate`/`delay`, covered by a regression test — it's the
-host page crashing around it. If this happens, just **restart the dev
-server** (or redeploy) — `ctx.runtime` is in-memory only, so the next
-process start reloads `errorRate: 0` (or whatever `mock.config.js` sets)
-from scratch; nothing is corrupted or persisted. This doesn't affect
+host page crashing around it. If this happens, you don't have to restart
+the dev server: append `?mpug-bypass=1` to the failing request's URL (or
+send an `X-Mockingpug-Bypass: 1` header, for requests you don't control
+the URL of), and that one request skips `errorRate`/`delay` — and any
+armed one-shot override — entirely, checked before anything else. It's a
+per-request escape hatch, not a config change: it doesn't touch
+`ctx.runtime` or consume an armed override, so everything else keeps
+behaving exactly as configured. Restarting the dev server (or redeploying)
+still works too — `ctx.runtime` is in-memory only, so the next process
+start reloads `errorRate: 0` (or whatever `mock.config.js` sets) from
+scratch; nothing is corrupted or persisted. This doesn't affect
 `mockingpug/react`: the panel lives entirely client-side there, so it keeps
 rendering regardless of `errorRate`. For testing one specific
 error/loading state without this risk at all, prefer the panel's per-entity
