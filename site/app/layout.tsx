@@ -11,6 +11,9 @@ const inter = Inter({
 
 // metadataBase resolves relative OG/Twitter image URLs across the app.
 export const metadata: Metadata = {
+  verification: {
+    google: process.env.GOOGLE_SITE_VERIFICATION,
+  },
   metadataBase: new URL(siteUrl),
   icons: {
     icon: [
