@@ -148,7 +148,7 @@ export async function startMocking() {
     customDictionaries,
     pagination: {
       strategy: 'page' as const,
-      params: { page: 'page', limit: 'limit', offset: 'offset', cursor: 'cursor' },
+      params: { page: 'page', limit: 'limit', offset: 'offset', cursor: 'cursor', groupBy: 'groupBy', limitPerGroup: 'limitPerGroup' },
       defaultLimit: 20,
       maxLimit: 100,
       envelope: true,
@@ -253,6 +253,14 @@ export async function createMockingpug() {
   await generateAll(schemas, store, { seed: 'my-app', customDictionaries });
   const ctx = { schemas, store, seed: 'my-app', customDictionaries, pagination: { /* ...same as step 4 */ } };
   const worker = setupWorker(...createMockHandlers(ctx, '/api'));
+  // Started here, not left to <MockProvider> alone: <App> below is a child
+  // of <MockProvider>, and child effects commit *before* the parent's on
+  // mount — if nothing awaited worker.start() first, an <App> that fetches
+  // on mount would race ahead of the worker actually intercepting anything
+  // and hit the real (likely nonexistent, in dev) network instead.
+  // <MockProvider> starting an already-started worker again once it mounts
+  // is a harmless no-op (MSW logs a "redundant call" warning, doesn't throw).
+  await worker.start({ onUnhandledRequest: 'bypass' });
   return { ctx, worker };
 }
 ```
@@ -272,12 +280,13 @@ matching `createMockHandlers(ctx, baseUrl)`'s own default) — it's only
 used to build the URL for the "Copy as curl" button, pass it explicitly if
 you called `createMockHandlers` with a different one.
 
-`<MockProvider>` owns the worker's start/stop lifecycle (mode persisted to
-`localStorage` across reloads) and mutates `ctx.runtime` in place when
-devtools users edit delay/errorRate: no restart needed, the change takes
-effect on the very next request. Both components are gated behind the same
-dev-only dynamic `import()` as `startMocking()` itself. Never import them
-at the top level of a file that ships to production.
+`<MockProvider>` owns the worker's start/stop lifecycle from here on (mode
+persisted to `localStorage` across reloads, StrictMode-safe) and mutates
+`ctx.runtime` in place when devtools users edit delay/errorRate: no
+restart needed, the change takes effect on the very next request. Both
+components are gated behind the same dev-only dynamic `import()` as
+`startMocking()` itself. Never import them at the top level of a file that
+ships to production.
 
 ## Switching mock ↔ real API
 

@@ -5,8 +5,21 @@ import App from './App.tsx'
 
 async function bootstrap() {
   if (import.meta.env.DEV) {
-    const { startMocking } = await import('./mocks/browser');
-    await startMocking();
+    const [{ startMocking }, { MockProvider, MockDevtools }] = await Promise.all([
+      import('./mocks/browser'),
+      import('mockingpug/react'),
+    ]);
+    const { ctx, worker } = await startMocking();
+
+    createRoot(document.getElementById('root')!).render(
+      <StrictMode>
+        <MockProvider worker={worker} ctx={ctx}>
+          <App />
+          <MockDevtools />
+        </MockProvider>
+      </StrictMode>,
+    )
+    return;
   }
 
   createRoot(document.getElementById('root')!).render(

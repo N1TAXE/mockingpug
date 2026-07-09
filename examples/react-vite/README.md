@@ -8,7 +8,10 @@ Demonstrates: paginated list (`GET /api/user`), a custom dictionary
 (`role`), a bare/inverse relation (`user.posts` → `blogpost`, resolved at
 read time), a field-level relation (`blogpost.author` → `user.id`), `GET
 /api/user/:id`, `POST /api/user`, `DELETE /api/user/:id` — all through real
-`fetch()` calls intercepted by MSW.
+`fetch()` calls intercepted by MSW — plus `<MockProvider>`/`<MockDevtools>`
+(wired up dev-only in [`src/main.tsx`](src/main.tsx)). Open the floating
+panel to edit `runtime.delay`/`errorRate` live, browse/edit generated
+records, and watch the "Requests" log.
 
 ## Run it
 
@@ -18,7 +21,7 @@ build of `mockingpug`, not the npm registry):
 ```bash
 npm install
 npm run build
-npm pack        # regenerates mockingpug-0.1.0.tgz, gitignored on purpose
+npm pack        # regenerates mockingpug-1.3.0.tgz, gitignored on purpose
 ```
 
 Then, in this directory:
@@ -44,4 +47,5 @@ tab: the requests are genuine `fetch()` calls, only the response is mocked.
 - [`src/mocks/browser.ts`](src/mocks/browser.ts) — `generateAll()` +
   `createMockHandlers()` + `setupWorker()`.
 - [`src/main.tsx`](src/main.tsx) — dev-only bootstrap gate
-  (`import.meta.env.DEV`) so none of this ships in a production build.
+  (`import.meta.env.DEV`) so none of this ships in a production build;
+  wraps `<App>` in `<MockProvider>` + `<MockDevtools>` when mocking is on.

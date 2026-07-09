@@ -8,9 +8,9 @@ custom webpack config without ejecting/craco).
 
 Demonstrates the same functionality as [`examples/react-vite`](../react-vite):
 paginated list, custom dictionary (`role`), bare relation (`user.posts`),
-field-level relation (`blogpost.author`), GET by id, POST, DELETE — plus
-two CRA-specific fixes documented in `react/README.md`'s "CRA / webpack
-gotcha":
+field-level relation (`blogpost.author`), GET by id, POST, DELETE,
+`<MockProvider>`/`<MockDevtools>` — plus two CRA-specific fixes documented
+in `react/README.md`'s "CRA / webpack gotcha":
 
 1. Schemas live under **`src/mock/`**, not `mock/` at the project root — CRA
    refuses to bundle imports that reach outside `src/`.
@@ -26,7 +26,7 @@ build of `mockingpug`, not the npm registry):
 ```bash
 npm install
 npm run build
-npm pack        # regenerates mockingpug-0.1.0.tgz, gitignored on purpose
+npm pack        # regenerates mockingpug-1.3.0.tgz, gitignored on purpose
 ```
 
 Then, in this directory:
@@ -60,4 +60,5 @@ tab: the requests are genuine `fetch()` calls, only the response is mocked.
 - [`src/mocks/browser.ts`](src/mocks/browser.ts) — `generateAll()` +
   `createMockHandlers()` + `setupWorker()`, identical to the Vite example.
 - [`src/index.tsx`](src/index.tsx) — dev-only bootstrap gate on
-  `process.env.NODE_ENV`.
+  `process.env.NODE_ENV`; wraps `<App>` in `<MockProvider>` +
+  `<MockDevtools>` when mocking is on.

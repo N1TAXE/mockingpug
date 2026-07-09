@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MockProvider, useMockContext, type MockWorker } from '../../src/react/MockProvider.js';
@@ -106,5 +107,31 @@ describe('MockProvider', () => {
     expect(screen.getByTestId('mode').textContent).toBe('off');
     await waitFor(() => expect(worker2.stop).toHaveBeenCalled());
     expect(worker2.start).not.toHaveBeenCalled();
+  });
+
+  it("survives StrictMode's dev-only mount->cleanup->mount without a double worker.start()", async () => {
+    // Before the fix, the fake mount's effect and the real mount's effect
+    // each called worker.start() directly and synchronously, with no
+    // gating — two calls, racing whichever one's promise settled last
+    // (reproducing MSW's real "cannot configure an already enabled
+    // network" throw). worker.start() returning a promise is enough to
+    // reproduce this: any `.then()` continuation is deferred to a
+    // microtask, always landing *after* the synchronous cleanup -> remount
+    // that StrictMode does, regardless of how fast the promise settles.
+    const worker = fakeWorker();
+    const ctx = await makeCtx();
+
+    render(
+      <StrictMode>
+        <MockProvider worker={worker} ctx={ctx} storageKey={null}>
+          <Probe />
+        </MockProvider>
+      </StrictMode>,
+    );
+
+    await waitFor(() => expect(worker.start).toHaveBeenCalledTimes(1));
+    // Give any stale/queued transition a chance to run before asserting there wasn't a second call.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(worker.start).toHaveBeenCalledTimes(1);
   });
 });

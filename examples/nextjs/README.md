@@ -7,7 +7,11 @@ server endpoint here, verifiable with `curl` as well as the browser.
 
 Demonstrates the same functionality as the React examples: paginated list,
 custom dictionary (`role`), bare relation (`user.posts`), field-level
-relation (`blogpost.author`), GET by id, POST, DELETE.
+relation (`blogpost.author`), GET by id, POST, DELETE — plus
+`<MockDevtools>` (`mockingpug/next/client`), wired up dev-only in
+[`app/layout.tsx`](app/layout.tsx). Open the floating panel to edit
+`runtime.delay`/`errorRate` live, browse/edit generated records, and watch
+the "Requests" log.
 
 ## Run it
 
@@ -17,7 +21,7 @@ build of `mockingpug`, not the npm registry):
 ```bash
 npm install
 npm run build
-npm pack        # regenerates mockingpug-0.1.0.tgz, gitignored on purpose
+npm pack        # regenerates mockingpug-1.3.0.tgz, gitignored on purpose
 ```
 
 Then, in this directory:
@@ -49,6 +53,8 @@ curl -X POST http://localhost:3000/api/user -H "Content-Type: application/json" 
   files would otherwise make Turbopack guess the workspace root).
 - [`app/page.tsx`](app/page.tsx) — client-side demo UI hitting the same
   `/api/user` endpoint the Route Handler serves.
+- [`app/layout.tsx`](app/layout.tsx) — `<MockDevtools>`, gated behind
+  `process.env.NODE_ENV === "development"`.
 
 ## Switching mock ↔ real API
 

@@ -89,15 +89,43 @@ export function MockProvider({
     ctx.requestBypass = requestBypassRef.current;
   }
 
+  // Chains every mode transition onto a single ref-held promise instead of
+  // firing `worker.start()`/`worker.stop()` directly from the effect. Plain
+  // fire-and-forget calls race under React StrictMode's dev-only
+  // mount -> cleanup -> mount double-invoke: the first (fake) mount's
+  // `worker.start()` is still in flight when its cleanup calls
+  // `worker.stop()`, and the second (real) mount's `worker.start()` fires
+  // before the first has settled — MSW's `setupWorker()` throws
+  // ("cannot configure an already enabled network") when a `start()`
+  // overlaps another in-flight `start()`/`stop()` this way. Serializing
+  // through `lifecycleRef` guarantees each transition fully settles before
+  // the next begins, and `cancelled` lets a transition superseded before
+  // its turn comes up (the fake mount, cleaned up synchronously before any
+  // promise settles) skip calling `worker.start()` at all.
+  const lifecycleRef = useRef<Promise<void>>(Promise.resolve());
+
   useEffect(() => {
-    if (mode === 'mock') {
-      worker.start({ onUnhandledRequest: 'bypass' }).catch((error: unknown) => {
-        console.error('[mockingpug] failed to start the MSW worker:', error);
+    let cancelled = false;
+
+    lifecycleRef.current = lifecycleRef.current.then(async () => {
+      if (cancelled) return;
+      if (mode === 'mock') {
+        try {
+          await worker.start({ onUnhandledRequest: 'bypass' });
+        } catch (error) {
+          console.error('[mockingpug] failed to start the MSW worker:', error);
+        }
+      } else {
+        worker.stop();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      lifecycleRef.current = lifecycleRef.current.then(() => {
+        worker.stop();
       });
-    } else {
-      worker.stop();
-    }
-    return () => worker.stop();
+    };
   }, [mode, worker]);
 
   useEffect(() => {
