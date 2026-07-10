@@ -32,7 +32,9 @@ Configured via `mock.config.js`'s `persist.adapter: 'memory' | 'file'`; see
 
 Each entity's stored metadata includes a **fingerprint**, a stable hash of
 its `data` block (field names + generator types, independent of key
-order). Before regenerating anything, mockingpug compares the old
+order) plus the content of any `mock/data/*.json` custom dictionary a
+field references, direct or nested inside `array`/`conditional`. Before
+regenerating anything, mockingpug compares the old
 fingerprint's per-field hashes against the current schema and produces a
 plan covering exactly these cases, only doing the work each one requires:
 
@@ -45,6 +47,7 @@ plan covering exactly these cases, only doing the work each one requires:
 | Field added | Only the new field is generated and added to every existing record; other fields are untouched. |
 | Field removed | The key is deleted from every existing record; nothing else regenerated. |
 | Field's generator type changed | Only that field is regenerated on every existing record it applies to (same seed, so still deterministic per record) — except records covered by a [fixture](/docs/concepts/schema-dsl#fixtures), whose fixed fields are reapplied afterward regardless. |
+| A referenced custom dictionary's *content* changed (values edited in `mock/data/<name>.json`, spec/field itself untouched) | Same as a generator type change: only the field(s) using that dictionary are regenerated. |
 | A [multi-pick](/docs/concepts/relations-and-generation#correlated-multi-field-pick)'s field list changed | Treated the same as any field's spec changing: re-picked on every existing record. If the list *shrank*, the now-dropped projected key isn't retroactively deleted from existing records — only newly generated ones skip it; run `mpug reset`/`prune` for a clean slate. |
 | `fixtures` added, removed, or edited | Reapplied positionally onto records 0..`fixtures.length - 1` after every other step. |
 | `literal` added, removed, or edited | Whole records 0..`literal.length - 1` are replaced verbatim (not patched) with the `literal` entries, both before increment-counter seeding and again after every other step. If `literal` shrank, positions no longer covered are regenerated fresh instead of keeping stale literal content. |
