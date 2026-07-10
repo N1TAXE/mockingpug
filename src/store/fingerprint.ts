@@ -1,5 +1,5 @@
 import { hashString } from '../core/index.js';
-import type { FieldSpec } from '../core/index.js';
+import type { CustomDictionaryEntry, FieldSpec } from '../core/index.js';
 
 /** Stable meta snapshot stored next to generated records. */
 export interface EntityMeta {
@@ -26,9 +26,33 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value);
 }
 
-/** Hash of a single field's spec; changes if and only if the field's type/params change. */
-export function computeFieldFingerprint(spec: FieldSpec): string {
-  return hashString(stableStringify(spec)).toString(16);
+/** Names of `mock/data/*.json` custom dictionaries a field spec references, direct or nested (`array`/`conditional`). */
+function collectCustomNames(spec: FieldSpec, out: Set<string>): void {
+  if (spec.kind === 'custom') out.add(spec.name);
+  else if (spec.kind === 'array') collectCustomNames(spec.item, out);
+  else if (spec.kind === 'conditional') {
+    collectCustomNames(spec.then, out);
+    collectCustomNames(spec.else, out);
+  }
+}
+
+/**
+ * Hash of a single field's spec, plus the content of any `mock/data/*.json`
+ * dictionaries it references — so editing a pool's values (not just the
+ * field's type/params) invalidates the cache too, instead of silently
+ * leaving stale generated values behind.
+ */
+export function computeFieldFingerprint(
+  spec: FieldSpec,
+  customDictionaries?: Record<string, readonly CustomDictionaryEntry[]>,
+): string {
+  const names = new Set<string>();
+  collectCustomNames(spec, names);
+  const pools = [...names]
+    .sort()
+    .map((name) => stableStringify(customDictionaries?.[name] ?? []))
+    .join('|');
+  return hashString(stableStringify(spec) + pools).toString(16);
 }
 
 /** Full meta for an entity, ready to compare against a previously stored snapshot. */
@@ -37,10 +61,11 @@ export function computeEntityMeta(
   fields: Record<string, FieldSpec>,
   fixtures?: readonly Record<string, unknown>[],
   literal?: readonly Record<string, unknown>[],
+  customDictionaries?: Record<string, readonly CustomDictionaryEntry[]>,
 ): EntityMeta {
   const fieldsHash: Record<string, string> = {};
   for (const [name, spec] of Object.entries(fields)) {
-    fieldsHash[name] = computeFieldFingerprint(spec);
+    fieldsHash[name] = computeFieldFingerprint(spec, customDictionaries);
   }
   const fixturesHash = hashString(stableStringify(fixtures ?? [])).toString(16);
   const literalHash = hashString(stableStringify(literal ?? [])).toString(16);

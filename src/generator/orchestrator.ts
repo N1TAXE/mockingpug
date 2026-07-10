@@ -142,7 +142,7 @@ export async function generateAll(
   for (const entity of order) {
     const schema = schemas[entity]!;
     const previous = await store.load(entity);
-    const currentMeta = computeEntityMeta(schema.amount, schema.data, schema.fixtures, schema.literal);
+    const currentMeta = computeEntityMeta(schema.amount, schema.data, schema.fixtures, schema.literal, customDictionaries);
     const plan = planReconciliation(previous?.meta, currentMeta);
 
     if (!plan.isNewEntity && isNoopPlan(plan)) {

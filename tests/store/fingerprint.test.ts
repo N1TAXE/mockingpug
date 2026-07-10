@@ -43,6 +43,20 @@ describe('computeFieldFingerprint', () => {
     expect(computeFieldFingerprint(a)).toBe(computeFieldFingerprint(b));
     expect(computeFieldFingerprint(a)).not.toBe(computeFieldFingerprint(differentOrder));
   });
+
+  it('changes when a referenced custom dictionary\'s content changes, even though the spec is identical', () => {
+    const spec: FieldSpec = { kind: 'custom', name: 'role' };
+    const before = computeFieldFingerprint(spec, { role: [{ value: 'ADMIN' }] });
+    const after = computeFieldFingerprint(spec, { role: [{ value: 'USER' }] });
+    expect(before).not.toBe(after);
+  });
+
+  it('picks up a custom dictionary nested inside array/conditional', () => {
+    const arraySpec: FieldSpec = { kind: 'array', item: { kind: 'custom', name: 'role' }, count: 2 };
+    const before = computeFieldFingerprint(arraySpec, { role: [{ value: 'ADMIN' }] });
+    const after = computeFieldFingerprint(arraySpec, { role: [{ value: 'USER' }] });
+    expect(before).not.toBe(after);
+  });
 });
 
 describe('computeEntityMeta', () => {
