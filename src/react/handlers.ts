@@ -1,144 +1,53 @@
 import { http, passthrough, type RequestHandler } from 'msw';
-import {
-  buildListResponse,
-  createRecord,
-  deleteRecord,
-  errorResponse,
-  getRecordById,
-  jsonResponse,
-  listRecords,
-  readJsonBody,
-  recordRequest,
-  simulateRuntimeForEntity,
-  updateRecord,
-  type QueryContext,
-} from '../query/index.js';
+import { defaultRoutes, expandRoutePaths, matchRoute, routeEntity, type HttpMethod } from '../core/index.js';
+import { serveRoute, type QueryContext } from '../query/index.js';
 import { isRuntimeBypassed } from './bypassState.js';
 
-function joinUrl(baseUrl: string, ...segments: string[]): string {
-  const trimmedBase = baseUrl.replace(/\/+$/, '');
-  return [trimmedBase, ...segments].join('/');
+function joinUrl(baseUrl: string, path: string): string {
+  return baseUrl.replace(/\/+$/, '') + path;
 }
 
+const HTTP: Record<HttpMethod, (typeof http)['get']> = {
+  GET: http.get,
+  POST: http.post,
+  PUT: http.put,
+  PATCH: http.patch,
+  DELETE: http.delete,
+};
+
 /**
- * Generates one MSW `RequestHandler[]` per entity in `ctx.schemas`: GET
- * (list, with pagination), GET/:id, POST, PUT, PATCH, DELETE/:id, all
- * backed by the same `query` resolver (and the same Response-shaping
- * helpers) any transport uses, e.g. `mockingpug/next`'s Route Handlers.
+ * Generates one MSW `RequestHandler` per concrete route path in
+ * `ctx.routes` (defaulting to one full-CRUD resource per table). Every
+ * handler shares a single resolver that re-runs {@link matchRoute} for
+ * correct specificity, applies bypass, and delegates to the framework-
+ * agnostic {@link serveRoute} engine `mockingpug/next` uses too. Only
+ * registered route shapes are handled — an unknown path stays unhandled, so
+ * MSW's `onUnhandledRequest` still fires exactly as before.
  */
 export function createMockHandlers(ctx: QueryContext, baseUrl: string): RequestHandler[] {
-  const handlers: RequestHandler[] = [];
+  const routes = ctx.routes ?? defaultRoutes(Object.keys(ctx.schemas));
 
-  // Per-request bypass (`<MockDevtools>`-armed, exact `METHOD pathname`,
-  // e.g. "GET /api/faqCategory" for the list route or
-  // "GET /api/faqCategory/1" for one record — independent toggles). MSW's
-  // `passthrough()` here needs no extra config: the browser's own
-  // `fetch()` already has the real absolute URL, so letting the request
-  // through is enough, no `target` to forward to.
-  function isRequestBypassed(request: Request): boolean {
+  // Bypass lets the real backend answer instead. Three independent triggers:
+  // an explicit `route.bypass`, an entity-level bypass (schema `bypass: true`
+  // or a runtime `mockingpug.bypass('entity')` call — mutable while the
+  // worker runs, so checked per request), and a `<MockDevtools>`-armed
+  // per-request toggle keyed to the exact `METHOD pathname`. MSW's
+  // `passthrough()` needs no target: the browser's own `fetch()` already has
+  // the real absolute URL.
+  function shouldBypass(route: (typeof routes)[number], request: Request): boolean {
+    if (route.bypass) return true;
+    const entity = routeEntity(route);
+    if (entity && (ctx.schemas[entity]?.bypass === true || isRuntimeBypassed(entity))) return true;
     const pathname = new URL(request.url).pathname;
     return ctx.requestBypass?.isBypassed(request.method, pathname) ?? false;
   }
 
-  for (const entity of Object.keys(ctx.schemas)) {
-    const collectionUrl = joinUrl(baseUrl, entity);
-    const itemUrl = joinUrl(baseUrl, entity, ':id');
+  const resolver = async ({ request }: { request: Request }) => {
+    const pathname = new URL(request.url).pathname;
+    const match = matchRoute(request.method, pathname, routes, baseUrl);
+    if (!match || shouldBypass(match.route, request)) return passthrough();
+    return serveRoute(match, request, ctx);
+  };
 
-    // Bypassed entities (schema-level `bypass: true`, or a runtime
-    // `mockingpug.bypass('entity')` call) let the real backend answer
-    // instead. Checked per-request since the runtime half is
-    // mutable while the worker is already running.
-    function isBypassed(): boolean {
-      return ctx.schemas[entity]?.bypass === true || isRuntimeBypassed(entity);
-    }
-
-    handlers.push(
-      http.get(collectionUrl, async ({ request }) => {
-        if (isBypassed() || isRequestBypassed(request)) return passthrough();
-        const startedAt = Date.now();
-        let response: Response;
-        try {
-          await simulateRuntimeForEntity(ctx, entity, request);
-          const url = new URL(request.url);
-          const { data, meta } = await listRecords(entity, url.searchParams, ctx);
-          response = buildListResponse(data, meta, ctx.pagination.strategy !== false && ctx.pagination.envelope);
-        } catch (error) {
-          response = errorResponse(error);
-        }
-        recordRequest(ctx, request, response.status, startedAt);
-        return response;
-      }),
-    );
-
-    handlers.push(
-      http.get(itemUrl, async ({ request, params }) => {
-        if (isBypassed() || isRequestBypassed(request)) return passthrough();
-        const startedAt = Date.now();
-        let response: Response;
-        try {
-          await simulateRuntimeForEntity(ctx, entity, request);
-          response = jsonResponse(await getRecordById(entity, String(params.id), ctx));
-        } catch (error) {
-          response = errorResponse(error);
-        }
-        recordRequest(ctx, request, response.status, startedAt);
-        return response;
-      }),
-    );
-
-    handlers.push(
-      http.post(collectionUrl, async ({ request }) => {
-        if (isBypassed() || isRequestBypassed(request)) return passthrough();
-        const startedAt = Date.now();
-        let response: Response;
-        try {
-          await simulateRuntimeForEntity(ctx, entity, request);
-          const created = await createRecord(entity, await readJsonBody(request), ctx);
-          response = jsonResponse(created, { status: 201 });
-        } catch (error) {
-          response = errorResponse(error);
-        }
-        recordRequest(ctx, request, response.status, startedAt);
-        return response;
-      }),
-    );
-
-    for (const method of ['put', 'patch'] as const) {
-      handlers.push(
-        http[method](itemUrl, async ({ request, params }) => {
-          if (isBypassed() || isRequestBypassed(request)) return passthrough();
-          const startedAt = Date.now();
-          let response: Response;
-          try {
-            await simulateRuntimeForEntity(ctx, entity, request);
-            const updated = await updateRecord(entity, String(params.id), await readJsonBody(request), ctx);
-            response = jsonResponse(updated);
-          } catch (error) {
-            response = errorResponse(error);
-          }
-          recordRequest(ctx, request, response.status, startedAt);
-          return response;
-        }),
-      );
-    }
-
-    handlers.push(
-      http.delete(itemUrl, async ({ request, params }) => {
-        if (isBypassed() || isRequestBypassed(request)) return passthrough();
-        const startedAt = Date.now();
-        let response: Response;
-        try {
-          await simulateRuntimeForEntity(ctx, entity, request);
-          await deleteRecord(entity, String(params.id), ctx);
-          response = new Response(null, { status: 204 });
-        } catch (error) {
-          response = errorResponse(error);
-        }
-        recordRequest(ctx, request, response.status, startedAt);
-        return response;
-      }),
-    );
-  }
-
-  return handlers;
+  return expandRoutePaths(routes).map(({ method, path }) => HTTP[method](joinUrl(baseUrl, path), resolver));
 }

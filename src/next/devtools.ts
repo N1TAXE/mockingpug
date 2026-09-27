@@ -180,6 +180,7 @@ export async function handleDevtoolsRequest(
   if (action === 'docs' && !entity && method === 'GET' && docsEnabled(ctx)) {
     const spec = generateOpenApiSpec(
       ctx.schemas,
+      ctx.routes,
       { baseUrl: baseUrlFromRequest(request), pagination: ctx.pagination },
       ctx.customDictionaries,
     );

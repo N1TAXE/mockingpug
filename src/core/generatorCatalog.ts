@@ -85,19 +85,26 @@ export const GENERATOR_CATALOG: readonly GeneratorCatalogEntry[] = [
   {
     category: 'Relations',
     syntax: 'data.<entity>',
-    description: "Cross-entity reference: picks a related record's id.",
+    description:
+      "Reverse list (not a stored id): a read-time join returning the related records that link back to this one. Requires exactly one field on <entity> referencing back (e.g. this entity's id), else MP-DEP-003. To store a link to a record, use data.<entity>.<field>.",
     example: 'data.user',
   },
   {
     category: 'Relations',
     syntax: 'data.<entity>.<field>',
-    description: 'Cross-entity reference to a specific field on the related record.',
-    example: 'data.user.name',
+    description: "Link to a related record: picks one <entity> record and stores its <field> (e.g. data.user.id for a foreign key).",
+    example: 'data.user.id',
   },
   {
     category: 'Relations',
     syntax: 'data.<entity>.[field1,field2,...]',
     description: 'Correlated multi-field pick: two or more flat output fields from the same related record.',
     example: 'data.user.[id,name]',
+  },
+  {
+    category: 'Relations',
+    syntax: 'data.<entity>.<field>!unique',
+    description: 'Unique link (1:1): each source record gets a distinct target record. Errors if there are fewer target records than source.',
+    example: 'data.user.id!unique',
   },
 ];

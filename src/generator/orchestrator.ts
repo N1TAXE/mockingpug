@@ -11,10 +11,14 @@ import {
 // consumer), and a browser bundle for `mockingpug/react` must never end up
 // pulling in Node built-ins transitively just because it imports `generator`
 //.
-import { computeEntityMeta } from '../store';
-import { findOrphanEntities, isNoopPlan, planReconciliation } from '../store';
+// Import from specific store files, NOT the `store/index.js` barrel: that
+// barrel re-exports `FileStoreAdapter` (node:fs/promises + node:path), which
+// would then be pulled into `mockingpug/react`'s browser bundle transitively
+// through `generateAll` (R9). These files are node-free.
+import { computeEntityMeta } from '../store/fingerprint.js';
+import { findOrphanEntities, isNoopPlan, planReconciliation } from '../store/reconcile.js';
 import { safeMerge } from '../store/safeMerge.js';
-import type { StoreAdapter, StoredRecord } from '../store';
+import type { StoreAdapter, StoredRecord } from '../store/adapter.js';
 import {
   buildCustomResolver,
   generateFullRecord,
@@ -92,6 +96,11 @@ function applyFixtures(records: StoredRecord[], fixtures: readonly Record<string
   for (let i = 0; i < fixtures.length && i < records.length; i++) {
     const patch = { ...fixtures[i] };
     for (const key of FIXTURE_INTERNAL_KEYS) delete patch[key];
+    // Sparse fixtures: an empty patch pins nothing. Leave the generated record
+    // as-is and DON'T mark it `_seed: false`, so trimming on a lower `amount`
+    // still treats it as generated (R11). Lets `fixtures: [{}, {}, …, {…}]`
+    // pin only row N without pinning every earlier row.
+    if (Object.keys(patch).length === 0) continue;
     records[i] = { ...safeMerge(records[i]!, patch), _seed: false, _index: records[i]!._index };
   }
 }
@@ -211,6 +220,11 @@ export async function generateAll(
       const spec = schema.data[fieldName];
       if (!spec || !isStoredField(spec)) continue;
       for (const record of records) {
+        // Literal positions (index 0..literalCount-1) are set verbatim by
+        // applyLiteral and must never hit the generator: doing so wastes
+        // `number.increment` counters and dictionary `max` on values that get
+        // immediately overwritten (R14). Skip them here.
+        if ((record._index as number) < currentLiteralCount) continue;
         const entries = await generateStoredFieldEntries(
           entity,
           record._index as number,

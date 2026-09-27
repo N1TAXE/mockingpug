@@ -59,6 +59,7 @@ describe('mockingpug() vite plugin', () => {
 
     const code = (await callHook(plugin.load, RESOLVED_VIRTUAL_MODULE_ID)) as string;
     expect(code).toContain('export const schemas');
+    expect(code).toContain('export const routes');
     expect(code).toContain('export const customDictionaries');
     expect(code).toContain('export const mockConfig');
 
@@ -66,6 +67,8 @@ describe('mockingpug() vite plugin', () => {
     const mod: Record<string, unknown> = {};
     new Function('exports', code.replace(/export const/g, 'exports.'))(mod);
     expect((mod.schemas as Record<string, unknown>).user).toBeDefined();
+    // legacy api/user → a resource route so the virtual module carries the API too
+    expect((mod.routes as Array<{ table?: string }>).some((r) => r.table === 'user')).toBe(true);
   });
 
   it('load() returns undefined for any other module id', async () => {

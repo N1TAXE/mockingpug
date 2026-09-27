@@ -3,17 +3,24 @@ title: Schema DSL
 description: Every generator type an entity's data block can use
 ---
 
-Each entity is one JSON file, conventionally at `mock/api/<entity>/schema.json`:
+Each table is one JSON file at `mock/tables/<table>.json` (a table holds data;
+its API surface is described separately — see [Endpoints](/docs/concepts/endpoints)):
 
 ```json
 {
   "amount": 1000,
   "data": { "fieldName": "<DSL string>" },
   "fixtures": [{ "fieldName": "an exact literal value" }],
-  "literal": [{ "fieldName": "a whole curated record" }],
-  "bypass": false
+  "literal": [{ "fieldName": "a whole curated record" }]
 }
 ```
+
+<Callout title="Legacy layout">
+`mock/api/<entity>/schema.json` (a table plus an implicit CRUD REST surface,
+with an optional table-level `bypass`) still works; `npx mpug migrate` converts
+it to the `tables/` + `routes/` layout. `bypass` now lives on the
+[endpoint](/docs/concepts/endpoints), not the table.
+</Callout>
 
 - **`amount`**: how many records to generate for this entity. Required,
   non-negative.
@@ -24,10 +31,11 @@ Each entity is one JSON file, conventionally at `mock/api/<entity>/schema.json`:
   [Fixtures](#fixtures) below.
 - **`literal`** *(optional)*: exact, caller-provided whole *records* placed
   at the head of the set, bypassing generation entirely. See
-  [Literal records](#literal-records) below.
-- **`bypass`** *(optional, `mockingpug/react` only)*: `true` makes every
-  request for this entity fall through to the real network instead of
-  being mocked. See [React guide § bypass](/docs/guides/react#bypass).
+  [Literal records](#literal-records) below. Fields present in every literal
+  record but absent from `data` are inferred into the schema (typed by value).
+
+A field's value can also be a plain **[nested object](#nested-objects)** or a
+**[correlated `ref`](#correlated-ref)** — see below.
 
 Every DSL string below is parsed by `core`'s `parseFieldType()`. The exact
 same function backs the CLI, `mockingpug/next`, the Vite plugin, and the
@@ -53,7 +61,7 @@ between transports.
 | `date` / `date.past` / `date.future` | `string` (ISO) | A timestamp within one year of a fixed reference date, before/after/around it depending on the suffix. |
 | `boolean` | `boolean` | 50/50 by default. |
 | `boolean.<p>` | `boolean` | `true` with probability `p` (`0` to `1`), e.g. `boolean.0.9`. |
-| `enum[a,b,c]` | `string` | Uniformly random pick among the literal, comma-separated values. |
+| `enum[a,b,c]` | literal | Uniformly random pick. The value type is preserved: `enum[3600,86400]` → `number`, `enum[true,false]` → `boolean`, `enum[ADMIN,USER]` → `string`. |
 
 ## Arrays
 
@@ -214,6 +222,54 @@ field, or a self-reference, also fails at parse time (`MP-SCHEMA-017`).
 Unlike a [fixture](#fixtures), a `slugify` field is still generated fresh
 from its source on every reconciliation that touches it (field added, or the
 source field's own type changes) — it derives a value, it doesn't fix one.
+
+## Nested objects
+
+A field's value can be a plain object of sub-fields — a value object, not a
+relation. It's generated recursively, and a leaf is addressed by a **dotted
+path** in an endpoint's `select`/`filterable` (`options.is_top`):
+
+```json title="mock/tables/product.json"
+{
+  "amount": 100,
+  "data": {
+    "id": "number.increment",
+    "options": {
+      "is_top": "boolean.0.15",
+      "is_new": "boolean.0.05"
+    }
+  }
+}
+```
+
+This removes the need for a separate one-to-one table per value object. It's
+distinguished from a [conditional](#conditional-generation) by the absence of a
+`when` key. (Sub-fields are leaf generators — a `crossRef`/`slugify`/conditional
+inside a nested object isn't resolved.)
+
+## Correlated ref
+
+A bare multi-pick (`data.product.[id,slug]`) writes the target's fields under
+their **source** names, which collide with the record's own fields. A `ref`
+maps them to explicit output names, all from one guaranteed-same target record:
+
+```json
+"product": {
+  "kind": "ref",
+  "entity": "product",
+  "fields": { "product_id": "id", "product_slug": "slug" }
+}
+```
+
+Here `product_id` / `product_slug` come from the same picked `product`. See
+[Relations & Generation](/docs/concepts/relations-and-generation) for the plain
+and multi-pick forms.
+
+## Unique references
+
+A field-level relation with a trailing `!unique` — `data.user.id!unique` —
+maps record *i* to target *i* (a stable 1:1 pairing) instead of a random pick,
+so no two records share the same referenced row.
 
 ## Conditional generation
 

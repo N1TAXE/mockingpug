@@ -13,11 +13,16 @@ interface FieldRef {
   targetEntity: string;
   targetField?: string;
   targetFields?: readonly string[];
+  targetRename?: Record<string, string>;
 }
 
 /** True for any ref that needs `targetEntity` fully generated first: field-level (`data.user.id`) and multi-pick (`data.product.[id,name]`) refs, but not bare relations (`data.blogpost`), which resolve lazily at read time. */
 function isForwardRef(ref: FieldRef): boolean {
-  return ref.targetField !== undefined || (ref.targetFields !== undefined && ref.targetFields.length > 0);
+  return (
+    ref.targetField !== undefined ||
+    (ref.targetFields !== undefined && ref.targetFields.length > 0) ||
+    (ref.targetRename !== undefined && Object.keys(ref.targetRename).length > 0)
+  );
 }
 
 /** Recursively visits a field spec, including nested `array` items and both branches of a `conditional`. */
@@ -29,6 +34,8 @@ function walkFieldSpec(spec: FieldSpec, visit: (ref: FieldSpec & { kind: 'crossR
   } else if (spec.kind === 'conditional') {
     walkFieldSpec(spec.then, visit);
     walkFieldSpec(spec.else, visit);
+  } else if (spec.kind === 'object') {
+    for (const nested of Object.values(spec.fields)) walkFieldSpec(nested, visit);
   }
 }
 
@@ -43,6 +50,7 @@ function collectRefs(schemas: SchemaMap): FieldRef[] {
           targetEntity: ref.entity,
           targetField: ref.field,
           targetFields: ref.fields,
+          targetRename: ref.rename,
         });
       });
     }
@@ -149,6 +157,37 @@ export function resolveFieldRef(
     throw new GenerationError(
       'MP-GEN-005',
       `cannot resolve "data.${targetEntity}.${targetField}": field "${targetField}" does not exist on "${targetEntity}" records`,
+    );
+  }
+  return record[targetField];
+}
+
+/**
+ * Resolves a unique field-level cross-ref (`data.users.id!unique`): the source
+ * record at `index` gets the `index`-th target record's field, so every source
+ * maps to a distinct target (a 1:1 relation). Identity mapping keeps it O(1),
+ * deterministic and stable as the source grows (appending source N+1 claims
+ * target N without disturbing 0..N). Throws when there aren't enough targets.
+ */
+export function resolveUniqueFieldRef(
+  targetEntity: string,
+  targetField: string,
+  targetRecords: readonly Record<string, unknown>[],
+  index: number,
+): unknown {
+  if (index >= targetRecords.length) {
+    throw new GenerationError(
+      'MP-GEN-009',
+      `cannot resolve "data.${targetEntity}.${targetField}!unique": needs a distinct "${targetEntity}" per source record, ` +
+        `but only ${targetRecords.length} "${targetEntity}" record(s) exist for source #${index + 1}`,
+      { hint: `raise "${targetEntity}"'s amount to at least the referencing entity's amount, or drop "!unique"` },
+    );
+  }
+  const record = targetRecords[index]!;
+  if (!(targetField in record)) {
+    throw new GenerationError(
+      'MP-GEN-005',
+      `cannot resolve "data.${targetEntity}.${targetField}!unique": field "${targetField}" does not exist on "${targetEntity}" records`,
     );
   }
   return record[targetField];

@@ -5,6 +5,7 @@ import {
   generateValue,
   IncrementCounters,
   resolveFieldRef,
+  resolveUniqueFieldRef,
   resolveMultiFieldRef,
   type CustomDictionaryEntry,
   type FieldSpec,
@@ -37,7 +38,7 @@ export function buildCustomResolver(
 
 /** A field the generator actually stores: every field except bare (fieldless, non-multi-pick) cross-refs, which are resolved lazily on read. */
 export function isStoredField(spec: FieldSpec): boolean {
-  return !(spec.kind === 'crossRef' && spec.field === undefined && spec.fields === undefined);
+  return !(spec.kind === 'crossRef' && spec.field === undefined && spec.fields === undefined && spec.rename === undefined);
 }
 
 /**
@@ -67,7 +68,9 @@ export async function generateFieldValue(
   const rng = createRng(seed, entity, index, fieldName);
   if (spec.kind === 'crossRef' && spec.field !== undefined) {
     const target = await resolveTargetRecords(spec.entity);
-    return resolveFieldRef(spec.entity, spec.field, target, rng);
+    return spec.unique
+      ? resolveUniqueFieldRef(spec.entity, spec.field, target, index)
+      : resolveFieldRef(spec.entity, spec.field, target, rng);
   }
   if (spec.kind === 'array' && spec.item.kind === 'crossRef' && spec.item.field !== undefined) {
     // Each element is an independent pick, keyed by its position in the
@@ -133,6 +136,13 @@ export async function generateStoredFieldEntries(
   resolveTargetRecords: TargetRecordsResolver,
   partialRecord?: Readonly<Record<string, unknown>>,
 ): Promise<Record<string, unknown>> {
+  if (spec.kind === 'crossRef' && spec.rename !== undefined) {
+    // Correlated ref: pick ONE target record, map its fields to the renamed outputs.
+    const rng = createRng(seed, entity, index, fieldName);
+    const target = await resolveTargetRecords(spec.entity);
+    const picked = resolveMultiFieldRef(spec.entity, Object.values(spec.rename), target, rng);
+    return Object.fromEntries(Object.entries(spec.rename).map(([outName, src]) => [outName, picked[src]]));
+  }
   if (spec.kind === 'crossRef' && spec.fields !== undefined) {
     const rng = createRng(seed, entity, index, fieldName);
     const target = await resolveTargetRecords(spec.entity);

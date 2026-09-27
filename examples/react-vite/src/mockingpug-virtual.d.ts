@@ -4,8 +4,9 @@
 // this small shim themselves — same pattern as Vite's own `virtual:*` env
 // modules.
 declare module 'virtual:mockingpug/schemas' {
-  import type { CustomDictionaryEntry, EntitySchema } from 'mockingpug';
+  import type { CustomDictionaryEntry, EntitySchema, Route } from 'mockingpug';
 
   export const schemas: Record<string, EntitySchema>;
+  export const routes: Route[];
   export const customDictionaries: Record<string, CustomDictionaryEntry[]>;
 }

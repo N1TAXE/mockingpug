@@ -174,6 +174,51 @@ Set `docs: { enabled: false }` in `mock.config.js` to skip this entirely
 "API Docs" button and 404s its `{baseUrl}/__mockingpug/docs` route.
 Defaults to `true`.
 
+## 8. `migrate`
+
+```bash
+npx mpug migrate        # dry-run (prints the plan)
+npx mpug migrate --yes  # apply
+```
+
+Converts a legacy project (one `mock/api/<entity>/schema.json` per entity =
+table + implicit REST) to the split format: `mock/tables/<entity>.json` (data
+only) + `mock/routes/<entity>.json` (the 6 endpoints reproducing the old CRUD —
+`list`/`one` for the GETs, `mutation` for POST/PUT/PATCH/DELETE), then removes
+the migrated `api/` folders. A table `bypass` moves onto each endpoint. Skips
+(with a warning) entities whose `tables/`/`routes/` files already exist, so
+re-running is safe. Dry-run by default; `--yes` writes and deletes.
+
+## Cloud sync: `login` / `link` / `pull`
+
+Optional — mockingpug runs fully offline from local JSON. Cloud sync mirrors a
+schema authored in [MockingPug Cloud](https://app.mockingpug.com) into the repo.
+Cloud owns the schema; the local checkout mirrors it, plus local-only code
+(custom generators, `handlers/`).
+
+```bash
+npx mpug login                        # device auth → token in ~/.config/mockingpug/auth.json
+npx mpug link <projectId>             # link + first sync
+npx mpug link <projectId> --no-push   # link only, don't upload local mocks
+npx mpug pull                         # 1:1 mirror of the published version
+```
+
+- **`login`** — device auth; CI uses `MOCKINGPUG_TOKEN` (`mp_ci_…`, read-only)
+  instead, which overrides the config token.
+- **`link`** — writes `.mockingpug/project.json` (commit it). No local mocks →
+  `pull`s the published version down. Local mocks present → **pushes** them to
+  the project's *draft* (cloud merges), then you Publish in the editor and
+  `pull`. `--no-push` links without uploading. Push needs an *edit schema*
+  token (CI token → `CLOUD-FORBIDDEN`); a busy editor → `CLOUD-BUSY`.
+- **`pull`** — mirrors the published version 1:1 into `mock/tables`,
+  `mock/routes`, `mock/data`: writes what cloud has and **removes what it no
+  longer has** (plus any legacy `mock/api/`). `handlers/`, custom generators
+  and `mock.config.js` are out of scope. Refuses without `--yes` when it would
+  overwrite/remove local files. `--watch` keeps syncing; `--version N` /
+  `--project id` for CI. If a local push is still unpublished, `pull` holds off
+  (nothing written) until you Publish — or `--force` to mirror the published
+  version and discard the draft.
+
 ## `mock.config.js` reference
 
 All fields are optional; this shows every default:
@@ -217,7 +262,8 @@ dynamic `import()` and Node's CJS/ESM interop handles the rest. An ESM
 
 Every message is prefixed `[mockingpug]`; warnings are prefixed
 `[mockingpug] warning:`. Errors carry a stable code (`MP-SCHEMA-*`,
-`MP-CONFIG-*`, `MP-DEP-*`, `MP-STORE-*`) and, where relevant, the exact
+`MP-CONFIG-*`, `MP-DEP-*`, `MP-STORE-*`, `MP-ROUTE-*`, and `CLOUD-*` for
+sync) and, where relevant, the exact
 file/field at fault plus a fix suggestion; these are meant to be readable
 without cross-referencing this doc. Anything that reaches the CLI *without*
 one of these codes is treated as a genuine bug in mockingpug itself, not a

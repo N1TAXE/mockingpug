@@ -1,0 +1,4 @@
+[
+  { "id": "user_list", "kind": "list", "method": "GET", "path": "/user", "from": "user" },
+  { "id": "user_get", "kind": "one", "method": "GET", "path": "/user/:id", "from": "user", "where": { "id": ":id" }, "include": { "posts": { "from": "blogpost", "by": "author", "select": ["id", "title"] } } }
+]

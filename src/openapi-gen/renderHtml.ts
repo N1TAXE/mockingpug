@@ -143,22 +143,35 @@ export function renderDocsHtml(spec: JsonSchema): string {
   const tags = ((spec.tags ?? []) as JsonSchema[]).map((t) => String(t.name));
   const paths = (spec.paths ?? {}) as Record<string, JsonSchema>;
 
+  // Group operations by their `tags` (the table they read), not by path prefix:
+  // a route's path (`/orders/:id/pay`, `/ping`) no longer mirrors a table name.
+  // Anything tagless (static routes) collects under "Other".
+  const opTags = (op: JsonSchema): string[] => ((op.tags as string[] | undefined) ?? []);
+  const OTHER = '__other__';
+  const groups = [...tags, OTHER];
+
   const nav = tags.map((entity) => `<a href="#entity-${escapeHtml(entity)}">${escapeHtml(entity)}</a>`).join('');
 
-  const sections = tags
-    .map((entity) => {
-      const entityPaths = Object.entries(paths).filter(([path]) => path === `/${entity}` || path.startsWith(`/${entity}/`));
-      const operations = entityPaths
+  const sections = groups
+    .map((group) => {
+      const operations = Object.entries(paths)
         .flatMap(([path, pathItem]) =>
-          METHOD_ORDER.filter((m) => m in pathItem).map((method) => operationSection(entity, path, method, pathItem[method] as JsonSchema, serverUrl, schemas)),
+          METHOD_ORDER.filter((m) => m in pathItem).filter((m) => {
+            const ts = opTags(pathItem[m] as JsonSchema);
+            return group === OTHER ? ts.length === 0 : ts.includes(group);
+          }).map((method) => operationSection(group, path, method, pathItem[method] as JsonSchema, serverUrl, schemas)),
         )
         .join('');
-      const schemaName = pascalCase(entity);
+      if (!operations) return '';
+      const schemaName = pascalCase(group);
+      const heading = group === OTHER ? 'Other' : group;
+      const schemaTable = group !== OTHER && schemas[schemaName]
+        ? `<h4>Schema</h4>${schemaPropertiesTable({ $ref: `#/components/schemas/${schemaName}` }, schemas)}`
+        : '';
       return `
-        <section id="entity-${escapeHtml(entity)}" class="entity-section">
-          <h2>${escapeHtml(entity)}</h2>
-          <h4>Schema</h4>
-          ${schemaPropertiesTable(schemas[schemaName] ? { $ref: `#/components/schemas/${schemaName}` } : undefined, schemas)}
+        <section id="entity-${escapeHtml(group)}" class="entity-section">
+          <h2>${escapeHtml(heading)}</h2>
+          ${schemaTable}
           ${operations}
         </section>`;
     })

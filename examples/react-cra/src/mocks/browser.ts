@@ -1,6 +1,6 @@
 import { setupWorker } from 'msw/browser';
 import { MemoryStoreAdapter, generateAll, createMockHandlers, type QueryContext } from 'mockingpug/react';
-import { schemas, customDictionaries } from './schemas';
+import { schemas, routes, customDictionaries } from './schemas';
 
 const SEED = 'react-cra-example';
 
@@ -10,6 +10,7 @@ export async function startMocking() {
 
   const ctx: QueryContext = {
     schemas,
+    routes,
     store,
     seed: SEED,
     customDictionaries,

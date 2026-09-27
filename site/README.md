@@ -22,9 +22,11 @@ In the project, you can see:
 - `lib/source.ts`: Code for content source adapter, [`loader()`](https://fumadocs.dev/docs/headless/source-api) provides the interface to access your content.
 - `lib/layout.shared.tsx`: Shared options for layouts, optional but preferred to keep.
 
+This site is **documentation only** — the marketing landing lives in the shared SEO app in a separate repository. The root (`/`) redirects to `/docs`.
+
 | Route                     | Description                                            |
 | ------------------------- | ------------------------------------------------------ |
-| `app/(home)`              | The route group for your landing page and other pages. |
+| `app/page.tsx`            | Root redirect to `/docs`.                              |
 | `app/docs`                | The documentation layout and pages.                    |
 | `app/api/search/route.ts` | The Route Handler for search.                          |
 

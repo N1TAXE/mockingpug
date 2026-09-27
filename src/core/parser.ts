@@ -41,10 +41,23 @@ export function parseFieldType(raw: string, options: ParseFieldTypeOptions = {})
   const value = raw.trim();
   const knownCustomTypes = options.knownCustomTypes ?? [];
 
-  // data.<entity> / data.<entity>.<field>
-  const crossRefMatch = /^data\.([A-Za-z_][\w]*)(?:\.([A-Za-z_][\w]*))?$/.exec(value);
+  // data.<entity> / data.<entity>.<field> / data.<entity>.<field>!unique
+  const crossRefMatch = /^data\.([A-Za-z_][\w]*)(?:\.([A-Za-z_][\w]*))?(!unique)?$/.exec(value);
   if (crossRefMatch) {
-    return { kind: 'crossRef', entity: crossRefMatch[1]!, field: crossRefMatch[2] };
+    const entity = crossRefMatch[1]!;
+    const field = crossRefMatch[2];
+    const unique = crossRefMatch[3] !== undefined;
+    if (unique && field === undefined) {
+      throw new SchemaError(
+        'MP-SCHEMA-028',
+        `"!unique" needs a field-level reference (a bare relation is a read-time list, not a stored value)`,
+        {
+          location: options.file ? { file: options.file, path: options.fieldPath } : undefined,
+          hint: `e.g. "data.${entity}.id!unique"`,
+        },
+      );
+    }
+    return { kind: 'crossRef', entity, field, ...(unique ? { unique: true } : {}) };
   }
 
   // data.<entity>.[field1,field2,...]: a single pick of <entity>, projected
@@ -73,10 +86,18 @@ export function parseFieldType(raw: string, options: ParseFieldTypeOptions = {})
     return { kind: 'crossRef', entity, fields };
   }
 
-  // enum[a,b,c]
+  // enum[a,b,c] — a value's literal type is preserved: `true`/`false` → boolean,
+  // a canonical number → number (`enum[3600,86400]` yields numbers, not strings),
+  // everything else → string (`enum[ADMIN,USER]` stays strings).
   const enumMatch = /^enum\[(.+)]$/.exec(value);
   if (enumMatch) {
-    const values = enumMatch[1]!.split(',').map((v) => v.trim());
+    const values = enumMatch[1]!.split(',').map((raw) => {
+      const v = raw.trim();
+      if (v === 'true') return true;
+      if (v === 'false') return false;
+      if (v !== '' && String(Number(v)) === v) return Number(v);
+      return v;
+    });
     return { kind: 'enumInline', values };
   }
 

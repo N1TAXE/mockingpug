@@ -1,4 +1,5 @@
 import { expandDataFields } from '../core/expandFields.js';
+import { defaultRoutes, routeEntity, type Route } from '../core/routes.js';
 import type { CustomDictionaryEntry, EntitySchema, FieldSpec } from '../core/types.js';
 import type { MockConfig } from '../cli/mockConfig.js';
 
@@ -65,8 +66,11 @@ export function fieldSchema(
       return { type: 'string', format: 'date-time' };
     case 'boolean':
       return { type: 'boolean' };
-    case 'enumInline':
-      return { type: 'string', enum: spec.values };
+    case 'enumInline': {
+      // Type follows the literal values (numbers/booleans keep their type).
+      const t = spec.values.every((v) => typeof v === 'number') ? 'number' : spec.values.every((v) => typeof v === 'boolean') ? 'boolean' : spec.values.every((v) => typeof v === 'string') ? 'string' : undefined;
+      return { ...(t ? { type: t } : {}), enum: spec.values };
+    }
     case 'array':
       return {
         type: 'array',
@@ -98,6 +102,11 @@ export function fieldSchema(
       return spec.value === null ? { type: 'null' } : { type: typeof spec.value, const: spec.value };
     case 'conditional':
       return { oneOf: [fieldSchema(spec.then, schemas, customDictionaries, visiting), fieldSchema(spec.else, schemas, customDictionaries, visiting)] };
+    case 'object':
+      return {
+        type: 'object',
+        properties: Object.fromEntries(Object.entries(spec.fields).map(([key, sub]) => [key, fieldSchema(sub, schemas, customDictionaries, visiting)])),
+      };
   }
 }
 
@@ -113,12 +122,52 @@ function entitySchemaComponent(
   schema: EntitySchema,
   allSchemas: Record<string, EntitySchema>,
   customDictionaries: Record<string, readonly CustomDictionaryEntry[]> | undefined,
+  writeOnly?: ReadonlySet<string>,
 ): JsonSchema {
   const properties: Record<string, JsonSchema> = {};
   for (const [fieldName, spec] of expandDataFields(schema.data)) {
-    properties[fieldName] = fieldSchema(spec, allSchemas, customDictionaries, new Set());
+    const field = fieldSchema(spec, allSchemas, customDictionaries, new Set());
+    // A field no endpoint ever returns (projected out of every `select`) is
+    // documented as write-only: it exists in the record and can be sent, but
+    // never appears in a response body.
+    properties[fieldName] = writeOnly?.has(fieldName) ? { ...field, writeOnly: true } : field;
   }
   return { type: 'object', properties };
+}
+
+/**
+ * Fields no endpoint returns for each table, per R5 §4: a field is write-only
+ * when the table is read by at least one route and none of those reads includes
+ * it in their `select` (a `select`-less read returns everything, so the table
+ * then has no write-only fields). Tables with no reading route (internal, or
+ * legacy resource which returns everything) get an empty set.
+ */
+function computeWriteOnly(routes: readonly Route[], entities: Record<string, EntitySchema>): Map<string, Set<string>> {
+  const returned = new Map<string, Set<string> | 'all'>();
+  const note = (table: string, fields: 'all' | readonly string[]): void => {
+    const cur = returned.get(table);
+    if (cur === 'all') return;
+    if (fields === 'all') return void returned.set(table, 'all');
+    const set = cur ?? new Set<string>();
+    for (const f of fields) set.add(f);
+    returned.set(table, set);
+  };
+  for (const route of routes) {
+    if (route.kind === 'resource') note(route.table, 'all');
+    else if (route.kind === 'list' || route.kind === 'one') note(route.from, route.select ?? 'all');
+    else if (route.kind === 'mutation' && route.from) note(route.from, route.response !== undefined ? [] : (route.select ?? 'all'));
+  }
+
+  const writeOnly = new Map<string, Set<string>>();
+  for (const [table, seen] of returned) {
+    if (seen === 'all') continue;
+    const schema = entities[table];
+    if (!schema) continue;
+    const set = new Set<string>();
+    for (const [fieldName] of expandDataFields(schema.data)) if (!seen.has(fieldName)) set.add(fieldName);
+    if (set.size > 0) writeOnly.set(table, set);
+  }
+  return writeOnly;
 }
 
 const ERROR_SCHEMA: JsonSchema = {
@@ -171,14 +220,17 @@ function filterParams(
   schema: EntitySchema,
   allSchemas: Record<string, EntitySchema>,
   customDictionaries: Record<string, readonly CustomDictionaryEntry[]> | undefined,
+  filterable?: readonly string[],
 ): JsonSchema[] {
-  return expandDataFields(schema.data).map(([fieldName, spec]) => ({
-    name: fieldName,
-    in: 'query',
-    required: false,
-    description: `Exact-match filter on "${fieldName}" (comma-separated value = OR).`,
-    schema: fieldSchema(spec, allSchemas, customDictionaries, new Set()),
-  }));
+  return expandDataFields(schema.data)
+    .filter(([fieldName]) => !filterable || filterable.includes(fieldName))
+    .map(([fieldName, spec]) => ({
+      name: fieldName,
+      in: 'query',
+      required: false,
+      description: `Exact-match filter on "${fieldName}" (comma-separated value = OR).`,
+      schema: fieldSchema(spec, allSchemas, customDictionaries, new Set()),
+    }));
 }
 
 function listParameters(
@@ -186,6 +238,7 @@ function listParameters(
   allSchemas: Record<string, EntitySchema>,
   config: OpenApiConfig,
   customDictionaries: Record<string, readonly CustomDictionaryEntry[]> | undefined,
+  filterable?: readonly string[],
 ): JsonSchema[] {
   const params: JsonSchema[] = [];
   const { pagination } = config;
@@ -214,12 +267,13 @@ function listParameters(
   params.push(stringParam('sort', 'Comma-separated "field:asc|desc" clauses, e.g. "price:asc,name:desc".'));
   params.push(stringParam('q', 'Case-insensitive substring search across every string field (or just the fields in `searchFields`).'));
   params.push(stringParam('searchFields', 'Comma-separated field names to restrict `q` to.'));
-  params.push(...filterParams(schema, allSchemas, customDictionaries));
+  params.push(...filterParams(schema, allSchemas, customDictionaries, filterable));
   return params;
 }
 
-function listResponseSchema(entityName: string, config: OpenApiConfig): JsonSchema {
-  const items = { type: 'array', items: schemaRef(entityName) };
+/** Wraps an item schema in the configured list envelope (`{data, meta}`) or leaves it a bare array (envelope off / no pagination). */
+function listEnvelope(itemsSchema: JsonSchema, config: OpenApiConfig): JsonSchema {
+  const items = { type: 'array', items: itemsSchema };
   if (config.pagination.strategy === false || !config.pagination.envelope) return items;
   return {
     type: 'object',
@@ -247,59 +301,137 @@ function jsonContent(schema: JsonSchema): JsonSchema {
   return { content: { 'application/json': { schema } } };
 }
 
-function entityPaths(entityName: string, schema: EntitySchema, allSchemas: Record<string, EntitySchema>, config: OpenApiConfig, customDictionaries: Record<string, readonly CustomDictionaryEntry[]> | undefined): Record<string, JsonSchema> {
-  const tag = entityName;
-  const collectionPath = `/${entityName}`;
-  const itemPath = `/${entityName}/{id}`;
-  const entityRef = schemaRef(entityName);
-  const listHeaders = listResponseHeaders(config);
+/** `/orders/:id/full` → `/orders/{id}/full` (route param syntax → OpenAPI param syntax). */
+function openapiPath(path: string): string {
+  return path.replace(/:([A-Za-z_]\w*)/g, '{$1}');
+}
 
-  return {
-    [collectionPath]: {
-      get: {
-        tags: [tag],
-        summary: `List "${entityName}" records`,
-        parameters: listParameters(schema, allSchemas, config, customDictionaries),
-        responses: {
-          '200': { description: 'OK', ...jsonContent(listResponseSchema(entityName, config)), ...(listHeaders ? { headers: listHeaders } : {}) },
-        },
-      },
-      post: {
-        tags: [tag],
-        summary: `Create a "${entityName}" record`,
-        description: 'Generates a fully-formed record (every schema field, including a resolved field-level cross-ref) and merges the request body over it, so a minimal or empty body still yields a complete record.',
-        requestBody: { required: false, ...jsonContent(entityRef) },
-        responses: { '201': { description: 'Created', ...jsonContent(entityRef) } },
-      },
-    },
-    [itemPath]: {
-      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
-      get: {
-        tags: [tag],
-        summary: `Get one "${entityName}" record by id`,
-        responses: { '200': { description: 'OK', ...jsonContent(entityRef) }, '404': errorResponse('No record with this id.') },
-      },
-      put: {
-        tags: [tag],
-        summary: `Replace/merge a "${entityName}" record`,
-        description: 'Merges the request body over the existing record (safe-merge — see the security notes in the docs site); not a full-document replace.',
-        requestBody: { required: false, ...jsonContent(entityRef) },
-        responses: { '200': { description: 'OK', ...jsonContent(entityRef) }, '404': errorResponse('No record with this id.') },
-      },
-      patch: {
-        tags: [tag],
-        summary: `Partially update a "${entityName}" record`,
-        description: 'Same merge semantics as PUT; both verbs are handled identically.',
-        requestBody: { required: false, ...jsonContent(entityRef) },
-        responses: { '200': { description: 'OK', ...jsonContent(entityRef) }, '404': errorResponse('No record with this id.') },
-      },
-      delete: {
-        tags: [tag],
-        summary: `Delete a "${entityName}" record`,
-        responses: { '204': { description: 'No Content' }, '404': errorResponse('No record with this id.') },
-      },
-    },
-  };
+function pathParamObjects(path: string): JsonSchema[] {
+  return [...path.matchAll(/:([A-Za-z_]\w*)/g)].map((m) => ({ name: m[1], in: 'path', required: true, schema: { type: 'string' } }));
+}
+
+type IncludeSpec = string | { from: string; by: string; select?: string[] };
+
+/**
+ * The response body schema for a projected read (`list`/`one`): the table's
+ * fields restricted to `select` (all when absent), plus one property per
+ * `include` — a `$ref` to the FK target for the string form, an array of
+ * `$ref`s for the reverse `{from, by}` form.
+ */
+function projectedSchema(
+  fromTable: string,
+  select: string[] | undefined,
+  include: Record<string, IncludeSpec> | undefined,
+  entities: Record<string, EntitySchema>,
+  customDictionaries: Record<string, readonly CustomDictionaryEntry[]> | undefined,
+): JsonSchema {
+  const schema = entities[fromTable];
+  if (!schema) return schemaRef(fromTable);
+  const properties: Record<string, JsonSchema> = {};
+  for (const [fieldName, spec] of expandDataFields(schema.data)) {
+    if (select && !select.includes(fieldName)) continue;
+    properties[fieldName] = fieldSchema(spec, entities, customDictionaries, new Set());
+  }
+  for (const [key, spec] of Object.entries(include ?? {})) {
+    if (typeof spec === 'string') {
+      const fk = schema.data[spec];
+      properties[key] = fk && fk.kind === 'crossRef' ? schemaRef(fk.entity) : {};
+    } else {
+      properties[key] = { type: 'array', items: schemaRef(spec.from) };
+    }
+  }
+  return { type: 'object', properties };
+}
+
+/** Legacy `resource`: the classic per-table CRUD surface, at the route's own base path and limited to its `methods`. */
+function resourcePaths(route: Extract<Route, { kind: 'resource' }>, entities: Record<string, EntitySchema>, config: OpenApiConfig, customDictionaries: Record<string, readonly CustomDictionaryEntry[]> | undefined): Record<string, JsonSchema> {
+  const schema = entities[route.table];
+  if (!schema) return {};
+  const tag = route.table;
+  const base = openapiPath(route.path);
+  const item = `${base}/{id}`;
+  const ref = schemaRef(route.table);
+  const listHeaders = listResponseHeaders(config);
+  const collection: JsonSchema = {};
+  const single: JsonSchema = { parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }] };
+
+  if (route.methods.includes('list')) {
+    collection.get = { tags: [tag], summary: `List "${route.table}" records`, parameters: listParameters(schema, entities, config, customDictionaries), responses: { '200': { description: 'OK', ...jsonContent(listEnvelope(ref, config)), ...(listHeaders ? { headers: listHeaders } : {}) } } };
+  }
+  if (route.methods.includes('create')) {
+    collection.post = { tags: [tag], summary: `Create a "${route.table}" record`, description: 'Generates a fully-formed record and merges the request body over it, so a minimal or empty body still yields a complete record.', requestBody: { required: false, ...jsonContent(ref) }, responses: { '201': { description: 'Created', ...jsonContent(ref) } } };
+  }
+  if (route.methods.includes('get')) {
+    single.get = { tags: [tag], summary: `Get one "${route.table}" record by id`, responses: { '200': { description: 'OK', ...jsonContent(ref) }, '404': errorResponse('No record with this id.') } };
+  }
+  if (route.methods.includes('update')) {
+    single.put = { tags: [tag], summary: `Replace/merge a "${route.table}" record`, description: 'Safe-merge over the existing record; not a full-document replace.', requestBody: { required: false, ...jsonContent(ref) }, responses: { '200': { description: 'OK', ...jsonContent(ref) }, '404': errorResponse('No record with this id.') } };
+    single.patch = { tags: [tag], summary: `Partially update a "${route.table}" record`, description: 'Same merge semantics as PUT.', requestBody: { required: false, ...jsonContent(ref) }, responses: { '200': { description: 'OK', ...jsonContent(ref) }, '404': errorResponse('No record with this id.') } };
+  }
+  if (route.methods.includes('delete')) {
+    single.delete = { tags: [tag], summary: `Delete a "${route.table}" record`, responses: { '204': { description: 'No Content' }, '404': errorResponse('No record with this id.') } };
+  }
+
+  const out: Record<string, JsonSchema> = {};
+  if (Object.keys(collection).length > 0) out[base] = collection;
+  if (Object.keys(single).length > 1) out[item] = single;
+  return out;
+}
+
+/** Merges an operation for one authored route into the path map, keyed by its OpenAPI path + HTTP method. */
+function addRouteOperation(paths: Record<string, JsonSchema>, route: Route, entities: Record<string, EntitySchema>, config: OpenApiConfig, customDictionaries: Record<string, readonly CustomDictionaryEntry[]> | undefined): void {
+  if (route.kind === 'resource' || route.kind === 'handler') return; // resource handled separately; handler is code, opaque here
+  const path = openapiPath(route.path);
+  const method = route.method.toLowerCase();
+  const tag = routeEntity(route);
+  const params = pathParamObjects(route.path);
+  const base: JsonSchema = { ...(tag ? { tags: [tag] } : {}), ...(route.description ? { description: route.description } : {}), ...(params.length ? { parameters: params } : {}) };
+  let op: JsonSchema;
+
+  if (route.kind === 'list') {
+    const items = projectedSchema(route.from, route.select, route.include, entities, customDictionaries);
+    const listHeaders = listResponseHeaders(config);
+    op = { ...base, summary: `List from "${route.from}"`, parameters: [...params, ...listParameters(entities[route.from] ?? { data: {} } as EntitySchema, entities, config, customDictionaries, route.filterable)], responses: { '200': { description: 'OK', ...jsonContent(listEnvelope(items, config)), ...(listHeaders ? { headers: listHeaders } : {}) } } };
+  } else if (route.kind === 'one') {
+    const schema = projectedSchema(route.from, route.select, route.include, entities, customDictionaries);
+    op = { ...base, summary: `Get one from "${route.from}"`, responses: { '200': { description: 'OK', ...jsonContent(schema) }, '404': errorResponse('No record matched.') } };
+  } else if (route.kind === 'mutation') {
+    const responseSchema = route.response !== undefined ? exampleContent(route.response) : route.from ? jsonContent(projectedSchema(route.from, route.select, undefined, entities, customDictionaries)) : jsonContent({ type: 'object' });
+    op = { ...base, summary: `${route.method} ${route.path}`, description: `${route.description ?? ''} A mock method map: responds 200 without changing stored data.`.trim(), ...(route.body !== undefined ? { requestBody: { required: false, ...exampleContent(route.body) } } : {}), responses: { '200': { description: 'OK', ...responseSchema } } };
+  } else if (route.kind === 'composite') {
+    const properties: Record<string, JsonSchema> = {};
+    for (const [key, slot] of Object.entries(route.shape)) {
+      const one = projectedSchema(slot.from, slot.select, slot.include, entities, customDictionaries);
+      properties[key] = slot.first ? one : { type: 'array', items: one };
+    }
+    op = { ...base, summary: `Composite from ${Object.values(route.shape).map((s) => s.from).join(', ')}`, responses: { '200': { description: 'OK', ...jsonContent({ type: 'object', properties }) } } };
+  } else if (route.kind === 'action') {
+    const respond = route.respond;
+    const status = 'status' in respond ? String(respond.status) : '200';
+    const content =
+      'status' in respond
+        ? { content: { 'application/json': { example: respond.body } } }
+        : 'from' in respond
+          ? jsonContent(respond.first ? projectedSchema(respond.from, respond.select, undefined, entities, customDictionaries) : { type: 'array', items: projectedSchema(respond.from, respond.select, undefined, entities, customDictionaries) })
+          : jsonContent({ type: 'object' });
+    op = { ...base, summary: `Action ${route.method} ${route.path}`, description: `${route.description ?? ''} Writes via ${route.effects.length} effect(s).`.trim(), responses: { [status]: { description: 'OK', ...content } } };
+  } else {
+    // static
+    op = { ...base, summary: `Static ${route.method} ${route.path}`, responses: { [String(route.status)]: { description: 'OK', content: { 'application/json': { example: route.body } } } } };
+  }
+
+  paths[path] = { ...(paths[path] ?? {}), [method]: op };
+}
+
+/** `content` with a parsed JSON `example` (mutation `body`/`response` are JSON text). Falls back to a raw string example if it doesn't parse. */
+function exampleContent(jsonText: string): JsonSchema {
+  let example: unknown;
+  try {
+    example = JSON.parse(jsonText);
+  } catch {
+    example = jsonText;
+  }
+  return { content: { 'application/json': { example } } };
 }
 
 export interface GenerateOpenApiSpecOptions {
@@ -308,29 +440,35 @@ export interface GenerateOpenApiSpecOptions {
 }
 
 /**
- * Generates an OpenAPI 3.1 document describing the REST surface
- * `mockingpug/react`'s handlers / `mockingpug/next`'s Route Handler expose
- * for every entity: `GET`/`POST` on the collection, `GET`/`PUT`/`PATCH`/
- * `DELETE` on one record. The devtools sub-API (`{baseUrl}/__mockingpug/*`)
- * is deliberately excluded — it's an internal channel, not part of the
- * contract being mocked.
+ * Generates an OpenAPI 3.1 document from the effective endpoint set (R5): a
+ * legacy `resource` fans out to its per-table CRUD; `list`/`one` document their
+ * projected response (`select` + `include`); `mutation` documents its example
+ * request/response body (a method map — 200, no store write). Component schemas
+ * are one per table, with fields no endpoint returns marked `writeOnly`. The
+ * devtools sub-API (`{baseUrl}/__mockingpug/*`) is excluded — internal channel.
  */
 export function generateOpenApiSpec(
   entities: Record<string, EntitySchema>,
+  routes: readonly Route[] | undefined,
   config: OpenApiConfig,
   customDictionaries?: Record<string, readonly CustomDictionaryEntry[]>,
   options: GenerateOpenApiSpecOptions = {},
 ): JsonSchema {
-  const sortedEntities = Object.values(entities).sort((a, b) => a.name.localeCompare(b.name));
+  const effectiveRoutes = routes ?? defaultRoutes(Object.keys(entities));
+  const writeOnly = computeWriteOnly(effectiveRoutes, entities);
 
   const paths: Record<string, JsonSchema> = {};
-  for (const schema of sortedEntities) {
-    Object.assign(paths, entityPaths(schema.name, schema, entities, config, customDictionaries));
+  for (const route of effectiveRoutes) {
+    if (route.kind === 'resource') Object.assign(paths, resourcePaths(route, entities, config, customDictionaries));
+    else addRouteOperation(paths, route, entities, config, customDictionaries);
   }
 
+  // Tags: every table a route reads, in stable order — drives the docs nav.
+  const tags = [...new Set(effectiveRoutes.map(routeEntity).filter((t): t is string => t !== undefined))].sort();
+
   const schemas: Record<string, JsonSchema> = { Error: ERROR_SCHEMA };
-  for (const schema of sortedEntities) {
-    schemas[pascalCase(schema.name)] = entitySchemaComponent(schema, entities, customDictionaries);
+  for (const schema of Object.values(entities).sort((a, b) => a.name.localeCompare(b.name))) {
+    schemas[pascalCase(schema.name)] = entitySchemaComponent(schema, entities, customDictionaries, writeOnly.get(schema.name));
   }
   if (config.pagination.strategy !== false && config.pagination.envelope) {
     schemas[metaSchemaName(config.pagination.strategy)] = metaSchemaComponent(config.pagination.strategy);
@@ -340,7 +478,7 @@ export function generateOpenApiSpec(
     openapi: '3.1.0',
     info: { title: options.title ?? 'mockingpug', version: options.version ?? '0.0.0' },
     servers: [{ url: config.baseUrl }],
-    tags: sortedEntities.map((schema) => ({ name: schema.name })),
+    tags: tags.map((name) => ({ name })),
     paths,
     components: { schemas },
   };

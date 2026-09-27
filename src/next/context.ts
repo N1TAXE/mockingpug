@@ -42,7 +42,11 @@ export async function createMockContext(projectDir: string): Promise<MockContext
   const ctx: QueryContext = {
     schemas: project.entities,
     store,
+    // Effective endpoints already computed by loadProject: legacy `api/`
+    // resource routes + authored `routes/` (tables without a route are internal).
+    routes: project.routes,
     pagination: config.pagination,
+    ...(config.response !== undefined ? { response: config.response } : {}),
     seed: config.seed,
     customDictionaries: project.customDictionaries,
     runtime: config.runtime,

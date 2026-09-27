@@ -44,8 +44,9 @@ curl -X POST http://localhost:3000/api/user -H "Content-Type: application/json" 
 - [`app/api/[[...mock]]/route.ts`](<app/api/[[...mock]]/route.ts>) — the
   entire integration: `getMockContext()` loads schemas + generates data on
   first request, `createNextHandlers()` builds `GET`/`POST`/`PUT`/`PATCH`/`DELETE`.
-- [`mock/api/user/schema.json`](mock/api/user/schema.json), [`mock/api/blogpost/schema.json`](mock/api/blogpost/schema.json),
-  [`mock/data/role.json`](mock/data/role.json) — the schemas. Editing them
+- [`mock/tables/user.json`](mock/tables/user.json), [`mock/tables/blogpost.json`](mock/tables/blogpost.json)
+  (blogpost is an internal table — no route), [`mock/routes/user.json`](mock/routes/user.json) — the
+  `list`/`one` endpoints, [`mock/data/role.json`](mock/data/role.json) — the schemas. Editing them
   while `next dev` is running auto-invalidates the cached context (no
   restart needed — see `next/README.md`'s "Live schema reloading").
 - [`next.config.ts`](next.config.ts) — pins `turbopack.root` since this

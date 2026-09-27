@@ -53,10 +53,11 @@ tab: the requests are genuine `fetch()` calls, only the response is mocked.
   `mockingpug/react`).
 - [`mock.config.js`](mock.config.js) — `dir: 'src/mock'`, used only by
   `npx mpug doctor` (a Node CLI process, not bundled).
-- [`src/mock/api/user/schema.json`](src/mock/api/user/schema.json), [`src/mock/api/blogpost/schema.json`](src/mock/api/blogpost/schema.json),
-  [`src/mock/data/role.json`](src/mock/data/role.json) — the schemas.
+- [`src/mock/tables/user.json`](src/mock/tables/user.json), [`src/mock/tables/blogpost.json`](src/mock/tables/blogpost.json)
+  (blogpost is an internal table — no route), [`src/mock/routes/user.json`](src/mock/routes/user.json) — the
+  `list`/`one` endpoints, [`src/mock/data/role.json`](src/mock/data/role.json) — the schemas.
 - [`src/mocks/schemas.ts`](src/mocks/schemas.ts) — one static `import` per
-  entity file + `parseEntitySchema()` (Option B, no plugin).
+  table + routes file + `parseEntitySchema()` (Option B, no plugin).
 - [`src/mocks/browser.ts`](src/mocks/browser.ts) — `generateAll()` +
   `createMockHandlers()` + `setupWorker()`, identical to the Vite example.
 - [`src/index.tsx`](src/index.tsx) — dev-only bootstrap gate on

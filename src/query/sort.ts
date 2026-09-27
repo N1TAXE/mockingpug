@@ -17,6 +17,8 @@ export function sortRecords<T extends Record<string, unknown>>(
     .map((part) => part.trim())
     .filter(Boolean)
     .map((part) => {
+      // Two accepted forms: `field:asc`/`field:desc` and the shorthand `-field` (descending).
+      if (part.startsWith('-')) return { field: part.slice(1), descending: true };
       const [field, direction] = part.split(':');
       return { field: field!, descending: direction?.trim().toLowerCase() === 'desc' };
     });

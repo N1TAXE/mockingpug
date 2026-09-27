@@ -118,7 +118,7 @@ export function MockDevtools({ baseUrl = '/api' }: MockDevtoolsProps = {}) {
    * new tab plenty of time to finish loading it.
    */
   function openDocs() {
-    const spec = generateOpenApiSpec(ctx.schemas, { baseUrl, pagination: ctx.pagination }, ctx.customDictionaries);
+    const spec = generateOpenApiSpec(ctx.schemas, ctx.routes, { baseUrl, pagination: ctx.pagination }, ctx.customDictionaries);
     const html = renderDocsHtml(spec);
     const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
     window.open(url, '_blank', 'noopener,noreferrer');

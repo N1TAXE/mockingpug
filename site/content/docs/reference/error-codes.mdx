@@ -113,8 +113,41 @@ Not bugs: the normal REST-ish 4xx path, returned as
 
 | Code | HTTP status | Cause |
 |---|---|---|
-| `MP-REQ-001` | 404 | Unknown entity: no schema matches the requested path. |
+| `MP-REQ-001` | 404 | Unknown entity/route: nothing matches the requested path. |
 | `MP-REQ-002` | 404 | The entity exists, but no record with that `id` was found. |
+| `MP-REQ-003` | 404 | A `one` endpoint's `where` matched no record. |
+| `MP-REQ-006` | 501 | A `handler` route (your own code) isn't wired up. |
+
+## `MP-ROUTE-*`: invalid endpoints (`doctor`)
+
+Reported by `mpug doctor` when a route in `mock/routes/**` doesn't line up with
+its tables. See [Endpoints](/docs/concepts/endpoints).
+
+| Code | Cause |
+|---|---|
+| `MP-ROUTE-001..006` | Malformed route file: not an object, bad `kind`, missing `id`/`path`/`method`, or a missing kind-specific field. |
+| `MP-ROUTE-010` | Two routes answer the same `method` + `path`. |
+| `MP-ROUTE-011` | `from` references a table that doesn't exist. |
+| `MP-ROUTE-012` | A `where` field doesn't exist, or binds a `:param` the path doesn't have. |
+| `MP-ROUTE-013` | A `select` field (or dotted path) doesn't exist on the table. |
+| `MP-ROUTE-014` | An `include` points at a non-relation field or unknown reverse table/field. |
+| `MP-ROUTE-015` | A `mutation`'s `body`/`response` isn't valid JSON. |
+| `MP-ROUTE-016` | A path `:param` is never used in `where`. |
+| `MP-ROUTE-017` | A `paginate` limit isn't a positive integer. |
+| `MP-ROUTE-018` | A `sort` field doesn't exist on the table. |
+| `MP-ROUTE-019` | An `action` uses `$ref.<name>` before any effect named `<name>` ran. |
+
+## `CLOUD-*`: cloud sync (`login` / `link` / `pull` / `push`)
+
+| Code | Cause |
+|---|---|
+| `CLOUD-AUTH` | Missing/revoked token — run `mockingpug login`. |
+| `CLOUD-PROJECT` | Project not found. |
+| `CLOUD-VERSION` | Requested version doesn't exist / nothing published. |
+| `CLOUD-LIMIT` | Connected-apps limit reached. |
+| `CLOUD-FORBIDDEN` | Push needs an edit-schema token (a CI token can only pull). |
+| `CLOUD-BUSY` | The project is open in the cloud editor — close it and retry. |
+| `CLOUD-REQUEST` | Bad request / an unsafe artifact name in the cloud response. |
 
 ## Anything without an `MP-*` code
 

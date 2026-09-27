@@ -32,6 +32,10 @@ module.exports = {
   docs: {
     enabled: true,                 // mpug docs + <MockDevtools>'s "API Docs" button
   },
+  // response: {                    // optional: wrap list/one/mutation/composite/action bodies
+  //   envelope: { data: '$payload', meta: '$meta', errors: [] },
+  //   listKey: 'items',            // nests a list under data.items
+  // },
   // target: 'https://api.example.com', // mockingpug/next only, no default — needed for <MockDevtools>'s per-request bypass
 };
 ```
@@ -150,3 +154,13 @@ to. `mockingpug/react` doesn't need this — MSW's `passthrough()` already
 knows the real absolute URL the browser's own `fetch()` used. See
 [Devtools → per-request bypass for
 Next.js](/docs/guides/devtools#per-request-bypass-for-nextjs).
+
+### `response.*`
+
+Optional response-envelope template, applied to `list`/`one`/`mutation`/
+`composite`/`action` responses so the mock matches a backend's exact body
+shape. `response.envelope` is a template object where `"$payload"` is replaced
+by the result and `"$meta"` by the pagination meta (any other value passes
+through literally); `response.listKey` nests a list under that key inside
+`$payload`. Unset → the plain `{ data, meta }` / raw-array shape from
+`pagination.envelope`. See [Endpoints → Response envelope](/docs/concepts/endpoints#response-envelope).

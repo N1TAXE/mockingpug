@@ -60,6 +60,18 @@ export interface RuntimeConfig {
   delay: number;
 }
 
+export interface ResponseConfig {
+  /**
+   * Response envelope template. `"$payload"` is replaced by the result (a list
+   * or a record), `"$meta"` by the pagination meta; any other value is passed
+   * through literally (e.g. `"errors": []`). Unset → the plain
+   * `{ data, meta }` / raw-array shape driven by `pagination.envelope`.
+   */
+  envelope?: unknown;
+  /** When `$payload` is a list, nest the array under this key (`{ items: [...] }` for `data.items`). */
+  listKey?: string;
+}
+
 export interface DocsConfig {
   /** `mpug docs`/`<MockDevtools>`'s "API Docs" button, on by default. `false` skips generation entirely and hides the button — no OpenAPI spec of your mock's exact shape ships anywhere. */
   enabled: boolean;
@@ -77,6 +89,8 @@ export interface MockConfig {
   limits: LimitsConfig;
   runtime: RuntimeConfig;
   docs: DocsConfig;
+  /** Optional response-envelope template, applied to `list`/`one`/`mutation` endpoint responses. */
+  response?: ResponseConfig;
   /**
    * Base URL of a real backend, e.g. `"https://api.example.com"` — `mockingpug/next`
    * only. Required for `<MockDevtools>`'s per-request bypass toggle to work
@@ -287,6 +301,7 @@ export async function loadConfig(projectDir: string): Promise<MockConfig> {
     docs: {
       enabled: userConfig.docs?.enabled ?? DEFAULT_CONFIG.docs.enabled,
     },
+    ...(userConfig.response !== undefined ? { response: userConfig.response } : {}),
     ...(userConfig.target !== undefined ? { target: userConfig.target } : {}),
   };
 }

@@ -24,16 +24,19 @@ This creates:
 
 - `mock.config.js`: the project config (safe to commit; see the
   [config reference](/docs/reference/mock-config) for every field).
-- `mock/api/`: one folder per entity, each holding a `schema.json` schema.
+- `mock/tables/`: one JSON file per table — just its data.
+- `mock/routes/`: the API endpoints built from those tables (see
+  [Endpoints](/docs/concepts/endpoints)).
 - `mock/data/`: custom weighted dictionaries, referenced by schemas.
 
 `init` is idempotent and non-destructive: it never overwrites an existing
-`mock.config.js`, and only drops an example schema if `mock/api/` is
-completely empty.
+`mock.config.js`, and only drops an example table + routes if `mock/tables/`
+is empty. (A v1 project's legacy `mock/api/**` still works; run
+`npx mpug migrate` to move it to the new layout.)
 
 ## 3. Describe an entity
 
-```json title="mock/api/user/schema.json"
+```json title="mock/tables/user.json"
 {
   "amount": 1000,
   "data": {
@@ -46,7 +49,7 @@ completely empty.
 }
 ```
 
-```json title="mock/api/blogpost/schema.json"
+```json title="mock/tables/blogpost.json"
 {
   "amount": 1000,
   "data": {
@@ -57,6 +60,21 @@ completely empty.
   }
 }
 ```
+
+A table has no URL on its own. Expose it with an endpoint in `mock/routes/`
+(a `list` for the collection, a `one` for a record by id):
+
+```json title="mock/routes/user.json"
+[
+  { "id": "users_list", "kind": "list", "method": "GET", "path": "/users", "from": "user" },
+  { "id": "user_get", "kind": "one", "method": "GET", "path": "/users/:id",
+    "from": "user", "where": { "id": ":id" } }
+]
+```
+
+A table with no route is *internal* — generated and usable in relations, but
+not served. See [Endpoints](/docs/concepts/endpoints) for `mutation`,
+`composite`, `action`, `select`/`include` and the response envelope.
 
 ```json title="mock/data/role.json"
 [

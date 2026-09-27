@@ -165,6 +165,11 @@ export function generateValue(spec: FieldSpec, rng: Rng, ctx: GenerateContext): 
     case 'literal':
       return spec.value;
 
+    case 'object':
+      return Object.fromEntries(
+        Object.entries(spec.fields).map(([key, sub]) => [key, generateValue(sub, rng, { ...ctx, incrementKey: `${ctx.incrementKey}.${key}` })]),
+      );
+
     case 'conditional':
       throw new GenerationError(
         'MP-GEN-008',

@@ -513,6 +513,42 @@ describe('generateAll : literal', () => {
     }
   });
 
+  it('literal positions do not consume increment counters on the first pass (R14)', async () => {
+    const store = new MemoryStoreAdapter();
+    const schemas: SchemaBundle = {
+      category: {
+        name: 'category',
+        file: 'mock/api/category/schema.json',
+        amount: 4,
+        data: { id: increment, name: lorem },
+        literal: [{ id: 100, name: 'A' }, { id: 7, name: 'B' }],
+      },
+    };
+    await generateAll(schemas, store, { seed: 's' });
+    const ids = (await store.load('category'))!.records.map((r) => r.id);
+    // literal ids kept; generated ones continue from the max literal (100), not wasted to 103+
+    expect(ids).toEqual([100, 7, 101, 102]);
+  });
+
+  it('sparse fixtures: an empty patch leaves the row generated, not manual (R11)', async () => {
+    const store = new MemoryStoreAdapter();
+    const schemas: SchemaBundle = {
+      category: {
+        name: 'category',
+        file: 'mock/api/category/schema.json',
+        amount: 4,
+        data: { id: increment, name: lorem },
+        fixtures: [{}, {}, { name: 'Pinned' }],
+      },
+    };
+    await generateAll(schemas, store, { seed: 's' });
+    const records = (await store.load('category'))!.records;
+    expect(records[0]!._seed).toBe(true); // empty patch → still generated
+    expect(records[1]!._seed).toBe(true);
+    expect(records[2]!.name).toBe('Pinned');
+    expect(records[2]!._seed).toBe(false); // real patch → pinned/manual
+  });
+
   it('rejects literal.length greater than amount at parse time', async () => {
     const { parseEntitySchema, SchemaError } = await import('../../src/core/index.js');
     try {

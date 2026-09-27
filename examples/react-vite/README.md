@@ -38,8 +38,9 @@ tab: the requests are genuine `fetch()` calls, only the response is mocked.
 ## What to look at
 
 - [`vite.config.ts`](vite.config.ts) — `mockingpug()` plugin registration.
-- [`mock/api/user/schema.json`](mock/api/user/schema.json), [`mock/api/blogpost/schema.json`](mock/api/blogpost/schema.json),
-  [`mock/data/role.json`](mock/data/role.json) — the schemas (edit these and
+- [`mock/tables/user.json`](mock/tables/user.json), [`mock/tables/blogpost.json`](mock/tables/blogpost.json)
+  (blogpost is an internal table — no route), [`mock/routes/user.json`](mock/routes/user.json) — the
+  `list`/`one` endpoints, [`mock/data/role.json`](mock/data/role.json) — the schemas (edit these and
   the dev server hot-reloads, no restart needed).
 - [`src/mocks/schemas.ts`](src/mocks/schemas.ts) — the whole "load schemas
   into the browser" bridge is 3 lines thanks to the Vite plugin's virtual

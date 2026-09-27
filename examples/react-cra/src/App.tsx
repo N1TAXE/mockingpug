@@ -16,15 +16,15 @@ interface ListResponse {
 
 const PAGE_SIZE = 10;
 
-// Exercises the full mockingpug/react feature set against real fetch() calls
-// intercepted by MSW: paginated list, custom dictionary (`role`), bare
-// relation (`user.posts` -> blogpost, resolved at read time), field-level
-// relation (`blogpost.author` -> user.id), GET by id, POST create, DELETE.
+// Exercises the endpoint-driven mockingpug/react surface (src/mock/routes/user.json)
+// intercepted by MSW: a `list` endpoint (paginated, custom dictionary `role`)
+// and a `one` endpoint with an `include` that joins the internal `blogpost`
+// table back as `user.posts`. `blogpost` has no route — it's an internal table,
+// reached only through relations/includes.
 function App() {
   const [page, setPage] = useState(1);
   const [list, setList] = useState<ListResponse | null>(null);
   const [selected, setSelected] = useState<User | null>(null);
-  const [newName, setNewName] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -44,27 +44,6 @@ function App() {
     setSelected(await res.json());
   }
 
-  async function createUser(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newName) return;
-    await fetch('/api/user', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newName, email: `${newName}@example.com` }),
-    });
-    setNewName('');
-    setPage(1);
-    const res = await fetch(`/api/user?page=1&limit=${PAGE_SIZE}`);
-    setList(await res.json());
-  }
-
-  async function deleteUser(id: number) {
-    await fetch(`/api/user/${id}`, { method: 'DELETE' });
-    setSelected(null);
-    const res = await fetch(`/api/user?page=${page}&limit=${PAGE_SIZE}`);
-    setList(await res.json());
-  }
-
   const totalPages = list ? Math.max(1, Math.ceil(list.meta.total / list.meta.limit)) : 1;
 
   return (
@@ -72,19 +51,10 @@ function App() {
       <h1>mockingpug + CRA example</h1>
       <p>
         Every request below hits real <code>fetch('/api/user')</code> calls, intercepted by MSW
-        with data generated from <code>src/mock/api/user/schema.json</code> +{' '}
-        <code>src/mock/api/blogpost/schema.json</code>. Open devtools' Network tab — the requests are
-        real, only the responses are mocked.
+        with data generated from <code>src/mock/tables/user.json</code> +{' '}
+        <code>src/mock/tables/blogpost.json</code> and routed via <code>src/mock/routes/user.json</code>.
+        Open devtools' Network tab — the requests are real, only the responses are mocked.
       </p>
-
-      <form className="toolbar" onSubmit={createUser}>
-        <input
-          placeholder="New user name"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-        />
-        <button type="submit">Create</button>
-      </form>
 
       {!list && <p>Loading...</p>}
 
@@ -93,14 +63,9 @@ function App() {
           <span>
             #{user.id} {user.name} <span className="role">{user.role}</span>
           </span>
-          <span>
-            <button type="button" onClick={() => openUser(user.id)}>
-              View
-            </button>{' '}
-            <button type="button" onClick={() => deleteUser(user.id)}>
-              Delete
-            </button>
-          </span>
+          <button type="button" onClick={() => openUser(user.id)}>
+            View
+          </button>
         </div>
       ))}
 
@@ -124,7 +89,7 @@ function App() {
             {selected.name} <span className="role">{selected.role}</span>
           </h3>
           <p>{selected.email}</p>
-          <p>{selected.posts.length} posts (bare relation, resolved on read):</p>
+          <p>{selected.posts.length} posts (include join from the internal blogpost table):</p>
           <ul>
             {selected.posts.slice(0, 5).map((post) => (
               <li key={post.id}>{post.title}</li>

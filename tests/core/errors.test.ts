@@ -61,4 +61,16 @@ describe('MockingpugError formatting', () => {
     const error = new StoreError('MP-STORE-002', 'write failed', { cause: original });
     expect(error.cause).toBe(original);
   });
+
+  it('exposes reason: the core message without the location/hint that .message appends (R8)', () => {
+    const error = new SchemaError('MP-SCHEMA-001', 'unknown generator type "emial"', {
+      location: { file: 'mock/api/user/schema.json', path: 'data.email' },
+      hint: 'did you mean "email"?',
+    });
+    expect(error.reason).toBe('unknown generator type "emial"');
+    expect(error.reason).not.toContain('at ');
+    expect(error.reason).not.toContain('did you mean');
+    // message still carries everything
+    expect(error.message).toContain('at ');
+  });
 });

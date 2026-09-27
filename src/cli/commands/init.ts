@@ -15,7 +15,7 @@ module.exports = {
 };
 `;
 
-const EXAMPLE_SCHEMA = `${JSON.stringify(
+const EXAMPLE_TABLE = `${JSON.stringify(
   {
     amount: 100,
     data: {
@@ -28,10 +28,23 @@ const EXAMPLE_SCHEMA = `${JSON.stringify(
   2,
 )}\n`;
 
+// A `tables/` table has no implicit URL — endpoints are declared here. This
+// gives a working read API out of the box (`GET /example`, `GET /example/:id`).
+// Writes are `action` routes (documented separately); a `mutation` route is a
+// 200-only method map, not a persisting write.
+const EXAMPLE_ROUTES = `${JSON.stringify(
+  [
+    { id: 'example_list', kind: 'list', method: 'GET', path: '/example', from: 'example' },
+    { id: 'example_get', kind: 'one', method: 'GET', path: '/example/:id', from: 'example', where: { id: ':id' } },
+  ],
+  null,
+  2,
+)}\n`;
+
 /**
- * Scaffolds `mock.config.js` + `mock/api` + `mock/data`. Idempotent and
- * non-destructive: never overwrites an existing config, and only drops in
- * an example schema if `mock/api` is completely empty.
+ * Scaffolds `mock.config.js` + the `mock/{tables,routes,data}` layout.
+ * Idempotent and non-destructive: never overwrites an existing config, and
+ * only drops in the example table + its routes when `mock/tables` is empty.
  */
 export async function init(projectDir: string): Promise<CommandResult> {
   const configPath = join(projectDir, 'mock.config.js');
@@ -45,18 +58,19 @@ export async function init(projectDir: string): Promise<CommandResult> {
   messages.push('created mock.config.js');
 
   const mockDir = join(projectDir, 'mock');
-  const apiDir = join(mockDir, 'api');
+  const tablesDir = join(mockDir, 'tables');
+  const routesDir = join(mockDir, 'routes');
   const dataDir = join(mockDir, 'data');
-  await mkdir(apiDir, { recursive: true });
+  await mkdir(tablesDir, { recursive: true });
+  await mkdir(routesDir, { recursive: true });
   await mkdir(dataDir, { recursive: true });
-  messages.push('ensured mock/api and mock/data exist');
+  messages.push('ensured mock/tables, mock/routes and mock/data exist');
 
-  const apiEntries = await readdir(apiDir);
-  if (apiEntries.length === 0) {
-    const exampleDir = join(apiDir, 'example');
-    await mkdir(exampleDir, { recursive: true });
-    await writeFile(join(exampleDir, 'schema.json'), EXAMPLE_SCHEMA, 'utf-8');
-    messages.push('added an example schema at mock/api/example/schema.json');
+  const tableEntries = (await readdir(tablesDir)).filter((name) => name.endsWith('.json'));
+  if (tableEntries.length === 0) {
+    await writeFile(join(tablesDir, 'example.json'), EXAMPLE_TABLE, 'utf-8');
+    await writeFile(join(routesDir, 'example.json'), EXAMPLE_ROUTES, 'utf-8');
+    messages.push('added an example table (mock/tables/example.json) + its endpoints (mock/routes/example.json)');
   }
 
   const packageManager = detectPackageManager(projectDir);

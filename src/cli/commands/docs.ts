@@ -36,7 +36,7 @@ export async function docs(projectDir: string): Promise<CommandResult> {
     return ok([`no entities found under ${config.dir}/api, nothing to generate docs for`]);
   }
 
-  const spec = generateOpenApiSpec(project.entities, config, project.customDictionaries);
+  const spec = generateOpenApiSpec(project.entities, project.routes, config, project.customDictionaries);
   const html = renderDocsHtml(spec);
 
   const outDir = join(projectDir, '.mockingpug', 'docs');

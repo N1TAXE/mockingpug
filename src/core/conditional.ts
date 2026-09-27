@@ -16,7 +16,7 @@ function parseBranchValue(raw: unknown, options: ParseFieldTypeOptions, entityNa
     return parseFieldType(raw, options);
   }
   if (typeof raw === 'object' && !Array.isArray(raw)) {
-    return parseConditional(raw as Record<string, unknown>, options, entityName);
+    return parseObjectOrConditional(raw as Record<string, unknown>, options, entityName);
   }
   throw new SchemaError(
     'MP-SCHEMA-024',
@@ -38,6 +38,66 @@ function assertStorableBranch(spec: FieldSpec, entityName: string, options: Pars
       },
     );
   }
+}
+
+/**
+ * Parses ONE raw `data` field value into a {@link FieldSpec}: a DSL string
+ * (→ `parseFieldType`) or a `{when,then,else}` object (→ `parseConditional`).
+ * The single entry point cloud/CLI use to parse a full-format schema field
+ * without re-implementing the string-vs-object branch.
+ */
+export function parseFieldValue(raw: unknown, options: ParseFieldTypeOptions = {}, entityName = ''): FieldSpec {
+  if (typeof raw === 'string') return parseFieldType(raw, options);
+  if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+    return parseObjectOrConditional(raw as Record<string, unknown>, options, entityName);
+  }
+  throw new SchemaError(
+    'MP-SCHEMA-009',
+    `field value in "${entityName}" must be a DSL string, a {when,then,else} object, or a nested object of fields, got ${Array.isArray(raw) ? 'array' : typeof raw}`,
+    { location: options.file ? { file: options.file, path: options.fieldPath } : undefined },
+  );
+}
+
+/**
+ * Routes an object-form `data` value: a `{when,...}` object is a conditional,
+ * anything else is a nested object whose keys are themselves fields (parsed
+ * recursively). Distinguished by the `when` key, per the schema DSL.
+ */
+function parseObjectOrConditional(raw: Record<string, unknown>, options: ParseFieldTypeOptions, entityName: string): FieldSpec {
+  if (raw.kind === 'ref') return parseRef(raw, options, entityName);
+  if ('when' in raw) return parseConditional(raw, options, entityName);
+  const fields: Record<string, FieldSpec> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const fieldPath = options.fieldPath ? `${options.fieldPath}.${key}` : key;
+    fields[key] = parseFieldValue(value, { ...options, fieldPath }, entityName);
+  }
+  return { kind: 'object', fields };
+}
+
+/**
+ * Parses `{ "kind": "ref", "entity": "product", "fields": { "product_id": "id" } }`
+ * — a correlated cross-ref that maps target fields to renamed output fields
+ * (all from the SAME picked target record), avoiding the name collisions a bare
+ * multi-pick (`data.product.[id,slug]`) causes when the source names clash with
+ * the record's own fields.
+ */
+function parseRef(raw: Record<string, unknown>, options: ParseFieldTypeOptions, entityName: string): FieldSpec {
+  const { entity, fields } = raw as { entity?: unknown; fields?: unknown };
+  const loc = options.file ? { file: options.file, path: options.fieldPath } : undefined;
+  if (typeof entity !== 'string' || entity.length === 0) {
+    throw new SchemaError('MP-SCHEMA-029', `"ref" in "${entityName}" needs a non-empty "entity"`, { location: loc });
+  }
+  if (typeof fields !== 'object' || fields === null || Array.isArray(fields) || Object.keys(fields).length === 0) {
+    throw new SchemaError('MP-SCHEMA-029', `"ref" in "${entityName}" needs a non-empty "fields" map of outputName -> targetField`, { location: loc });
+  }
+  const rename: Record<string, string> = {};
+  for (const [outName, src] of Object.entries(fields)) {
+    if (typeof src !== 'string') {
+      throw new SchemaError('MP-SCHEMA-029', `"ref.fields.${outName}" in "${entityName}" must be a target field name (string)`, { location: loc });
+    }
+    rename[outName] = src;
+  }
+  return { kind: 'crossRef', entity, rename };
 }
 
 /**

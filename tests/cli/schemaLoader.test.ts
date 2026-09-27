@@ -152,3 +152,79 @@ describe('loadProject: structure and edge cases', () => {
     expect(project.entities.user!.data.role).toEqual({ kind: 'custom', name: 'role' });
   });
 });
+
+describe('loadProject: routes/*.json (R5)', () => {
+  it('legacy api/ tables get a full-CRUD resource route; tables/ tables do not', async () => {
+    await writeMockProject({
+      'mock/api/user/schema.json': JSON.stringify({ amount: 1, data: { id: 'uuid' } }),
+      'mock/tables/audit.json': JSON.stringify({ amount: 2, data: { id: 'uuid' } }),
+    });
+    const project = await loadProject(dir, 'mock');
+    // both tables generated
+    expect(Object.keys(project.entities).sort()).toEqual(['audit', 'user']);
+    // only the legacy one is exposed, as a resource route
+    expect(project.routes).toEqual([{ id: 'user', kind: 'resource', path: '/user', table: 'user', methods: ['list', 'get', 'create', 'update', 'delete'] }]);
+  });
+
+  it('a tables/ table with no route is internal (no URL); an authored route exposes it', async () => {
+    await writeMockProject({
+      'mock/tables/order.json': JSON.stringify({ amount: 3, data: { id: 'uuid' } }),
+      'mock/routes/orders.json': JSON.stringify({ id: 'orders_list', kind: 'list', path: '/orders', method: 'GET', from: 'order' }),
+    });
+    const project = await loadProject(dir, 'mock');
+    expect(project.entities.order!.amount).toBe(3);
+    expect(project.routes.map((r) => r.id)).toEqual(['orders_list']);
+  });
+
+  it('a name defined in both api/ and tables/ is a duplicate error', async () => {
+    await writeMockProject({
+      'mock/api/user/schema.json': JSON.stringify({ amount: 1, data: { id: 'uuid' } }),
+      'mock/tables/user.json': JSON.stringify({ amount: 1, data: { id: 'uuid' } }),
+    });
+    await expect(loadProject(dir, 'mock')).rejects.toMatchObject({ code: 'MP-SCHEMA-011' });
+  });
+
+  it('loads routes from a single file (array) and a file with one object', async () => {
+    await writeMockProject({
+      'mock/tables/user.json': JSON.stringify({ amount: 1, data: { id: 'uuid' } }),
+      'mock/tables/blogpost.json': JSON.stringify({ amount: 1, data: { id: 'uuid' } }),
+      'mock/routes/users.json': JSON.stringify([
+        { id: 'users_list', kind: 'list', path: '/users', method: 'GET', from: 'user' },
+        { id: 'user-posts', kind: 'list', path: '/users/:id/posts', method: 'GET', from: 'blogpost', where: { author: ':id' } },
+        { id: 'user-create', kind: 'mutation', path: '/users', method: 'POST', from: 'user', body: '{"name":"x"}' },
+      ]),
+      'mock/routes/ping.json': JSON.stringify({ id: 'ping', kind: 'static', path: '/ping', method: 'GET', status: 200, body: { ok: true } }),
+    });
+    const project = await loadProject(dir, 'mock');
+    expect(project.routes.map((r) => r.id).sort()).toEqual(['ping', 'user-create', 'user-posts', 'users_list']);
+  });
+
+  it('rejects an authored resource kind (internal/legacy only)', async () => {
+    await writeMockProject({
+      'mock/api/user/schema.json': JSON.stringify({ amount: 1, data: { id: 'uuid' } }),
+      'mock/routes/r.json': JSON.stringify({ id: 'r', kind: 'resource', path: '/users', table: 'user', methods: ['list'] }),
+    });
+    await expect(loadProject(dir, 'mock')).rejects.toMatchObject({ code: 'MP-ROUTE-002' });
+  });
+
+  it('rejects an unknown kind, a missing kind-specific field, and a duplicate id', async () => {
+    const base = { 'mock/api/user/schema.json': JSON.stringify({ amount: 1, data: { id: 'uuid' } }) };
+
+    await writeMockProject({ ...base, 'mock/routes/r.json': JSON.stringify({ id: 'r', kind: 'nope', path: '/r' }) });
+    await expect(loadProject(dir, 'mock')).rejects.toMatchObject({ code: 'MP-ROUTE-002' });
+
+    dir = await mkdtemp(join(tmpdir(), 'mockingpug-schemaLoader-'));
+    await writeMockProject({ ...base, 'mock/routes/r.json': JSON.stringify({ id: 'r', kind: 'list', path: '/r' }) });
+    await expect(loadProject(dir, 'mock')).rejects.toMatchObject({ code: 'MP-ROUTE-006' });
+
+    dir = await mkdtemp(join(tmpdir(), 'mockingpug-schemaLoader-'));
+    await writeMockProject({
+      ...base,
+      'mock/routes/r.json': JSON.stringify([
+        { id: 'dup', kind: 'static', path: '/a', method: 'GET', status: 200, body: 1 },
+        { id: 'dup', kind: 'static', path: '/b', method: 'GET', status: 200, body: 2 },
+      ]),
+    });
+    await expect(loadProject(dir, 'mock')).rejects.toMatchObject({ code: 'MP-ROUTE-004' });
+  });
+});

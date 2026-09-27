@@ -40,6 +40,7 @@ export function mockingpug(options: MockingpugVitePluginOptions = {}): Plugin {
     const project = await loadProject(root, options.dir ?? config.dir);
     return [
       `export const schemas = ${JSON.stringify(project.entities)};`,
+      `export const routes = ${JSON.stringify(project.routes)};`,
       `export const customDictionaries = ${JSON.stringify(project.customDictionaries)};`,
       `export const mockConfig = ${JSON.stringify(config)};`,
       '',

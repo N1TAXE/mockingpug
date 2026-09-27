@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { generateOpenApiSpec } from '../../src/openapi-gen/generate.js';
 import { DEFAULT_CONFIG } from '../../src/cli/mockConfig.js';
 import type { EntitySchema } from '../../src/core/types.js';
+import type { Route } from '../../src/core/routes.js';
 import type { MockConfig } from '../../src/cli/mockConfig.js';
 
 type Paths = Record<string, Record<string, unknown>>;
@@ -35,7 +36,7 @@ describe('generateOpenApiSpec : field type mapping', () => {
         },
       },
     };
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const user = schemas(spec).User as { properties: Record<string, Record<string, unknown>> };
     expect(user.properties.id).toEqual({ type: 'string', format: 'uuid' });
     expect(user.properties.age).toEqual({ type: 'number', minimum: 0, maximum: 100 });
@@ -52,7 +53,7 @@ describe('generateOpenApiSpec : field type mapping', () => {
     const entities: Record<string, EntitySchema> = {
       user: { name: 'user', file: 'x', amount: 1, data: { role: { kind: 'enumInline', values: ['ADMIN', 'USER'] } } },
     };
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const user = schemas(spec).User as { properties: Record<string, unknown> };
     expect(user.properties.role).toEqual({ type: 'string', enum: ['ADMIN', 'USER'] });
   });
@@ -61,9 +62,18 @@ describe('generateOpenApiSpec : field type mapping', () => {
     const entities: Record<string, EntitySchema> = {
       user: { name: 'user', file: 'x', amount: 1, data: { tags: { kind: 'array', item: { kind: 'lorem' }, count: 3 } } },
     };
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const user = schemas(spec).User as { properties: Record<string, unknown> };
     expect(user.properties.tags).toEqual({ type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 3 });
+  });
+
+  it('renders a nested object field as a nested object schema', () => {
+    const entities: Record<string, EntitySchema> = {
+      product: { name: 'product', file: 'x', amount: 1, data: { options: { kind: 'object', fields: { is_top: { kind: 'boolean' }, rank: { kind: 'number', mode: 'random' } } } } },
+    };
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
+    const product = schemas(spec).Product as { properties: Record<string, unknown> };
+    expect(product.properties.options).toEqual({ type: 'object', properties: { is_top: { type: 'boolean' }, rank: { type: 'number' } } });
   });
 
   it('renders an array of a field-level cross-reference with items recursing into the target field\'s schema', () => {
@@ -76,7 +86,7 @@ describe('generateOpenApiSpec : field type mapping', () => {
       },
       product: { name: 'product', file: 'x', amount: 1, data: { id: { kind: 'number', mode: 'increment' } } },
     };
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const order = schemas(spec).Order as { properties: Record<string, unknown> };
     expect(order.properties.relatedProductIds).toEqual({
       type: 'array',
@@ -90,7 +100,7 @@ describe('generateOpenApiSpec : field type mapping', () => {
     const entities: Record<string, EntitySchema> = {
       article: { name: 'article', file: 'x', amount: 1, data: { flag: { kind: 'literal', value: null } } },
     };
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const article = schemas(spec).Article as { properties: Record<string, unknown> };
     expect(article.properties.flag).toEqual({ type: 'null' });
   });
@@ -99,7 +109,7 @@ describe('generateOpenApiSpec : field type mapping', () => {
     const entities: Record<string, EntitySchema> = {
       article: { name: 'article', file: 'x', amount: 1, data: { flag: { kind: 'literal', value: true } } },
     };
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const article = schemas(spec).Article as { properties: Record<string, unknown> };
     expect(article.properties.flag).toEqual({ type: 'boolean', const: true });
   });
@@ -120,7 +130,7 @@ describe('generateOpenApiSpec : field type mapping', () => {
         },
       },
     };
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const article = schemas(spec).Article as { properties: Record<string, unknown> };
     expect(article.properties.publishedAt).toEqual({
       oneOf: [{ type: 'null' }, { type: 'string', format: 'date-time' }],
@@ -132,7 +142,7 @@ describe('generateOpenApiSpec : field type mapping', () => {
       user: { name: 'user', file: 'x', amount: 1, data: { role: { kind: 'custom', name: 'role' } } },
     };
     const customDictionaries = { role: [{ value: 'ADMIN', max: 5 }, { value: 'USER', chance: 0.9 }] };
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG, customDictionaries);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG, customDictionaries);
     const user = schemas(spec).User as { properties: Record<string, unknown> };
     expect(user.properties.role).toEqual({ type: 'string', enum: ['ADMIN', 'USER'] });
   });
@@ -142,7 +152,7 @@ describe('generateOpenApiSpec : field type mapping', () => {
       user: { name: 'user', file: 'x', amount: 1, data: { config: { kind: 'custom', name: 'config' } } },
     };
     const customDictionaries = { config: [{ value: { nested: true } }] };
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG, customDictionaries);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG, customDictionaries);
     const user = schemas(spec).User as { properties: Record<string, unknown> };
     expect(user.properties.config).toEqual({ type: 'string' });
   });
@@ -152,7 +162,7 @@ describe('generateOpenApiSpec : field type mapping', () => {
       user: { name: 'user', file: 'x', amount: 1, data: { posts: { kind: 'crossRef', entity: 'blogpost' } } },
       blogpost: { name: 'blogpost', file: 'x', amount: 1, data: { id: { kind: 'uuid' } } },
     };
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const user = schemas(spec).User as { properties: Record<string, unknown> };
     expect(user.properties.posts).toEqual({ type: 'array', items: { $ref: '#/components/schemas/Blogpost' } });
   });
@@ -162,7 +172,7 @@ describe('generateOpenApiSpec : field type mapping', () => {
       blogpost: { name: 'blogpost', file: 'x', amount: 1, data: { author: { kind: 'crossRef', entity: 'user', field: 'id' } } },
       user: { name: 'user', file: 'x', amount: 1, data: { id: { kind: 'number', mode: 'increment' } } },
     };
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const blogpost = schemas(spec).Blogpost as { properties: Record<string, unknown> };
     expect(blogpost.properties.author).toEqual({ type: 'number' });
   });
@@ -171,7 +181,7 @@ describe('generateOpenApiSpec : field type mapping', () => {
     const entities: Record<string, EntitySchema> = {
       user: { name: 'user', file: 'x', amount: 1, data: { posts: { kind: 'crossRef', entity: 'ghost' } } },
     };
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const user = schemas(spec).User as { properties: Record<string, unknown> };
     expect(user.properties.posts).toEqual({ type: 'array', items: {} });
   });
@@ -191,7 +201,7 @@ describe('generateOpenApiSpec : field type mapping', () => {
         data: { id: { kind: 'number', mode: 'increment' }, name: { kind: 'lorem' } },
       },
     };
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const order = schemas(spec).Order as { properties: Record<string, unknown> };
     expect(order.properties.id).toEqual({ type: 'number' });
     expect(order.properties.name).toEqual({ type: 'string' });
@@ -208,14 +218,14 @@ describe('generateOpenApiSpec : field type mapping', () => {
       a: { name: 'a', file: 'x', amount: 1, data: { bRef: { kind: 'crossRef', entity: 'b', field: 'aRef' } } },
       b: { name: 'b', file: 'x', amount: 1, data: { aRef: { kind: 'crossRef', entity: 'a', field: 'bRef' } } },
     };
-    expect(() => generateOpenApiSpec(entities, DEFAULT_CONFIG)).not.toThrow();
+    expect(() => generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG)).not.toThrow();
   });
 
   it('PascalCases hyphenated/underscored entity names for the schema component name', () => {
     const entities: Record<string, EntitySchema> = {
       'blog-post': { name: 'blog-post', file: 'x', amount: 1, data: { id: { kind: 'uuid' } } },
     };
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     expect(schemas(spec)).toHaveProperty('BlogPost');
   });
 });
@@ -226,26 +236,26 @@ describe('generateOpenApiSpec : REST surface', () => {
   };
 
   it('exposes GET/POST on the collection and GET/PUT/PATCH/DELETE on one record', () => {
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const p = paths(spec);
     expect(Object.keys(p['/user']!)).toEqual(['get', 'post']);
     expect(Object.keys(p['/user/{id}']!).sort()).toEqual(['delete', 'get', 'parameters', 'patch', 'put']);
   });
 
   it('never emits a devtools sub-API path', () => {
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     expect(Object.keys(paths(spec)).some((p) => p.includes('__mockingpug'))).toBe(false);
   });
 
   it('includes one optional query parameter per schema field for filtering, plus sort/q/searchFields', () => {
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const listGet = paths(spec)['/user']!.get as { parameters: Array<{ name: string }> };
     const names = listGet.parameters.map((p) => p.name);
     expect(names).toEqual(expect.arrayContaining(['id', 'name', 'sort', 'q', 'searchFields']));
   });
 
   it('list response is { data, meta } when pagination.envelope is true (the default)', () => {
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const listGet = paths(spec)['/user']!.get as { responses: { 200: { content: { 'application/json': { schema: unknown } } } } };
     const body = listGet.responses['200'].content['application/json'].schema as Record<string, unknown>;
     expect(body).toMatchObject({ type: 'object', properties: { data: { type: 'array' }, meta: { $ref: '#/components/schemas/PageMeta' } } });
@@ -254,7 +264,7 @@ describe('generateOpenApiSpec : REST surface', () => {
 
   it('list response is a raw array + documented headers when pagination.envelope is false', () => {
     const config: MockConfig = { ...DEFAULT_CONFIG, pagination: { ...DEFAULT_CONFIG.pagination, envelope: false } };
-    const spec = generateOpenApiSpec(entities, config);
+    const spec = generateOpenApiSpec(entities, undefined, config);
     const listGet = paths(spec)['/user']!.get as {
       responses: { 200: { content: { 'application/json': { schema: unknown } }; headers: Record<string, unknown> } };
     };
@@ -266,7 +276,7 @@ describe('generateOpenApiSpec : REST surface', () => {
 
   it('list response has no pagination params/meta at all when pagination.strategy is false', () => {
     const config: MockConfig = { ...DEFAULT_CONFIG, pagination: { ...DEFAULT_CONFIG.pagination, strategy: false } };
-    const spec = generateOpenApiSpec(entities, config);
+    const spec = generateOpenApiSpec(entities, undefined, config);
     const listGet = paths(spec)['/user']!.get as { parameters: Array<{ name: string }>; responses: { 200: { headers?: unknown } } };
     expect(listGet.parameters.some((p) => p.name === 'page' || p.name === 'limit')).toBe(false);
     expect(listGet.responses['200'].headers).toBeUndefined();
@@ -274,7 +284,7 @@ describe('generateOpenApiSpec : REST surface', () => {
 
   it('uses offset/limit params and OffsetMeta for the offset strategy', () => {
     const config: MockConfig = { ...DEFAULT_CONFIG, pagination: { ...DEFAULT_CONFIG.pagination, strategy: 'offset' } };
-    const spec = generateOpenApiSpec(entities, config);
+    const spec = generateOpenApiSpec(entities, undefined, config);
     const listGet = paths(spec)['/user']!.get as { parameters: Array<{ name: string }> };
     expect(listGet.parameters.map((p) => p.name)).toEqual(expect.arrayContaining(['offset', 'limit']));
     expect(schemas(spec)).toHaveProperty('OffsetMeta');
@@ -282,7 +292,7 @@ describe('generateOpenApiSpec : REST surface', () => {
 
   it('uses a cursor param and CursorMeta for the cursor strategy', () => {
     const config: MockConfig = { ...DEFAULT_CONFIG, pagination: { ...DEFAULT_CONFIG.pagination, strategy: 'cursor' } };
-    const spec = generateOpenApiSpec(entities, config);
+    const spec = generateOpenApiSpec(entities, undefined, config);
     const listGet = paths(spec)['/user']!.get as { parameters: Array<{ name: string }> };
     expect(listGet.parameters.map((p) => p.name)).toEqual(expect.arrayContaining(['cursor', 'limit']));
     expect(schemas(spec)).toHaveProperty('CursorMeta');
@@ -293,19 +303,19 @@ describe('generateOpenApiSpec : REST surface', () => {
       ...DEFAULT_CONFIG,
       pagination: { ...DEFAULT_CONFIG.pagination, params: { ...DEFAULT_CONFIG.pagination.params, page: 'p', limit: 'perPage' } },
     };
-    const spec = generateOpenApiSpec(entities, config);
+    const spec = generateOpenApiSpec(entities, undefined, config);
     const listGet = paths(spec)['/user']!.get as { parameters: Array<{ name: string }> };
     expect(listGet.parameters.map((p) => p.name)).toEqual(expect.arrayContaining(['p', 'perPage']));
   });
 
   it('uses the configured baseUrl as the server URL', () => {
     const config: MockConfig = { ...DEFAULT_CONFIG, baseUrl: '/backend' };
-    const spec = generateOpenApiSpec(entities, config);
+    const spec = generateOpenApiSpec(entities, undefined, config);
     expect((spec.servers as Array<{ url: string }>)[0]!.url).toBe('/backend');
   });
 
   it('DELETE has no request body and responds 204', () => {
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const del = paths(spec)['/user/{id}']!.delete as { requestBody?: unknown; responses: Record<string, { description: string }> };
     expect(del.requestBody).toBeUndefined();
     expect(del.responses['204']!.description).toBe('No Content');
@@ -316,7 +326,57 @@ describe('generateOpenApiSpec : REST surface', () => {
       zebra: { name: 'zebra', file: 'x', amount: 1, data: { id: { kind: 'uuid' } } },
       alpha: { name: 'alpha', file: 'x', amount: 1, data: { id: { kind: 'uuid' } } },
     };
-    const spec = generateOpenApiSpec(multi, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(multi, undefined, DEFAULT_CONFIG);
     expect((spec.tags as Array<{ name: string }>).map((t) => t.name)).toEqual(['alpha', 'zebra']);
+  });
+});
+
+describe('generateOpenApiSpec : route-driven endpoints (R5)', () => {
+  const entities: Record<string, EntitySchema> = {
+    order: { name: 'order', file: 'x', amount: 1, data: { id: { kind: 'number', mode: 'increment' }, userId: { kind: 'crossRef', entity: 'user', field: 'id' }, total: { kind: 'number', mode: 'random', min: 0, max: 9 }, secret: { kind: 'hash', algorithm: 'generic' } } },
+    user: { name: 'user', file: 'x', amount: 1, data: { id: { kind: 'number', mode: 'increment' }, name: { kind: 'username', style: 'FS' } } },
+    transaction: { name: 'transaction', file: 'x', amount: 1, data: { id: { kind: 'uuid' }, orderId: { kind: 'crossRef', entity: 'order', field: 'id' } } },
+  };
+
+  it('list/one project select + include, and mark unreturned fields writeOnly', () => {
+    const routes: Route[] = [
+      { id: 'orders_list', kind: 'list', method: 'GET', path: '/orders', from: 'order', select: ['id', 'total'] },
+      { id: 'order_full', kind: 'one', method: 'GET', path: '/orders/:id/full', from: 'order', where: { id: ':id' }, select: ['id'], include: { user: 'userId', transactions: { from: 'transaction', by: 'orderId' } } },
+    ];
+    const spec = generateOpenApiSpec(entities, routes, DEFAULT_CONFIG);
+    const p = paths(spec);
+
+    // list response items = only selected fields, wrapped in the envelope
+    const items = ((p['/orders']!.get as any).responses['200'].content['application/json'].schema.properties.data.items) as { properties: Record<string, unknown> };
+    expect(Object.keys(items.properties).sort()).toEqual(['id', 'total']);
+
+    // one response = select ['id'] + include keys (FK → $ref object, reverse → array)
+    const one = ((p['/orders/{id}/full']!.get as any).responses['200'].content['application/json'].schema.properties) as Record<string, any>;
+    expect(Object.keys(one).sort()).toEqual(['id', 'transactions', 'user']);
+    expect(one.user).toEqual({ $ref: '#/components/schemas/User' });
+    expect(one.transactions).toEqual({ type: 'array', items: { $ref: '#/components/schemas/Transaction' } });
+
+    // "secret"/"userId"/"name(total)" never returned by any order endpoint → writeOnly on the component
+    const order = schemas(spec).Order as { properties: Record<string, any> };
+    expect(order.properties.secret.writeOnly).toBe(true);
+    expect(order.properties.id.writeOnly).toBeUndefined(); // id IS returned (in select)
+  });
+
+  it('mutation documents request/response examples and does not appear as a write on the store', () => {
+    const routes: Route[] = [
+      { id: 'order_pay', kind: 'mutation', method: 'POST', path: '/orders/:id/pay', body: '{"method":"card"}', response: '{"status":"paid"}' },
+    ];
+    const spec = generateOpenApiSpec(entities, routes, DEFAULT_CONFIG);
+    const op = paths(spec)['/orders/{id}/pay']!.post as any;
+    expect(op.requestBody.content['application/json'].example).toEqual({ method: 'card' });
+    expect(op.responses['200'].content['application/json'].example).toEqual({ status: 'paid' });
+  });
+
+  it('a table with no route is internal (no path) but still emitted as a component for includes', () => {
+    const routes: Route[] = [{ id: 'orders_list', kind: 'list', method: 'GET', path: '/orders', from: 'order' }];
+    const spec = generateOpenApiSpec(entities, routes, DEFAULT_CONFIG);
+    expect(Object.keys(paths(spec))).toEqual(['/orders']); // only the declared endpoint
+    expect(schemas(spec).Transaction).toBeDefined(); // component still available
+    expect((spec.tags as Array<{ name: string }>).map((t) => t.name)).toEqual(['order']); // only routed table tagged
   });
 });

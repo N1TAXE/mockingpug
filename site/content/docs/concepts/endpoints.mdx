@@ -1,0 +1,179 @@
+---
+title: Endpoints
+description: Describe your API surface separately from your data tables — list, one, mutation, composite and action routes
+---
+
+Since v2, **data** and **API** are described separately. A *table* holds
+generated records; an *endpoint* (route) is one method + path that reads or
+writes those tables. One table can back many endpoints — or none.
+
+```
+mock/
+  tables/<table>.json    # data only: { amount, data, fixtures?, literal? }
+  routes/<group>.json    # endpoints: one route object, or an array of them
+  data/<dict>.json       # custom dictionaries (unchanged)
+  handlers/<name>.ts     # your own code for kind: "handler" (local only)
+```
+
+- A `mock/tables/<name>.json` table with **no route** is *internal*: it's
+  generated and usable in relations/includes, but has no URL of its own.
+- Legacy `mock/api/<entity>/schema.json` still works — it's a table plus an
+  implicit full-CRUD REST surface. `npx mpug migrate` converts a legacy
+  project to `tables/` + `routes/`.
+
+<Callout title="Coming from v1?">
+`mpug migrate` (dry-run by default, `--yes` to apply) rewrites every
+`mock/api/<entity>/schema.json` into `mock/tables/<entity>.json` plus a
+`mock/routes/<entity>.json` reproducing its CRUD. See the
+[CLI guide](/docs/guides/cli#migrate).
+</Callout>
+
+## A route file
+
+Each file under `mock/routes/` is one route object or an array of them.
+Every route has an `id` (stable key), a `path` (relative to `baseUrl`, with
+`:params`), and a `kind`:
+
+```json title="mock/routes/orders.json"
+[
+  { "id": "orders_list", "kind": "list", "method": "GET", "path": "/orders", "from": "order" },
+  { "id": "order_get", "kind": "one", "method": "GET", "path": "/orders/:id",
+    "from": "order", "where": { "id": ":id" } }
+]
+```
+
+A static path segment always beats a `:param` at the same position, so
+`/orders/stats` is matched before `/orders/:id`.
+
+## Route kinds
+
+| Kind | Method(s) | What it does |
+|---|---|---|
+| `list` | GET | A collection read: filter, search, sort, paginate a table. |
+| `one` | GET | A single record: the first row matching `where`, else `404`. |
+| `mutation` | POST/PUT/PATCH/DELETE | A **method map**: responds `200`, but does **not** change stored data. |
+| `composite` | GET | One object composed from several table reads. |
+| `action` | POST/PUT/PATCH/DELETE | A **real write**: effects against tables, then a response. |
+| `static` | any | A fixed `status` + `body`. |
+| `handler` | any | Your own code (`file`), for anything the above can't express. |
+
+## Value bindings (`where`)
+
+A `where` clause matches records; each value is one of:
+
+| Value | Meaning |
+|---|---|
+| `"paid"`, `5`, `true`, `null` | literal |
+| `":id"` | a path parameter |
+| `"?status"` | a query parameter (skipped entirely when absent) |
+| `["paid","refunded"]` | one-of |
+| `{ "$literal": ":x" }` | a literal that begins with `:` / `?` / `$` |
+
+## Shaping a read (`list` / `one`)
+
+```json
+{ "id": "order_full", "kind": "one", "method": "GET", "path": "/orders/:id/full",
+  "from": "order", "where": { "id": ":id" },
+  "select": ["id", "total", "options.is_top"],
+  "include": {
+    "user": "userId",
+    "transactions": { "from": "transaction", "by": "orderId", "select": ["id", "amount"] }
+  } }
+```
+
+- **`select`** — which fields to return (all when omitted). A **dotted path**
+  (`options.is_top`) picks a leaf of a [nested object](/docs/concepts/schema-dsl#nested-objects).
+  This is how you hide a field: `password` lives in the table but no endpoint
+  selects it, so it's never returned (and is marked `writeOnly` in the OpenAPI).
+- **`include`** — join related records. `"user": "userId"` follows a foreign
+  key to one object; `{ "from", "by" }` is the reverse (an array), and may
+  nest its own `include` (up to 3 levels deep). Includes resolve **before**
+  projection, so a joined key doesn't need to be in `select`.
+- **`sort`** — `"createdAt:desc"` or the shorthand `"-createdAt"`; several
+  comma-separated clauses tie-break in order.
+- **`filterable`** / **`searchable`** — restrict which query params filter
+  (`?status=paid`) or which fields `?q=` searches; omit for the defaults.
+- **`paginate`** — `false` for a bare array, or `{ defaultLimit, maxLimit }`
+  merged over the config's pagination.
+
+## `mutation` — mapping a write without a backend
+
+A `mutation` documents that an endpoint exists and returns a `200`, but never
+touches the store. The body is the custom `response` (JSON text) if set, else
+the first `from` record projected by `select`, else `{}`; `body` is an example
+request payload (surfaced in the OpenAPI). Real writes are `action`.
+
+```json
+{ "id": "order-pay", "kind": "mutation", "method": "POST", "path": "/orders/:id/pay",
+  "body": "{ \"method\": \"card\" }", "response": "{ \"status\": \"paid\" }" }
+```
+
+## `composite` — one response from several tables
+
+Each `shape` value is a mini `list` query; `first: true` returns a single
+object instead of an array.
+
+```json
+{ "id": "advertising_common", "kind": "composite", "method": "GET", "path": "/advertising/common",
+  "shape": {
+    "slider":  { "from": "advSlide", "sort": "position:asc" },
+    "text_ad": { "from": "advText", "first": true },
+    "banners": { "from": "banner", "where": { "slot": "?slot" } }
+  } }
+```
+
+## `action` — real writes
+
+An `action` applies `effects` to the affected tables **atomically** (a failure
+part-way leaves the store untouched), then builds its response. Effect and
+response values support the `where` bindings plus `"$body.<path>"` (request
+body), `"$ref.<name>.<field>"` (a prior effect's result), and `"$now"`.
+
+```json
+{ "id": "add-favorite", "kind": "action", "method": "POST", "path": "/favorites",
+  "effects": [
+    { "op": "insert", "table": "favorite", "name": "fav",
+      "set": { "userId": "$body.userId", "productId": "$body.productId", "createdAt": "$now" } }
+  ],
+  "respond": { "ref": "fav" } }
+```
+
+- **effects**: `insert` (generate a record + overlay `set`), `update`
+  (`where` + `set`), `delete` (`where`), `increment` (`where` + `field` +
+  `by`). They run in order; `name` exposes an effect's result as `$ref.<name>`.
+- **respond**: `{ from, where, select, first }` (a fresh query), `{ ref }`
+  (a named effect's record), or `{ status, body }` (fixed).
+
+<Callout type="warn">
+`action` writes to the mock store — it's for exercising flows locally, not a
+production backend. `mpug doctor --assert-prod-safe` guards against the mock
+layer leaking into a production build.
+</Callout>
+
+## Response envelope
+
+By default a `list` returns `{ data, meta }` (or a raw array — see
+[Pagination](/docs/concepts/pagination)). To match a backend's exact body
+shape, set a template in `mock.config.js`:
+
+```js title="mock.config.js"
+module.exports = {
+  response: {
+    envelope: { data: '$payload', meta: '$meta', errors: [] },
+    listKey: 'items', // nests a list under data.items
+  },
+};
+```
+
+`$payload` is replaced by the result, `$meta` by the pagination meta, and any
+other value is passed through literally. The template applies to
+`list`/`one`/`mutation`/`composite`/`action` responses.
+
+## Validation
+
+`npx mpug doctor` checks routes as well as tables: unknown `from` tables,
+`where`/`select`/`sort` fields that don't exist, path params never used in a
+`where`, conflicting method+path pairs, bad includes, invalid `mutation` JSON,
+non-positive paginate limits, and (for Next.js) mock routes shadowed by a real
+`app/api/**` handler. See [Error Codes](/docs/reference/error-codes) —
+`MP-ROUTE-*`.

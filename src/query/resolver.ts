@@ -4,6 +4,7 @@ import {
   resolveInverseRelation,
   type CustomDictionaryEntry,
   type EntitySchema,
+  type Route,
 } from '../core/index.js';
 // Direct file imports, not the `store/index.js` barrel: it also re-exports
 // `FileStoreAdapter` (node:fs), which must never leak into a browser bundle
@@ -17,7 +18,7 @@ import {
   seedIncrementCounters,
   type SchemaBundle,
 } from '../generator/index.js';
-import type { DocsConfig, PaginationConfig, RuntimeConfig } from '../cli/mockConfig.js';
+import type { DocsConfig, PaginationConfig, ResponseConfig, RuntimeConfig } from '../cli/mockConfig.js';
 import { filterRecords } from './filter.js';
 import type { OneShotOverrides } from './oneShotOverride.js';
 import { paginate, type PaginatedResult } from './pagination.js';
@@ -35,6 +36,10 @@ export interface QueryContext {
   store: StoreAdapter;
   pagination: PaginationConfig;
   seed: string | number;
+  /** Endpoint definitions (R5). Omit to let a transport fall back to `defaultRoutes(Object.keys(schemas))` — one full-CRUD resource per table. */
+  routes?: Route[];
+  /** Response-envelope template applied to `list`/`one`/`mutation` responses; omit for the plain `{data,meta}`/array shape. */
+  response?: ResponseConfig;
   customDictionaries?: Record<string, readonly CustomDictionaryEntry[]>;
   /** Synthetic latency/error injection, defaults to disabled (`{errorRate: 0, delay: 0}`) when omitted. */
   runtime?: RuntimeConfig;
@@ -95,7 +100,7 @@ async function attachBareRelations(entity: string, record: StoredRecord, ctx: Qu
   if (!schema) return result;
 
   for (const [fieldName, spec] of Object.entries(schema.data)) {
-    if (spec.kind !== 'crossRef' || spec.field !== undefined || spec.fields !== undefined) continue;
+    if (spec.kind !== 'crossRef' || spec.field !== undefined || spec.fields !== undefined || spec.rename !== undefined) continue;
     const targetSchema = ctx.schemas[spec.entity];
     if (!targetSchema) continue;
     const targetStored = await ctx.store.load(spec.entity);

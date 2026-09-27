@@ -24,6 +24,16 @@ describe('sortRecords', () => {
     expect(result.map((r) => r.price)).toEqual([30, 30, 20, 10]);
   });
 
+  it('accepts the `-field` shorthand for descending', () => {
+    const result = sortRecords(records, new URLSearchParams('sort=-price'), 'sort');
+    expect(result.map((r) => r.price)).toEqual([30, 30, 20, 10]);
+  });
+
+  it('mixes `-field` and `field:asc` across clauses', () => {
+    const result = sortRecords(records, new URLSearchParams('sort=-price,name:asc'), 'sort');
+    expect(result.map((r) => r.id)).toEqual([3, 1, 4, 2]); // price desc, then name asc
+  });
+
   it('breaks ties using a second sort field', () => {
     const result = sortRecords(records, new URLSearchParams('sort=price:asc,name:asc'), 'sort');
     expect(result.map((r) => r.id)).toEqual([2, 4, 3, 1]);

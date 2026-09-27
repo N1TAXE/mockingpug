@@ -1,6 +1,6 @@
 ---
 title: CLI
-description: init, doctor, generate, reset, prune, types
+description: init, doctor, generate, migrate, reset, prune, types, and cloud sync (login/link/pull)
 ---
 
 Command reference for `mockingpug`'s CLI. Every command operates on
@@ -179,6 +179,99 @@ straight from the same catalog a test pipes through the real parser, so
 it can't drift out of sync with what a given release actually accepts,
 unlike this page. Doesn't touch `mock.config.js` or the filesystem, so it
 works from any directory, without a project scaffolded yet.
+
+## `migrate`
+
+```bash
+npx mpug migrate        # dry-run: prints the plan, writes nothing
+npx mpug migrate --yes  # apply
+```
+
+Converts a legacy project — one `mock/api/<entity>/schema.json` per entity,
+where each file was both a table and its implicit REST — into the current
+split format:
+
+- `mock/tables/<entity>.json` — the data only (`amount`, `data`, `fixtures?`,
+  `literal?`); a table-level `bypass` is dropped here (it moves onto the
+  endpoints);
+- `mock/routes/<entity>.json` — the six endpoints that reproduce the old
+  CRUD: `GET /<e>` (`list`), `GET /<e>/:id` (`one`), and `POST`/`PUT`/`PATCH`/
+  `DELETE` as `mutation` (a method map — responds `200`, doesn't change stored
+  data; real writes are `action`, coming later). A table `bypass` is copied
+  onto every generated endpoint.
+
+Then it removes the migrated `mock/api/` folders. It never overwrites an
+existing `tables/<e>.json` or `routes/<e>.json` (those entities are skipped
+with a warning), so re-running is safe. Default is a dry-run; pass `--yes` to
+actually write and delete.
+
+## Cloud sync: `login`, `link`, `pull`
+
+Optional. mockingpug works fully offline from local JSON — cloud sync is for
+teams who author schemas in [MockingPug Cloud](https://app.mockingpug.com) and
+mirror them into the repo. The cloud owns the schema; a local checkout is a
+mirror of it, plus any local-only code (custom generators, `handlers/`).
+
+### `login`
+
+```bash
+npx mpug login
+```
+
+Device auth: opens the browser, you approve, and the token
+(`mp_cli_…`) is written to your user config (`~/.config/mockingpug/auth.json`),
+never the repo. In CI, set `MOCKINGPUG_TOKEN` (`mp_ci_…`) instead — it takes
+priority over the config file.
+
+### `link`
+
+```bash
+npx mpug link <projectId>            # e.g. proj_abc123
+npx mpug link <projectId> --no-push  # link only, don't upload local mocks
+```
+
+Ties this folder to a cloud project (writes `.mockingpug/project.json` —
+commit it). What it does next depends on whether you already have local mocks:
+
+- **No local mocks** → immediately `pull`s the published version down (a fresh
+  mirror). Nothing published yet → it just links.
+- **Local mocks present** → **pushes** them into the project's *draft* (the
+  cloud merges: your local wins per name/id, unmatched cloud entries stay).
+  Nothing is published and nothing is pulled — open the cloud editor, review
+  the draft, **Publish**, then `pull`. `--no-push` skips the upload (link only;
+  mirror later with `pull --yes`).
+
+Push needs a personal token with *edit schema* rights; a CI token
+(`MOCKINGPUG_TOKEN`) is read-only and will get a clear `CLOUD-FORBIDDEN`. If
+someone has the cloud editor open, push is refused with `CLOUD-BUSY` (close it
+and retry).
+
+### `pull`
+
+```bash
+npx mpug pull                    # mirror the latest published version
+npx mpug pull --yes              # don't prompt before overwriting/removing
+npx mpug pull --watch            # keep syncing as cloud publishes new versions
+npx mpug pull --version 12       # pin a published version (CI)
+npx mpug pull --project proj_x   # target a project without a link file (CI)
+npx mpug pull --force            # mirror even if a local push is unpublished
+```
+
+**A 1:1 mirror of the published version.** In `mock/tables/`, `mock/routes/`
+and `mock/data/` it writes what cloud has and **removes local files cloud no
+longer has** (a locally-added table or endpoint disappears on the next pull),
+and it clears out any legacy `mock/api/`. Everything else is out of scope and
+never touched: `mock/handlers/`, your custom generator code, and
+`mock.config.js` (a differing `seed` is only warned about).
+
+Because it can delete and overwrite, `pull` shows the plan and refuses without
+`--yes` when it would overwrite a locally-changed file or remove one.
+
+If you ran `link`/`push` and haven't Published the draft yet, `pull` holds off
+(writes nothing) so it won't roll your local source back to the older published
+version — Publish it in the editor first, or pass `--force` to mirror the
+published version and discard the draft. `--watch` waits for the Publish and
+then mirrors automatically.
 
 ## Logs and errors
 

@@ -23,10 +23,13 @@ export abstract class MockingpugError extends Error {
 
   readonly location?: ErrorLocation;
   readonly hint?: string;
+  /** The core message alone, without the appended `at <file> → <path>` location or the hint that `.message` also carries. Lets consumers (e.g. cloud) show a clean one-liner without string-splitting `.message`. */
+  readonly reason: string;
 
   constructor(message: string, options: MockingpugErrorOptions = {}) {
     super(MockingpugError.format(message, options));
     this.name = new.target.name;
+    this.reason = message;
     this.location = options.location;
     this.hint = options.hint;
     if (options.cause !== undefined) {

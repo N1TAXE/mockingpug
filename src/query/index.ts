@@ -14,3 +14,4 @@ export { RequestLog, recordRequest, DEFAULT_REQUEST_LOG_SIZE, type RequestLogEnt
 export { OneShotOverrides, hasArmedOverride, type OneShotOverrideEntry } from './oneShotOverride.js';
 export { exportSnapshot, importSnapshot, type StoreSnapshot } from './snapshot.js';
 export { RequestBypass } from './requestBypass.js';
+export { executeRoute, serveRoute } from './executeRoute.js';

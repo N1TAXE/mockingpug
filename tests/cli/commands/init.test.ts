@@ -15,25 +15,24 @@ afterEach(async () => {
 });
 
 describe('init', () => {
-  it('creates mock.config.js and the mock/api + mock/data directories', async () => {
+  it('creates mock.config.js and the mock/tables + routes + data directories', async () => {
     const result = await init(dir);
     expect(result.ok).toBe(true);
 
     const config = await readFile(join(dir, 'mock.config.js'), 'utf-8');
     expect(config).toContain('module.exports');
 
-    const apiEntries = await readdir(join(dir, 'mock', 'api'));
-    expect(apiEntries).toContain('example');
-    const dataEntries = await readdir(join(dir, 'mock', 'data'));
-    expect(dataEntries).toEqual([]);
+    expect(await readdir(join(dir, 'mock', 'tables'))).toContain('example.json');
+    expect(await readdir(join(dir, 'mock', 'routes'))).toContain('example.json');
+    expect(await readdir(join(dir, 'mock', 'data'))).toEqual([]);
   });
 
-  it('writes a valid example schema that loadProject can actually parse', async () => {
+  it('writes an example table + routes that loadProject can actually parse into endpoints', async () => {
     await init(dir);
-    const exampleSchema = await readFile(join(dir, 'mock', 'api', 'example', 'schema.json'), 'utf-8');
-    const parsed = JSON.parse(exampleSchema);
-    expect(typeof parsed.amount).toBe('number');
-    expect(typeof parsed.data).toBe('object');
+    const { loadProject } = await import('../../../src/cli/schemaLoader.js');
+    const project = await loadProject(dir, 'mock');
+    expect(project.entities.example!.amount).toBe(100);
+    expect(project.routes.map((r) => r.id).sort()).toEqual(['example_get', 'example_list']);
   });
 
   it('is idempotent: does not overwrite an existing mock.config.js', async () => {
@@ -45,14 +44,13 @@ describe('init', () => {
     expect(config).toContain('hand-written');
   });
 
-  it('does not add an example schema if mock/api already has entries', async () => {
-    await mkdir(join(dir, 'mock', 'api', 'user'), { recursive: true });
-    await writeFile(join(dir, 'mock', 'api', 'user', 'schema.json'), JSON.stringify({ amount: 1, data: {} }), 'utf-8');
+  it('does not add an example table if mock/tables already has entries', async () => {
+    await mkdir(join(dir, 'mock', 'tables'), { recursive: true });
+    await writeFile(join(dir, 'mock', 'tables', 'user.json'), JSON.stringify({ amount: 1, data: { id: 'uuid' } }), 'utf-8');
 
     await init(dir);
 
-    const apiEntries = await readdir(join(dir, 'mock', 'api'));
-    expect(apiEntries).toEqual(['user']);
+    expect(await readdir(join(dir, 'mock', 'tables'))).toEqual(['user.json']);
   });
 
   it('reports npm as the detected package manager when no lockfile is present', async () => {

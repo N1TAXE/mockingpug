@@ -1,7 +1,15 @@
-import { parseConditional } from './conditional.js';
+import { parseFieldValue } from './conditional.js';
 import { SchemaError } from './errors.js';
 import { parseFieldType } from './parser.js';
 import type { EntitySchema, FieldSpec } from './types.js';
+
+/** Infers a generator spec for a `literal`-derived field from a sample value; unsupported value types (null/array/object) yield no field. */
+function inferFieldSpec(value: unknown): FieldSpec | undefined {
+  if (typeof value === 'boolean') return { kind: 'boolean' };
+  if (typeof value === 'number') return { kind: 'number', mode: 'random' };
+  if (typeof value === 'string') return { kind: 'lorem' };
+  return undefined;
+}
 
 /**
  * Filesystem-free parsing of one entity schema's already-loaded JSON content
@@ -81,7 +89,8 @@ export function parseEntitySchema(
   for (const [fieldName, rawType] of Object.entries(data as Record<string, unknown>)) {
     const fieldPath = `data.${fieldName}`;
     if (typeof rawType === 'object' && rawType !== null && !Array.isArray(rawType)) {
-      fields[fieldName] = parseConditional(rawType as Record<string, unknown>, { knownCustomTypes, file, fieldPath }, entityName);
+      // `{when,...}` → conditional; any other object → a nested object of fields.
+      fields[fieldName] = parseFieldValue(rawType, { knownCustomTypes, file, fieldPath }, entityName);
       continue;
     }
     if (typeof rawType !== 'string') {
@@ -102,7 +111,12 @@ export function parseEntitySchema(
   // iteration order.
   const outputFieldOwners = new Map<string, string>();
   for (const [fieldName, spec] of Object.entries(fields)) {
-    const outputNames = spec.kind === 'crossRef' && spec.fields !== undefined ? spec.fields : [fieldName];
+    const outputNames =
+      spec.kind === 'crossRef' && spec.rename !== undefined
+        ? Object.keys(spec.rename)
+        : spec.kind === 'crossRef' && spec.fields !== undefined
+          ? spec.fields
+          : [fieldName];
     for (const outputName of outputNames) {
       const owner = outputFieldOwners.get(outputName);
       if (owner !== undefined && owner !== fieldName) {
@@ -183,6 +197,22 @@ export function parseEntitySchema(
         `field "${fieldName}" in "${entityName}" is "slugify[${spec.field},${spec.separator}]", but "${spec.field}" must be declared earlier in "data" so it's generated first`,
         { location: { file, path: `data.${fieldName}` } },
       );
+    }
+  }
+
+  // Derive fields present in every `literal` record but absent from `data`:
+  // literal records carry them, but the schema (and thus cloud/OpenAPI/types)
+  // wouldn't otherwise know they exist. Type is inferred from the value; a
+  // field present in only some records is left out (it's not schema-wide).
+  if (Array.isArray(literal) && literal.length > 0) {
+    const records = literal as Array<Record<string, unknown>>;
+    const candidates = new Set<string>();
+    for (const key of Object.keys(records[0]!)) {
+      if (!(key in fields) && records.every((r) => key in r)) candidates.add(key);
+    }
+    for (const key of candidates) {
+      const inferred = inferFieldSpec(records[0]![key]);
+      if (inferred) fields[key] = inferred;
     }
   }
 

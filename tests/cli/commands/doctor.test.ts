@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { doctor } from '../../../src/cli/commands/doctor.js';
 import { generate } from '../../../src/cli/commands/generate.js';
 
@@ -291,6 +291,73 @@ describe('doctor', () => {
       await writeFiles(validProject);
       const result = await doctor(dir, { assertProdSafe: join(dir, 'does-not-exist') });
       expect(result.ok).toBe(true);
+    });
+  });
+
+  describe('--json (R6/R3 parity)', () => {
+    it('prints [] and exits ok for a valid project', async () => {
+      await writeFiles(validProject);
+      const logs: string[] = [];
+      const spy = vi.spyOn(console, 'log').mockImplementation((m?: unknown) => void logs.push(String(m)));
+      try {
+        const result = await doctor(dir, { json: true });
+        expect(result.ok).toBe(true);
+        expect(JSON.parse(logs.join('\n'))).toEqual([]);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('emits issues as JSON and exits non-ok for a broken schema', async () => {
+      await writeFiles({ 'mock/api/user/schema.json': JSON.stringify({ amount: 1, data: { id: 'uuid', u: 'data.nope.id' } }) });
+      const logs: string[] = [];
+      const spy = vi.spyOn(console, 'log').mockImplementation((m?: unknown) => void logs.push(String(m)));
+      try {
+        const result = await doctor(dir, { json: true });
+        expect(result.ok).toBe(false);
+        const issues = JSON.parse(logs.join('\n'));
+        expect(Array.isArray(issues)).toBe(true);
+        expect(issues.length).toBeGreaterThan(0);
+        expect(issues[0]).toHaveProperty('code');
+        expect(issues[0]).toHaveProperty('message');
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+
+  describe('routes (R5 §9)', () => {
+    it('fails when an authored route references an unknown table', async () => {
+      await writeFiles({
+        'mock/tables/order.json': JSON.stringify({ amount: 3, data: { id: 'uuid' } }),
+        'mock/routes/r.json': JSON.stringify({ id: 'bad', kind: 'list', path: '/x', method: 'GET', from: 'ghost' }),
+      });
+      const result = await doctor(dir);
+      expect(result.ok).toBe(false);
+      expect(result.warnings.join('\n')).toContain('MP-ROUTE-011');
+    });
+
+    it('warns when a mock route is shadowed by a real App Router handler', async () => {
+      await writeFiles({
+        'mock/tables/user.json': JSON.stringify({ amount: 1, data: { id: 'uuid' } }),
+        'mock/routes/auth.json': JSON.stringify({ id: 'me', kind: 'one', path: '/auth/me', method: 'GET', from: 'user', where: { id: 'me' } }),
+        'app/api/auth/me/route.ts': 'export function GET() {}',
+      });
+      const result = await doctor(dir);
+      expect(result.warnings.some((w) => w.includes('shadowed') && w.includes('/auth/me'))).toBe(true);
+    });
+
+    it('passes a valid tables/ + routes/ project and reports route count', async () => {
+      await writeFiles({
+        'mock/tables/order.json': JSON.stringify({ amount: 3, data: { id: 'number.increment', total: 'number.0-9' } }),
+        'mock/routes/orders.json': JSON.stringify([
+          { id: 'orders_list', kind: 'list', path: '/orders', method: 'GET', from: 'order', select: ['id', 'total'] },
+          { id: 'order_get', kind: 'one', path: '/orders/:id', method: 'GET', from: 'order', where: { id: ':id' } },
+        ]),
+      });
+      const result = await doctor(dir);
+      expect(result.ok).toBe(true);
+      expect(result.messages.some((m) => m.includes('2 routes validated OK'))).toBe(true);
     });
   });
 });

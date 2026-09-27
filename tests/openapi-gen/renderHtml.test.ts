@@ -15,7 +15,7 @@ const entities: Record<string, EntitySchema> = {
 
 describe('renderDocsHtml', () => {
   it('renders one nav link and one section per entity', () => {
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG, undefined, { title: 'my-app' });
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG, undefined, { title: 'my-app' });
     const html = renderDocsHtml(spec);
     expect(html).toContain('<a href="#entity-user">user</a>');
     expect(html).toContain('<section id="entity-user"');
@@ -23,7 +23,7 @@ describe('renderDocsHtml', () => {
   });
 
   it('renders every HTTP method for the entity as its own operation block', () => {
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const html = renderDocsHtml(spec);
     expect(html).toContain('>GET</span>');
     expect(html).toContain('>POST</span>');
@@ -35,7 +35,7 @@ describe('renderDocsHtml', () => {
   });
 
   it('renders a curl example for each operation, with a body for a write and none for GET', () => {
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const html = renderDocsHtml(spec);
     // Rendered inside a <pre>, so single quotes come out HTML-escaped (&#39;).
     expect(html).toContain('curl -X GET &#39;/api/user&#39;');
@@ -45,7 +45,7 @@ describe('renderDocsHtml', () => {
   });
 
   it('never mentions the devtools sub-API', () => {
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const html = renderDocsHtml(spec);
     expect(html).not.toContain('__mockingpug');
   });
@@ -59,21 +59,21 @@ describe('renderDocsHtml', () => {
         data: { '<script>alert(1)</script>': { kind: 'lorem' } },
       },
     };
-    const spec = generateOpenApiSpec(malicious, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(malicious, undefined, DEFAULT_CONFIG);
     const html = renderDocsHtml(spec);
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;');
   });
 
   it('renders the field table for the entity schema', () => {
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const html = renderDocsHtml(spec);
     expect(html).toContain('<td class="mono">id</td>');
     expect(html).toContain('<td class="mono">name</td>');
   });
 
   it('is valid enough to at least look like a full HTML document', () => {
-    const spec = generateOpenApiSpec(entities, DEFAULT_CONFIG);
+    const spec = generateOpenApiSpec(entities, undefined, DEFAULT_CONFIG);
     const html = renderDocsHtml(spec);
     expect(html.startsWith('<!doctype html>')).toBe(true);
     expect(html).toContain('</html>');

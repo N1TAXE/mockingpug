@@ -8,13 +8,16 @@ export type FieldSpec =
   | { kind: 'lorem'; length?: number }
   | { kind: 'date'; range?: 'past' | 'future' }
   | { kind: 'boolean'; chance?: number }
-  | { kind: 'enumInline'; values: string[] }
+  | { kind: 'enumInline'; values: Array<string | number | boolean> }
   | { kind: 'array'; item: FieldSpec; count: number }
   | { kind: 'custom'; name: string }
-  | { kind: 'crossRef'; entity: string; field?: string; fields?: readonly string[] }
+  | { kind: 'crossRef'; entity: string; field?: string; fields?: readonly string[]; unique?: boolean; rename?: Record<string, string> }
   | { kind: 'slugify'; field: string; separator: string }
   | { kind: 'literal'; value: string | number | boolean | null }
-  | { kind: 'conditional'; when: Record<string, string | number | boolean | null>; then: FieldSpec; else: FieldSpec };
+  | { kind: 'conditional'; when: Record<string, string | number | boolean | null>; then: FieldSpec; else: FieldSpec }
+  // A nested object value: each key is itself a field. Generated recursively;
+  // `select`/`filterable` address leaves with a dotted path (`options.is_top`).
+  | { kind: 'object'; fields: Record<string, FieldSpec> };
 
 /** One entry of a custom dictionary file under `mock/data/*.json`. */
 export interface CustomDictionaryEntry {

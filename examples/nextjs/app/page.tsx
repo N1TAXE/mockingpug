@@ -18,15 +18,16 @@ interface ListResponse {
 
 const PAGE_SIZE = 10;
 
-// Exercises the full mockingpug/next feature set against real fetch() calls
-// handled by the catch-all Route Handler (app/api/[[...mock]]/route.ts):
-// paginated list, custom dictionary (`role`), bare relation (`user.posts`),
-// field-level relation (`blogpost.author`), GET by id, POST create, DELETE.
+// Exercises the endpoint-driven mockingpug/next surface (mock/routes/user.json)
+// against real fetch() handled by the catch-all Route Handler
+// (app/api/[[...mock]]/route.ts): a `list` endpoint (paginated, custom
+// dictionary `role`) and a `one` endpoint with an `include` that joins the
+// internal `blogpost` table back as `user.posts`. `blogpost` has no route of
+// its own — it's an internal table, used only through relations/includes.
 export default function Home() {
   const [page, setPage] = useState(1);
   const [list, setList] = useState<ListResponse | null>(null);
   const [selected, setSelected] = useState<User | null>(null);
-  const [newName, setNewName] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -46,27 +47,6 @@ export default function Home() {
     setSelected(await res.json());
   }
 
-  async function createUser(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newName) return;
-    await fetch('/api/user', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newName, email: `${newName}@example.com` }),
-    });
-    setNewName('');
-    setPage(1);
-    const res = await fetch(`/api/user?page=1&limit=${PAGE_SIZE}`);
-    setList(await res.json());
-  }
-
-  async function deleteUser(id: number) {
-    await fetch(`/api/user/${id}`, { method: 'DELETE' });
-    setSelected(null);
-    const res = await fetch(`/api/user?page=${page}&limit=${PAGE_SIZE}`);
-    setList(await res.json());
-  }
-
   const totalPages = list ? Math.max(1, Math.ceil(list.meta.total / list.meta.limit)) : 1;
 
   return (
@@ -76,19 +56,11 @@ export default function Home() {
         <p>
           Every request below hits a real <code>/api/user</code> App Router endpoint —{' '}
           <code>app/api/[[...mock]]/route.ts</code>, a catch-all Route Handler backed by{' '}
-          <code>mockingpug/next</code>, generating data from <code>mock/api/user/schema.json</code> +{' '}
-          <code>mock/api/blogpost/schema.json</code>. Unlike the React/MSW examples, this is a real server
-          endpoint, not a browser-only interception — check it with <code>curl</code> too.
+          <code>mockingpug/next</code>, generating data from <code>mock/tables/user.json</code> +{' '}
+          <code>mock/tables/blogpost.json</code> and routing via <code>mock/routes/user.json</code>.
+          Unlike the React/MSW examples, this is a real server endpoint, not a browser-only
+          interception — check it with <code>curl</code> too.
         </p>
-
-        <form onSubmit={createUser} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          <input
-            placeholder="New user name"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-          />
-          <button type="submit">Create</button>
-        </form>
 
         {!list && <p>Loading...</p>}
 
@@ -97,10 +69,7 @@ export default function Home() {
             <span>
               #{user.id} {user.name} <em>{user.role}</em>
             </span>
-            <span>
-              <button type="button" onClick={() => openUser(user.id)}>View</button>{' '}
-              <button type="button" onClick={() => deleteUser(user.id)}>Delete</button>
-            </span>
+            <button type="button" onClick={() => openUser(user.id)}>View</button>
           </div>
         ))}
 

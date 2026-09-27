@@ -6,3 +6,12 @@ coverage/
 *.log
 *.tgz
 .idea
+# internal planning / working docs (kept locally, not committed)
+/PLAN.md
+/SYNC-PLAN.md
+/PACKAGE-REQUIREMENTS.md
+/IMPLEMENTATION_STATUS.md
+/mockingpug-cloud-plan.md
+/ATTRIBUTION.md
+/CLAUDE.md
+.claude/

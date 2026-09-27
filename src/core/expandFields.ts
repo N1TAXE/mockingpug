@@ -13,7 +13,12 @@ import type { FieldSpec } from './types.js';
 export function expandDataFields(data: Record<string, FieldSpec>): Array<[string, FieldSpec]> {
   const expanded: Array<[string, FieldSpec]> = [];
   for (const [fieldName, spec] of Object.entries(data)) {
-    if (spec.kind === 'crossRef' && spec.fields !== undefined) {
+    if (spec.kind === 'crossRef' && spec.rename !== undefined) {
+      // Correlated ref with renamed outputs: one field per output name, typed by its source field.
+      for (const [outName, src] of Object.entries(spec.rename)) {
+        expanded.push([outName, { kind: 'crossRef', entity: spec.entity, field: src }]);
+      }
+    } else if (spec.kind === 'crossRef' && spec.fields !== undefined) {
       for (const projected of spec.fields) {
         expanded.push([projected, { kind: 'crossRef', entity: spec.entity, field: projected }]);
       }
