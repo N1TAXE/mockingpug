@@ -9,6 +9,7 @@ import { prune } from './commands/prune.js';
 import { types } from './commands/types.js';
 import { docs } from './commands/docs.js';
 import { generators } from './commands/generators.js';
+import { codegen } from './commands/codegen.js';
 import { login } from './commands/login.js';
 import { link } from './commands/link.js';
 import { pull } from './commands/pull.js';
@@ -37,6 +38,8 @@ Commands:
   generate  Generate/reconcile data into the configured store
   reset     Wipe the store entirely (--yes required)
   prune     Delete orphaned entities from the store (--yes required)
+  codegen   Write mock/.generated/schemas.ts (parsed schemas+routes for Metro/RN)
+              --watch                     regenerate on changes to mock/
   types     Write .mockingpug/types/index.d.ts (one TS interface per entity)
   docs      Write .mockingpug/docs/{index.html,openapi.json} (REST API reference)
   generators  Print every DSL generator the parser supports, with syntax + examples
@@ -131,6 +134,11 @@ export async function run(argv: string[], cwd: string): Promise<number> {
       case 'generators': {
         printResult(generators());
         return 0;
+      }
+      case 'codegen': {
+        const result = await codegen(cwd, { watch: flags.has('--watch') });
+        printResult(result);
+        return result.ok ? 0 : 1;
       }
       default:
         console.log(USAGE);

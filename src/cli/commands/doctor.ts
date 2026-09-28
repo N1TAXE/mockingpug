@@ -35,7 +35,7 @@ export interface DoctorOptions {
   assertProdSafe?: string;
 }
 
-const PROD_SAFETY_MARKERS = ['mockServiceWorker.js', 'mockingpug/dist/react', 'mockingpug/dist/next'];
+const PROD_SAFETY_MARKERS = ['mockServiceWorker.js', 'mockingpug/dist/react', 'mockingpug/dist/next', 'mockingpug/dist/native'];
 
 function walkArrayCounts(spec: FieldSpec, onArray: (count: number) => void): void {
   if (spec.kind === 'array') {

@@ -1,0 +1,71 @@
+---
+title: React Native
+description: Mocking a REST API in a React Native / Expo app via MSW
+---
+
+`mockingpug/native` mocks your REST API inside a React Native or Expo app —
+the same generated data and endpoints as the web transports, but through
+[MSW's React Native integration](https://mswjs.io/docs/integrations/react-native)
+instead of a Service Worker. No DOM, no `mockServiceWorker.js`.
+
+## 1. Install
+
+```bash
+npm install -D mockingpug
+npm install msw react-native-url-polyfill fast-text-encoding
+```
+
+`msw` and the two polyfills are peers MSW needs on React Native.
+
+## 2. Generate the schema module
+
+React Native's bundler (Metro) has no plugin like `mockingpug/vite` and no
+filesystem at runtime, so parse the schema at build time into a plain module:
+
+```bash
+npx mpug codegen          # writes mock/.generated/schemas.ts
+npx mpug codegen --watch  # regenerate while you edit mock/
+```
+
+It emits `schemas`, `routes`, `customDictionaries` and `mockConfig` from your
+`mock/tables`, `mock/routes` and `mock/data` — the same parsed shapes the CLI
+and every transport use.
+
+## 3. Start the mocks
+
+Import the polyfills first, then wire up the server at app startup (dev only):
+
+```ts title="index.js"
+import 'react-native-url-polyfill/auto';
+import 'fast-text-encoding';
+
+import { MemoryStoreAdapter, generateAll, setupNativeMocks } from 'mockingpug/native';
+import { schemas, customDictionaries, mockConfig } from './mock/.generated/schemas';
+
+if (__DEV__) {
+  const store = new MemoryStoreAdapter();
+  await generateAll(schemas, store, { seed: mockConfig.seed, customDictionaries });
+  setupNativeMocks({ schemas, store, seed: mockConfig.seed, customDictionaries, pagination: mockConfig.pagination }, mockConfig.baseUrl);
+}
+```
+
+Now `fetch('<baseUrl>/user')` in your app returns generated data. A request no
+route handles falls through to the real network (`onUnhandledRequest: 'bypass'`).
+
+<Callout title="Absolute URLs on React Native">
+React Native's `fetch` needs absolute URLs, so set `baseUrl` in `mock.config.js`
+to your API's real origin (e.g. `https://api.example.com`) and call the same
+paths your app already calls.
+</Callout>
+
+## Keeping mocks out of production
+
+`__DEV__` guards the setup above, and
+[`mpug doctor --assert-prod-safe <dir>`](/docs/guides/cli#doctor) scans a
+release bundle (Metro / EAS output) for a `mockingpug/dist/native` leak.
+
+## What's not here yet
+
+`<MockDevtools>` (a React Native panel), an AsyncStorage-backed mock toggle,
+and an Expo Router (`+api.ts`) adapter are on the roadmap. The MSW path above
+covers `GET`/`list`/`one`/`mutation`/`composite` today.
