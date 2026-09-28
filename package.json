@@ -44,6 +44,10 @@
       "types": "./dist/native/index.d.ts",
       "import": "./dist/native/index.js"
     },
+    "./vue": {
+      "types": "./dist/vue/index.d.ts",
+      "import": "./dist/vue/index.js"
+    },
     "./next": {
       "types": "./dist/next/index.d.ts",
       "import": "./dist/next/index.js"

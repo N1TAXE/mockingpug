@@ -1,0 +1,71 @@
+---
+title: Vue
+description: Mocking a REST API in a Vue SPA via MSW
+---
+
+`mockingpug/vue` mocks your REST API in a Vue app (Vite, Nuxt SPA, or any
+bundler) through [MSW](https://mswjs.io)'s browser worker — the same generated
+data and endpoints as the React transport, without React's components. It's
+framework-neutral, so Svelte/Solid/vanilla work the same way.
+
+## 1. Install
+
+```bash
+npm install -D mockingpug
+npm install msw
+npx msw init public/   # writes the Service Worker script MSW needs
+```
+
+## 2. Load the schemas
+
+On Vite, the [plugin](/docs/guides/vite) exposes them as a virtual module:
+
+```ts title="vite.config.ts"
+import { mockingpug } from 'mockingpug/vite';
+export default defineConfig({ plugins: [mockingpug()] });
+```
+
+Without a Vite plugin, run `npx mpug codegen` and import
+`mock/.generated/schemas.ts` instead.
+
+## 3. Start the mocks
+
+Wire it up before mounting the app (dev only):
+
+```ts title="src/main.ts"
+import { createApp } from 'vue';
+import App from './App.vue';
+
+async function bootstrap() {
+  if (import.meta.env.DEV) {
+    const { MemoryStoreAdapter, generateAll, setupMockWorker } = await import('mockingpug/vue');
+    const { schemas, customDictionaries, mockConfig } = await import('virtual:mockingpug/schemas');
+
+    const store = new MemoryStoreAdapter();
+    await generateAll(schemas, store, { seed: mockConfig.seed, customDictionaries });
+    await setupMockWorker(
+      { schemas, store, seed: mockConfig.seed, customDictionaries, pagination: mockConfig.pagination },
+      mockConfig.baseUrl,
+    );
+  }
+  createApp(App).mount('#app');
+}
+
+bootstrap();
+```
+
+Now `fetch('<baseUrl>/user')` returns generated data. A request no route
+handles passes through to the real network.
+
+## Keeping mocks out of production
+
+The `import.meta.env.DEV` guard keeps the worker (and the dynamic
+`mockingpug/vue` import) out of the production bundle;
+[`mpug doctor --assert-prod-safe <dir>`](/docs/guides/cli#doctor) scans a build
+for a `mockServiceWorker.js` / `mockingpug/dist/vue` leak.
+
+## Devtools
+
+The in-app devtools panel (`<MockDevtools>`) ships for React only today; the Vue
+transport currently exposes the runtime controls programmatically via
+`bypass()` / `unbypass()`. A Vue panel is on the roadmap.

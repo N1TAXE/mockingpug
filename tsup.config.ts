@@ -7,6 +7,7 @@ export default defineConfig({
     'cli/bin': 'src/cli/bin.ts',
     'react/index': 'src/react/index.ts',
     'native/index': 'src/native/index.ts',
+    'vue/index': 'src/vue/index.ts',
     'next/index': 'src/next/index.ts',
     'next/MockDevtools': 'src/next/MockDevtools.tsx',
     'vite/index': 'src/vite/index.ts',
