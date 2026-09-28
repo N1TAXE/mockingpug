@@ -43,9 +43,11 @@ entity.
 
 | Import | What it's for |
 |---|---|
-| `mockingpug` | Core: schema parsing, generators, seeded RNG, dependency graph. No framework dependency. |
-| `mockingpug/cli` | Programmatic access to the CLI commands (`init`, `doctor`, `generate`, `migrate`, `reset`, `prune`, `types`, `docs`, and cloud sync: `login`/`link`/`pull`). |
+| `mockingpug` | Core: schema parsing, generators, seeded RNG, dependency graph, the `matchRoute`/`executeRoute` engine, and the OpenAPI generator (`generateOpenApi`/`renderOpenApiHtml`). No framework dependency, browser-safe. |
+| `mockingpug/cli` | Programmatic access to the CLI commands (`init`, `doctor`, `generate`, `migrate`, `codegen`, `reset`, `prune`, `types`, `docs`, and cloud sync: `login`/`link`/`pull`). |
 | `mockingpug/react` | MSW handler generation, `<MockProvider>`/`<MockDevtools>`, `bypass()`/`unbypass()`. |
+| `mockingpug/native` | React Native / Expo: `setupNativeMocks()` via `msw/native`, no DOM. Pair with `mpug codegen`. |
+| `mockingpug/vue` | Vue (and any non-React browser SPA): `setupMockWorker()` via `msw/browser`, no React. |
 | `mockingpug/next` | App Router catch-all Route Handler builder + context loader. |
 | `mockingpug/next/client` | `<MockDevtools>` for the Next.js transport. |
 | `mockingpug/vite` | Vite plugin: auto-discovers `mock/api/**`/`mock/data/**` as a virtual module. |

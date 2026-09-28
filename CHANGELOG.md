@@ -73,6 +73,17 @@ project.
 - **Configurable response envelope** (`response.envelope` + `listKey`):
   `$payload`/`$meta` placeholders let the mock match a contract's exact body
   shape (e.g. `{ data: { items: [...] }, meta, errors: [] }`).
+- **Public OpenAPI generator**: `generateOpenApi(entities, routes?, config?)`
+  (an OpenAPI 3.1 document) and `renderOpenApiHtml(spec)` are exported from the
+  root `mockingpug` entry — dependency- and fs-free, so they run in the browser
+  and Node.
+- **React Native / Expo support** (`mockingpug/native`): `setupNativeMocks(ctx)`
+  runs the same handlers through MSW's React Native server (no DOM). New
+  `mpug codegen` writes `mock/.generated/schemas.ts` for bundlers without a
+  plugin (Metro), and `doctor --assert-prod-safe` also flags a native leak.
+- **Vue (and non-React browser) support** (`mockingpug/vue`): `setupMockWorker(ctx)`
+  starts the same handlers through MSW's browser worker without React —
+  framework-neutral (Vue/Svelte/Solid/vanilla).
 - **`mockingpug/vite`** virtual module now also exports `routes`.
 - **`data.<entity>.<field>!unique`** — 1:1 relations (identity mapping).
 
