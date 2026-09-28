@@ -84,6 +84,11 @@ project.
 - **Vue (and non-React browser) support** (`mockingpug/vue`): `setupMockWorker(ctx)`
   starts the same handlers through MSW's browser worker without React —
   framework-neutral (Vue/Svelte/Solid/vanilla).
+- **GraphQL support** (`mockingpug/graphql`): a GraphQL API auto-generated from
+  the same tables and resolved through the same store as REST. `createGraphQLHandler(ctx)`
+  adds a `POST /graphql` MSW handler; `executeGraphQL(body, ctx)` runs one
+  request (the Next.js Route Handler answers `POST /graphql` out of the box).
+  `graphql` is an optional peer dependency.
 - **`mockingpug/vite`** virtual module now also exports `routes`.
 - **`data.<entity>.<field>!unique`** — 1:1 relations (identity mapping).
 

@@ -1,4 +1,4 @@
 {
   "title": "Guides",
-  "pages": ["index", "cli", "react", "vue", "react-native", "nextjs", "vite", "devtools"]
+  "pages": ["index", "cli", "react", "vue", "react-native", "graphql", "nextjs", "vite", "devtools"]
 }

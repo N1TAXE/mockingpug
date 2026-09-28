@@ -1,0 +1,80 @@
+---
+title: GraphQL
+description: A GraphQL API auto-generated from the same schemas and store as REST
+---
+
+`mockingpug/graphql` exposes a GraphQL endpoint over the **same** generated
+data as the REST transport — same tables, same store, same seed. The schema is
+derived automatically from your `mock/tables/**`, so a query and the equivalent
+REST call always return consistent records. No separate GraphQL server: it's a
+single MSW handler in the browser, or one call inside a Next.js Route Handler.
+
+Requires the `graphql` package (an optional peer — only needed when you import
+`mockingpug/graphql`):
+
+```bash
+npm install graphql
+```
+
+## What gets generated
+
+For every table, the schema gains:
+
+- an object type (`User`, `BlogPost`, …) — scalar fields typed from the DSL;
+  bare relations become a nested list (`posts: [Post!]`); nested objects stay
+  as an opaque `JSON` scalar.
+- `Query.<entity>(id: String!)` — one record by id (`null` if missing).
+- `Query.<entity>s(where, sort, q, page, limit, offset, cursor)` — the list,
+  reusing the same filter/search/sort/pagination as REST. `where` is a `JSON`
+  map of field → value.
+- `Mutation.create<Entity>(input: JSON)`, `update<Entity>(id, input: JSON)`,
+  `delete<Entity>(id): Boolean` — bodies are untyped `JSON`, the same
+  "any JSON is a valid body" contract REST has.
+
+## Browser (React / Vue / Svelte / …)
+
+Add the GraphQL handler to the same worker as your REST mocks — it shares the
+one `ctx`, so both hit the same store:
+
+```ts
+import { setupMockWorker } from 'mockingpug/vue'; // or build the worker yourself
+import { createGraphQLHandler } from 'mockingpug/graphql';
+
+const ctx = { schemas, store, seed, pagination, customDictionaries };
+const worker = await setupMockWorker(ctx, '/api'); // REST at /api/*
+worker.use(createGraphQLHandler(ctx));             // GraphQL at /graphql
+```
+
+```ts
+await fetch('/graphql', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ query: '{ users(limit: 5) { id name posts { id title } } }' }),
+});
+```
+
+The endpoint path defaults to `/graphql`; pass `{ path, baseUrl }` to move it.
+
+## Next.js
+
+The catch-all Route Handler already answers `POST <baseUrl>/graphql` — no extra
+wiring. Or call the executor directly from any handler:
+
+```ts
+import { executeGraphQL } from 'mockingpug/graphql';
+
+export async function POST(request: Request) {
+  const result = await executeGraphQL(await request.json(), ctx);
+  return Response.json(result);
+}
+```
+
+## Limitations (first cut)
+
+- Nested `object` fields and mixed `conditional` fields surface as the opaque
+  `JSON` scalar (no sub-field selection on them).
+- No per-request bypass or runtime latency/error injection through GraphQL —
+  it always answers from the mock. Bypass an entity at the schema level
+  (`bypass: true`) if you need the real backend for it.
+- Field names that aren't valid GraphQL identifiers (e.g. `first-name`) are
+  omitted from the GraphQL types; query them over REST.
