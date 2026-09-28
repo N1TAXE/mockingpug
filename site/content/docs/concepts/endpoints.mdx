@@ -177,3 +177,22 @@ other value is passed through literally. The template applies to
 non-positive paginate limits, and (for Next.js) mock routes shadowed by a real
 `app/api/**` handler. See [Error Codes](/docs/reference/error-codes) —
 `MP-ROUTE-*`.
+
+## OpenAPI
+
+`npx mpug docs` writes `.mockingpug/docs/openapi.json` + a standalone HTML page,
+and `<MockDevtools>`'s "API Docs" button serves the same live. The generator is
+also exported from the package root — dependency- and fs-free, so it runs in the
+browser too:
+
+```ts
+import { generateOpenApi, renderOpenApiHtml } from 'mockingpug';
+
+const spec = generateOpenApi(tables, routes); // OpenAPI 3.1 document (config optional)
+const html = renderOpenApiHtml(spec);         // a standalone HTML page
+```
+
+It takes the same tables + routes the rest of the package uses, so the spec
+matches what the endpoints actually serve: `select`/`include` shape the response
+schemas, fields no endpoint returns are marked `writeOnly`, and `mutation`
+request/response examples are included.

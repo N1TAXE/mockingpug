@@ -321,6 +321,20 @@ describe('generateOpenApiSpec : REST surface', () => {
     expect(del.responses['204']!.description).toBe('No Content');
   });
 
+  it('public generateOpenApi (R19) works from the root export with config optional', async () => {
+    const { generateOpenApi, renderOpenApiHtml } = await import('../../src/core/index.js');
+    const entities: Record<string, EntitySchema> = {
+      order: { name: 'order', file: 'x', amount: 1, data: { id: { kind: 'number', mode: 'increment' } } },
+    };
+    const routes: Route[] = [{ id: 'orders_list', kind: 'list', method: 'GET', path: '/orders', from: 'order' }];
+    // no config passed → defaults (page pagination, /api base)
+    const spec = generateOpenApi(entities, routes) as ReturnType<typeof generateOpenApiSpec>;
+    expect(spec.openapi).toBe('3.1.0');
+    expect(Object.keys(paths(spec))).toEqual(['/orders']);
+    expect((spec.servers as Array<{ url: string }>)[0]!.url).toBe('/api');
+    expect(typeof renderOpenApiHtml(spec)).toBe('string');
+  });
+
   it('every entity gets its own tag, sorted alphabetically', () => {
     const multi: Record<string, EntitySchema> = {
       zebra: { name: 'zebra', file: 'x', amount: 1, data: { id: { kind: 'uuid' } } },

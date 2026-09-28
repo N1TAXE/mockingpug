@@ -483,3 +483,31 @@ export function generateOpenApiSpec(
     components: { schemas },
   };
 }
+
+/** A sensible default when the caller has no full `mock.config.js` — page pagination, `/api` base. */
+const DEFAULT_OPENAPI_CONFIG: OpenApiConfig = {
+  baseUrl: '/api',
+  pagination: {
+    strategy: 'page',
+    params: { page: 'page', limit: 'limit', offset: 'offset', cursor: 'cursor', groupBy: 'groupBy', limitPerGroup: 'limitPerGroup' },
+    defaultLimit: 20,
+    maxLimit: 100,
+    envelope: true,
+  },
+};
+
+/**
+ * Public, dependency- and fs-free OpenAPI 3.1 generator (R19): the same
+ * `generateOpenApiSpec` the CLI/devtools use, with `config` optional so cloud
+ * (and any consumer) can build a spec from just entities + routes — the same
+ * inputs it already sends for data/API previews. Runs in the browser and Node.
+ */
+export function generateOpenApi(
+  entities: Record<string, EntitySchema>,
+  routes?: readonly Route[],
+  config?: OpenApiConfig,
+  customDictionaries?: Record<string, readonly CustomDictionaryEntry[]>,
+  options?: GenerateOpenApiSpecOptions,
+): JsonSchema {
+  return generateOpenApiSpec(entities, routes, config ?? DEFAULT_OPENAPI_CONFIG, customDictionaries, options);
+}

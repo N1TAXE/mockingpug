@@ -69,3 +69,9 @@ export {
 } from './routes.js';
 
 export { validateRoutes, type RouteIssue, type TableFields } from './validateRoutes.js';
+
+// OpenAPI generation (R19): fs-free, browser + Node. `generateOpenApi(entities,
+// routes?, config?)` → an OpenAPI 3.1 document; `renderOpenApiHtml(spec)` → a
+// standalone HTML page. Same generator the CLI `docs` command and devtools use.
+export { generateOpenApi, type OpenApiConfig, type JsonSchema } from '../openapi-gen/generate.js';
+export { renderDocsHtml as renderOpenApiHtml } from '../openapi-gen/renderHtml.js';
