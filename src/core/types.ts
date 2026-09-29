@@ -4,7 +4,7 @@ export type FieldSpec =
   | { kind: 'number'; mode: 'random' | 'increment'; min?: number; max?: number; precision?: number }
   | { kind: 'username'; style: 'FS' | 'NN' }
   | { kind: 'email'; domain?: string }
-  | { kind: 'hash'; algorithm: 'generic' | 'md5' | 'sha256' }
+  | { kind: 'hash'; algorithm: 'generic' | 'md5' | 'sha256' | 'bcrypt' | 'argon2' }
   | { kind: 'lorem'; length?: number }
   | { kind: 'date'; range?: 'past' | 'future' }
   | { kind: 'boolean'; chance?: number }

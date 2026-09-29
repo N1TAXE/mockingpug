@@ -44,6 +44,12 @@ export const GENERATOR_CATALOG: readonly GeneratorCatalogEntry[] = [
     description: 'A hex string shaped like a digest (32/32/64 hex chars). Not a real cryptographic hash.',
     example: 'hash.sha256',
   },
+  {
+    category: 'Scalars',
+    syntax: 'hash.bcrypt / hash.argon2',
+    description: 'A string shaped like a real password hash (bcrypt "$2b$10$…", argon2id PHC). Not a real hash — for realistic users tables.',
+    example: 'hash.bcrypt',
+  },
   { category: 'Scalars', syntax: 'lorem', description: '6 to 24 random lorem-ipsum words.', example: 'lorem' },
   { category: 'Scalars', syntax: 'lorem.<N>', description: 'Lorem text truncated/padded to exactly N characters.', example: 'lorem.120' },
   {

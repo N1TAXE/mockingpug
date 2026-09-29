@@ -112,6 +112,18 @@ describe('generateValue', () => {
     expect(sha256).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it('hash.bcrypt / hash.argon2 look like real password hashes (R15), deterministic from seed', () => {
+    const bcrypt = generateValue({ kind: 'hash', algorithm: 'bcrypt' }, createRng('s'), makeCtx()) as string;
+    const argon2 = generateValue({ kind: 'hash', algorithm: 'argon2' }, createRng('s'), makeCtx()) as string;
+    // bcrypt: $2b$<cost>$ + 53 bcrypt-base64 chars (60 total).
+    expect(bcrypt).toMatch(/^\$2b\$10\$[./A-Za-z0-9]{53}$/);
+    expect(bcrypt).toHaveLength(60);
+    // argon2id PHC string with standard params and base64 salt/hash.
+    expect(argon2).toMatch(/^\$argon2id\$v=19\$m=65536,t=3,p=4\$[A-Za-z0-9+/]{22}\$[A-Za-z0-9+/]{43}$/);
+    // Same seed → same value.
+    expect(generateValue({ kind: 'hash', algorithm: 'bcrypt' }, createRng('s'), makeCtx())).toBe(bcrypt);
+  });
+
   it('lorem without a fixed length produces a non-empty phrase', () => {
     const value = generateValue({ kind: 'lorem' }, createRng('s'), makeCtx()) as string;
     expect(value.length).toBeGreaterThan(0);

@@ -177,6 +177,12 @@ export function parseFieldType(raw: string, options: ParseFieldTypeOptions = {})
   if (value === 'hash.md5' || value === 'hash.sha256') {
     return { kind: 'hash', algorithm: value === 'hash.md5' ? 'md5' : 'sha256' };
   }
+  if (value === 'hash.bcrypt') {
+    return { kind: 'hash', algorithm: 'bcrypt' };
+  }
+  if (value === 'hash.argon2') {
+    return { kind: 'hash', algorithm: 'argon2' };
+  }
 
   if (value === 'lorem') {
     return { kind: 'lorem' };

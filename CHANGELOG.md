@@ -121,8 +121,16 @@ framework-agnostic devtools core, a cloud "open" command, and hot-reload of
   Route Handler; re-fetches the context per request so a live `next dev` picks
   up `mpug pull` / schema edits (data regenerated) without a restart.
 
+- **`hash.bcrypt` / `hash.argon2`** — generators shaped like real password
+  hashes (bcrypt `$2b$10$…`, argon2id PHC), deterministic from the seed, for
+  realistic `users` tables. Not real hashes (nothing to verify against).
+
 ### Changed
 
+- **`literal` no longer wastes generator state.** Literal-covered rows are
+  skipped in field backfill, so a `literal`-assigned `number.increment` id (or a
+  capped dictionary value) no longer burns counters/limits on the first pass —
+  the first generated row follows the literal ids exactly.
 - **Cloud sync safety.** The git origin is normalized (ssh/https, trailing
   `.git`, ports, tokens) so a repo counts as one connected app. Re-running
   `mpug link` on an already-linked folder no longer silently pushes — it

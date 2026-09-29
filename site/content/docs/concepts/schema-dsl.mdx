@@ -56,6 +56,7 @@ between transports.
 | `email` | `string` | `local.1234@<random-domain>`. |
 | `email[<domain>]` | `string` | Same, with a fixed domain: `email[gmail.com]` → `jane.492@gmail.com`. |
 | `hash` / `hash.md5` / `hash.sha256` | `string` | A hex string shaped like a digest (32/32/64 hex chars). **Not a real cryptographic hash**: there's nothing to verify it against, and a real one would require Node's `node:crypto` (unavailable in a browser bundle) or the async Web Crypto API. |
+| `hash.bcrypt` / `hash.argon2` | `string` | A string shaped like a real password hash — bcrypt (`$2b$10$…`, 60 chars) or argon2id PHC (`$argon2id$v=19$m=65536,t=3,p=4$…`). For realistic `users` tables. Still **not a real hash** (same reason as above); deterministic from the seed. |
 | `lorem` | `string` | 6 to 24 random lorem-ipsum words. |
 | `lorem.<N>` | `string` | Lorem text truncated/padded to exactly `N` characters. |
 | `date` / `date.past` / `date.future` | `string` (ISO) | A timestamp within one year of a fixed reference date, before/after/around it depending on the suffix. |

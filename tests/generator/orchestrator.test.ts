@@ -421,6 +421,16 @@ describe('generateAll : literal', () => {
     expect(ids[0]).toBe(1);
   });
 
+  it('R14: literal positions do not consume the increment counter (no wasted ids)', async () => {
+    const store = new MemoryStoreAdapter();
+    // Two literal rows claim ids 100 and 7; the counter is seeded from the max
+    // literal (100), so the first *generated* row is 101 — NOT 103 (which is
+    // what running the generator over the literal positions would produce).
+    await generateAll(categorySchemas(4, [{ id: 100, name: 'A', slug: 'a' }, { id: 7, name: 'B', slug: 'b' }]), store, { seed: 's' });
+    const ids = (await store.load('category'))!.records.map((r) => r.id);
+    expect(ids).toEqual([100, 7, 101, 102]);
+  });
+
   it('a literal record survives an unrelated field-type change', async () => {
     const store = new MemoryStoreAdapter();
     const base = categorySchemas(5, curated);

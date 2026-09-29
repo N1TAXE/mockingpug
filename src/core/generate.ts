@@ -62,16 +62,38 @@ function hexDigits(rng: Rng, count: number): string {
   return hex.slice(0, count);
 }
 
+// bcrypt uses its own base64 variant (`.`/`/`-free ordering differs from
+// standard base64); argon2's PHC encoding uses standard base64 without padding.
+const BCRYPT_B64 = './ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+const STD_B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+function randomFrom(rng: Rng, alphabet: string, count: number): string {
+  let out = '';
+  for (let i = 0; i < count; i++) out += alphabet[Math.floor(rng() * alphabet.length)];
+  return out;
+}
+
 /**
- * Produces a hex string shaped like an md5/sha256 digest, NOT a real
- * cryptographic hash. Mock data has no need for one (nothing here is meant
- * to be verified against real input), and a real implementation would
- * require Node's `node:crypto` (unavailable/async-only in browsers) or the
- * async Web Crypto API, breaking both this function's sync signature and
- * `mockingpug/react`'s ability to run in a browser bundle.
+ * Produces a string SHAPED like a password hash, NOT a real one. Mock data
+ * never verifies against real input, and a real implementation would need
+ * `node:crypto` / async Web Crypto — breaking this sync, browser-safe
+ * generator. The shape (length, alphabet, cost/param prefix) matches the real
+ * thing so front/back-end validation and display behave as in production:
+ * - `generic`/`md5` → 32 hex chars, `sha256` → 64 hex chars;
+ * - `bcrypt` → `$2b$10$` + 53 bcrypt-base64 chars (60 total);
+ * - `argon2` → `$argon2id$v=19$m=65536,t=3,p=4$<salt>$<hash>` (base64, no padding).
  */
-function randomHash(rng: Rng, algorithm: 'generic' | 'md5' | 'sha256'): string {
-  return hexDigits(rng, algorithm === 'sha256' ? 64 : 32);
+function randomHash(rng: Rng, algorithm: 'generic' | 'md5' | 'sha256' | 'bcrypt' | 'argon2'): string {
+  switch (algorithm) {
+    case 'sha256':
+      return hexDigits(rng, 64);
+    case 'bcrypt':
+      return `$2b$10$${randomFrom(rng, BCRYPT_B64, 53)}`;
+    case 'argon2':
+      return `$argon2id$v=19$m=65536,t=3,p=4$${randomFrom(rng, STD_B64, 22)}$${randomFrom(rng, STD_B64, 43)}`;
+    default:
+      return hexDigits(rng, 32); // generic, md5
+  }
 }
 
 /**

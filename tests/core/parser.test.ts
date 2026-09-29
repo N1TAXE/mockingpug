@@ -52,6 +52,8 @@ describe('parseFieldType', () => {
     expect(parseFieldType('hash')).toEqual({ kind: 'hash', algorithm: 'generic' });
     expect(parseFieldType('hash.md5')).toEqual({ kind: 'hash', algorithm: 'md5' });
     expect(parseFieldType('hash.sha256')).toEqual({ kind: 'hash', algorithm: 'sha256' });
+    expect(parseFieldType('hash.bcrypt')).toEqual({ kind: 'hash', algorithm: 'bcrypt' });
+    expect(parseFieldType('hash.argon2')).toEqual({ kind: 'hash', algorithm: 'argon2' });
   });
 
   it('parses lorem with and without a fixed length', () => {
