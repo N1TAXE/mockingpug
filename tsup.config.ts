@@ -9,6 +9,7 @@ export default defineConfig({
     'native/index': 'src/native/index.ts',
     'vue/index': 'src/vue/index.ts',
     'graphql/index': 'src/graphql/index.ts',
+    'devtools-core/index': 'src/devtools-core/index.ts',
     'next/index': 'src/next/index.ts',
     'next/MockDevtools': 'src/next/MockDevtools.tsx',
     'vite/index': 'src/vite/index.ts',

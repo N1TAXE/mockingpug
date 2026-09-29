@@ -35,7 +35,7 @@ export interface DoctorOptions {
   assertProdSafe?: string;
 }
 
-const PROD_SAFETY_MARKERS = ['mockServiceWorker.js', 'mockingpug/dist/react', 'mockingpug/dist/next', 'mockingpug/dist/native', 'mockingpug/dist/vue', 'mockingpug/dist/graphql'];
+const PROD_SAFETY_MARKERS = ['mockServiceWorker.js', 'mockingpug/dist/react', 'mockingpug/dist/next', 'mockingpug/dist/native', 'mockingpug/dist/vue', 'mockingpug/dist/graphql', 'mockingpug/dist/devtools-core'];
 
 function walkArrayCounts(spec: FieldSpec, onArray: (count: number) => void): void {
   if (spec.kind === 'array') {
