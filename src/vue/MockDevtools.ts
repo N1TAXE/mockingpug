@@ -75,7 +75,7 @@ export const MockDevtools = defineComponent({
         },
         onOpenDocs: (c.docs?.enabled ?? true)
           ? () => {
-              const spec = generateOpenApiSpec(c.schemas, c.routes, { baseUrl: props.baseUrl, pagination: c.pagination }, c.customDictionaries);
+              const spec = generateOpenApiSpec(c.schemas, c.routes, { baseUrl: props.baseUrl, pagination: c.pagination, response: c.response }, c.customDictionaries);
               const url = URL.createObjectURL(new Blob([renderDocsHtml(spec)], { type: 'text/html' }));
               window.open(url, '_blank', 'noopener,noreferrer');
               setTimeout(() => URL.revokeObjectURL(url), 60_000);

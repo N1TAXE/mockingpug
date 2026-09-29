@@ -44,8 +44,28 @@ export async function readJsonBody(request: Request): Promise<unknown> {
   }
 }
 
-/** Applies `pagination.envelope`: `true` -> `{ data, meta }` body, `false` -> raw array + `X-*` headers. */
-export function buildListResponse(data: unknown[], meta: PaginationMeta | null, envelope: boolean): Response {
+/**
+ * Reshapes pagination meta via a `response.meta` template: a `"$<field>"`
+ * string becomes that field of the computed meta, everything else passes
+ * through literally (so fields can be renamed and static ones added). Returns
+ * `meta` unchanged when there's no template or the meta isn't an object.
+ */
+export function fillMeta(template: unknown, meta: unknown): unknown {
+  if (template === undefined || meta === null || typeof meta !== 'object') return meta;
+  return substituteMeta(template, meta as Record<string, unknown>);
+}
+
+function substituteMeta(node: unknown, meta: Record<string, unknown>): unknown {
+  if (typeof node === 'string' && node.length > 1 && node[0] === '$') return meta[node.slice(1)];
+  if (Array.isArray(node)) return node.map((n) => substituteMeta(n, meta));
+  if (node !== null && typeof node === 'object') {
+    return Object.fromEntries(Object.entries(node).map(([k, v]) => [k, substituteMeta(v, meta)]));
+  }
+  return node;
+}
+
+/** Applies `pagination.envelope`: `true` -> `{ data, meta }` body, `false` -> raw array + `X-*` headers. A `response.meta` template reshapes the body meta (headers stay raw). */
+export function buildListResponse(data: unknown[], meta: PaginationMeta | null, envelope: boolean, metaTemplate?: unknown): Response {
   if (!envelope || meta === null) {
     const headers = new Headers();
     if (meta) {
@@ -63,5 +83,5 @@ export function buildListResponse(data: unknown[], meta: PaginationMeta | null, 
     }
     return jsonResponse(data, { headers });
   }
-  return jsonResponse({ data, meta });
+  return jsonResponse({ data, meta: fillMeta(metaTemplate, meta) });
 }

@@ -44,11 +44,26 @@ export type Respond =
   | { ref: string }
   | { status: number; body: unknown };
 
+/**
+ * Per-endpoint response-shape override, merged (field by field) over the
+ * project-wide `response.*` config. Lets one endpoint carry its own envelope /
+ * `listKey` / meta template — e.g. a legacy route whose pagination meta uses
+ * different field names than the rest of the API. Named `responseShape` (not
+ * `response`) to avoid colliding with `mutation`'s `response` body text.
+ */
+export interface RouteResponse {
+  envelope?: unknown;
+  listKey?: string;
+  meta?: unknown;
+}
+
 interface RouteBase {
   id: string;
   path: string;
   bypass?: boolean;
   description?: string;
+  /** Per-endpoint override of the config's `response.*` (envelope/listKey/meta). Ignored by kinds that don't wrap a body (`static`/`handler`/`resource`). */
+  responseShape?: RouteResponse;
 }
 
 /** One slot of a `composite` response: a mini list query. `first: true` returns a single object (or null) instead of an array. */

@@ -29,6 +29,8 @@ const routes: Route[] = [
   { id: 'order-pay', kind: 'mutation', method: 'POST', path: '/orders/:id/pay', response: '{"status":"paid"}' },
   { id: 'order-create', kind: 'mutation', method: 'POST', path: '/orders', from: 'orders', select: ['id'] },
   { id: 'orders-small', kind: 'list', method: 'GET', path: '/orders/small', from: 'orders', paginate: { defaultLimit: 2 } },
+  { id: 'orders-shaped', kind: 'list', method: 'GET', path: '/orders/shaped', from: 'orders', responseShape: { meta: { per_page: '$limit', total_pages: '$pageCount', locale: 'en' } } },
+  { id: 'orders-enveloped', kind: 'list', method: 'GET', path: '/orders/enveloped', from: 'orders', responseShape: { envelope: { rows: '$payload', page_info: '$meta' } } },
   { id: 'dashboard', kind: 'composite', method: 'GET', path: '/dashboard', shape: { users: { from: 'users', select: ['id'] }, latestOrder: { from: 'orders', sort: 'id:desc', first: true, select: ['id'] } } },
   { id: 'do', kind: 'action', method: 'POST', path: '/do', effects: [], respond: { status: 200, body: { ok: true } } },
   { id: 'like', kind: 'action', method: 'POST', path: '/orders/:id/like', effects: [{ op: 'increment', table: 'orders', where: { id: ':id' }, field: 'total', by: 100, name: 'liked' }], respond: { ref: 'liked' } },
@@ -139,6 +141,53 @@ describe('executeRoute (R5)', () => {
     const fullBody = (await executeRoute(fullMatch, new Request('http://localhost/api/orders/1/full'), enveloped).then((r) => r.json())) as any;
     expect(fullBody.data.id).toBe(1); // record under $payload (no listKey for a single record)
     expect(fullBody.errors).toEqual([]);
+  });
+
+  it('response.meta renames pagination fields and adds literals (default {data,meta} shape)', async () => {
+    const withMeta: QueryContext = {
+      ...ctx,
+      response: { meta: { page: '$page', per_page: '$limit', total: '$total', total_pages: '$pageCount', locale: 'en', country: 'US' } },
+    };
+    const listMatch = matchRoute('GET', '/api/users/1/orders', routes)!;
+    const body = (await executeRoute(listMatch, new Request('http://localhost/api/users/1/orders'), withMeta).then((r) => r.json())) as any;
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.meta).toEqual({
+      page: expect.any(Number),
+      per_page: expect.any(Number),
+      total: expect.any(Number),
+      total_pages: expect.any(Number),
+      locale: 'en',
+      country: 'US',
+    });
+    // The raw mock field names are gone.
+    expect(body.meta.strategy).toBeUndefined();
+    expect(body.meta.limit).toBeUndefined();
+  });
+
+  it('route responseShape overrides the response config per endpoint (meta)', async () => {
+    // ctx has no global response; the endpoint carries its own meta template.
+    const body = (await run('GET', '/orders/shaped').then((r) => r.json())) as any;
+    expect(Array.isArray(body.data)).toBe(true);
+    expect(body.meta).toEqual({ per_page: expect.any(Number), total_pages: expect.any(Number), locale: 'en' });
+  });
+
+  it('route responseShape merges field-by-field over the global response (route envelope + global meta)', async () => {
+    // The endpoint overrides only the envelope; the global meta template still applies inside its $meta.
+    const merged: QueryContext = { ...ctx, response: { meta: { per_page: '$limit' } } };
+    const match = matchRoute('GET', '/orders/enveloped', routes)!;
+    const body = (await executeRoute(match, new Request('http://localhost/orders/enveloped'), merged).then((r) => r.json())) as any;
+    expect(Array.isArray(body.rows)).toBe(true); // route's envelope key
+    expect(body.page_info).toEqual({ per_page: expect.any(Number) }); // global meta template, applied under the route's $meta
+  });
+
+  it('response.meta also reshapes the meta inside a custom envelope $meta', async () => {
+    const withBoth: QueryContext = {
+      ...ctx,
+      response: { envelope: { data: '$payload', meta: '$meta' }, meta: { per_page: '$limit', total_pages: '$pageCount' } },
+    };
+    const listMatch = matchRoute('GET', '/api/users/1/orders', routes)!;
+    const body = (await executeRoute(listMatch, new Request('http://localhost/api/users/1/orders'), withBoth).then((r) => r.json())) as any;
+    expect(body.meta).toEqual({ per_page: expect.any(Number), total_pages: expect.any(Number) });
   });
 
   it('composite route builds one object from several table reads (first → object, else array)', async () => {

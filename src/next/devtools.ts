@@ -181,7 +181,7 @@ export async function handleDevtoolsRequest(
     const spec = generateOpenApiSpec(
       ctx.schemas,
       ctx.routes,
-      { baseUrl: baseUrlFromRequest(request), pagination: ctx.pagination },
+      { baseUrl: baseUrlFromRequest(request), pagination: ctx.pagination, response: ctx.response },
       ctx.customDictionaries,
     );
     return htmlResponse(renderDocsHtml(spec));

@@ -66,6 +66,7 @@ export {
   type CompositeSlot,
   type Effect,
   type Respond,
+  type RouteResponse,
 } from './routes.js';
 
 export { validateRoutes, type RouteIssue, type TableFields } from './validateRoutes.js';

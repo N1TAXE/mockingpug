@@ -4,9 +4,10 @@ import { buildCustomResolver, generateFullRecord, seedIncrementCounters } from '
 import { computeEntityMeta } from '../store/fingerprint.js';
 import type { StoredEntity, StoredRecord } from '../store/adapter.js';
 import { filterRecords } from './filter.js';
-import { buildListResponse, errorResponse, jsonResponse, readJsonBody } from './httpResponse.js';
+import { buildListResponse, errorResponse, fillMeta, jsonResponse, readJsonBody } from './httpResponse.js';
 import { paginate } from './pagination.js';
 import { getRecordById, listRecords, createRecord, updateRecord, deleteRecord, type QueryContext } from './resolver.js';
+import type { ResponseConfig } from '../cli/mockConfig.js';
 import { RequestError } from '../core/index.js';
 import { recordRequest } from './requestLog.js';
 import { simulateRuntimeForEntity } from './runtime.js';
@@ -36,10 +37,26 @@ function fillEnvelope(node: unknown, payload: unknown, meta: unknown, listKey: s
  * (`ctx.response.envelope`), else returns `undefined` so the caller uses its
  * default shape. `meta` is `null` for single-record/mutation responses.
  */
-function enveloped(payload: unknown, meta: unknown, ctx: QueryContext): Response | undefined {
-  const cfg = ctx.response;
+/**
+ * The effective response config for a route: the endpoint's own
+ * `responseShape` merged field-by-field over the project-wide `ctx.response`,
+ * so one endpoint can override just its envelope, `listKey`, or meta template.
+ */
+function responseFor(match: RouteMatch, ctx: QueryContext): ResponseConfig | undefined {
+  const override = (match.route as { responseShape?: { envelope?: unknown; listKey?: string; meta?: unknown } }).responseShape;
+  const base = ctx.response;
+  if (!override) return base;
+  return {
+    envelope: override.envelope !== undefined ? override.envelope : base?.envelope,
+    listKey: override.listKey !== undefined ? override.listKey : base?.listKey,
+    meta: override.meta !== undefined ? override.meta : base?.meta,
+  };
+}
+
+function enveloped(payload: unknown, meta: unknown, cfg: ResponseConfig | undefined): Response | undefined {
   if (!cfg?.envelope) return undefined;
-  return jsonResponse(fillEnvelope(cfg.envelope, payload, meta, cfg.listKey));
+  const shapedMeta = cfg.meta !== undefined ? fillMeta(cfg.meta, meta) : meta;
+  return jsonResponse(fillEnvelope(cfg.envelope, payload, shapedMeta, cfg.listKey));
 }
 
 async function loadRecords(entity: string, ctx: QueryContext): Promise<Rec[]> {
@@ -183,7 +200,7 @@ async function executeResource(match: RouteMatch, request: Request, ctx: QueryCo
   switch (match.op) {
     case 'list': {
       const { data, meta } = await listRecords(table, new URL(request.url).searchParams, ctx);
-      return buildListResponse(data, meta, ctx.pagination.strategy !== false && ctx.pagination.envelope);
+      return buildListResponse(data, meta, ctx.pagination.strategy !== false && ctx.pagination.envelope, responseFor(match, ctx)?.meta);
     }
     case 'get':
       return jsonResponse(await getRecordById(table, id!, ctx));
@@ -236,7 +253,8 @@ async function executeList(match: RouteMatch, request: Request, ctx: QueryContex
   const pconfig = route.paginate === false ? { ...ctx.pagination, strategy: false as const } : { ...ctx.pagination, ...route.paginate };
   const { data, meta } = paginate(records, query, pconfig);
   const out = await projectRows(data, route.from, route.select, route.include, ctx);
-  return enveloped(out, meta, ctx) ?? buildListResponse(out, meta, pconfig.strategy !== false && pconfig.envelope);
+  const response = responseFor(match, ctx);
+  return enveloped(out, meta, response) ?? buildListResponse(out, meta, pconfig.strategy !== false && pconfig.envelope, response?.meta);
 }
 
 /** Composes one object from several table reads (`shape`). Each slot is a mini list query; `first: true` → a single object (or null). */
@@ -252,7 +270,7 @@ async function executeComposite(match: RouteMatch, request: Request, ctx: QueryC
     const projected = await projectRows(slot.first ? rows.slice(0, 1) : rows, slot.from, slot.select, slot.include, ctx);
     body[key] = slot.first ? (projected[0] ?? null) : projected;
   }
-  return enveloped(body, null, ctx) ?? jsonResponse(body);
+  return enveloped(body, null, responseFor(match, ctx)) ?? jsonResponse(body);
 }
 
 /**
@@ -271,14 +289,14 @@ async function executeMutation(match: RouteMatch, ctx: QueryContext): Promise<Re
     } catch {
       throw new RequestError('MP-REQ-001', `route "${route.id}" has an invalid "response" JSON`, 500);
     }
-    return enveloped(parsed, null, ctx) ?? jsonResponse(parsed);
+    return enveloped(parsed, null, responseFor(match, ctx)) ?? jsonResponse(parsed);
   }
   if (route.from) {
     const first = (await loadRecords(route.from, ctx))[0];
     const body = first ? project(first, route.select) : {};
-    return enveloped(body, null, ctx) ?? jsonResponse(body);
+    return enveloped(body, null, responseFor(match, ctx)) ?? jsonResponse(body);
   }
-  return enveloped({}, null, ctx) ?? jsonResponse({});
+  return enveloped({}, null, responseFor(match, ctx)) ?? jsonResponse({});
 }
 
 async function executeOne(match: RouteMatch, ctx: QueryContext): Promise<Response> {
@@ -294,7 +312,7 @@ async function executeOne(match: RouteMatch, ctx: QueryContext): Promise<Respons
   const joined = route.include ? (await applyIncludeAll([found], route.include, route.from, ctx))[0]! : found;
   const includeKeys = route.include ? new Set(Object.keys(route.include)) : undefined;
   const record = project(joined, route.select, includeKeys);
-  return enveloped(record, null, ctx) ?? jsonResponse(record);
+  return enveloped(record, null, responseFor(match, ctx)) ?? jsonResponse(record);
 }
 
 /**
@@ -401,7 +419,7 @@ async function executeAction(match: RouteMatch, request: Request, ctx: QueryCont
   // Commit atomically: only after every effect succeeded.
   for (const [table, entity] of cache) await ctx.store.save(table, entity);
 
-  return buildActionResponse(route.respond, b, ctx);
+  return buildActionResponse(route.respond, b, ctx, responseFor(match, ctx));
 }
 
 /** Generates a full record for an `insert` effect, overlays the effect's resolved `set`, appends it to the working table. */
@@ -425,17 +443,17 @@ function sanitizeRec(record: StoredRecord): Rec {
   return rest;
 }
 
-async function buildActionResponse(respond: Respond, b: BindCtx, ctx: QueryContext): Promise<Response> {
+async function buildActionResponse(respond: Respond, b: BindCtx, ctx: QueryContext, response: ResponseConfig | undefined): Promise<Response> {
   if ('status' in respond) return jsonResponse(respond.body, { status: respond.status });
   if ('ref' in respond) {
     const rec = b.refs.get(respond.ref);
-    return enveloped(rec ?? null, null, ctx) ?? jsonResponse(rec ?? null);
+    return enveloped(rec ?? null, null, response) ?? jsonResponse(rec ?? null);
   }
   // { from, where, select, first }
   const rows = (await loadRecords(respond.from, ctx)).filter((r) => (respond.where ? matchesEffectWhere(r, respond.where, b) : true));
   const projected = rows.map((r) => project(r, respond.select));
   const payload = respond.first ? (projected[0] ?? null) : projected;
-  return enveloped(payload, null, ctx) ?? jsonResponse(payload);
+  return enveloped(payload, null, response) ?? jsonResponse(payload);
 }
 
 function isRec(v: unknown): v is Rec {

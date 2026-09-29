@@ -262,6 +262,36 @@ describe('generateOpenApiSpec : REST surface', () => {
     expect(schemas(spec)).toHaveProperty('PageMeta');
   });
 
+  it('reflects response.meta by inlining the reshaped meta object (no PageMeta component)', () => {
+    const config: MockConfig = { ...DEFAULT_CONFIG, response: { meta: { per_page: '$limit', total_pages: '$pageCount', locale: 'en' } } };
+    const spec = generateOpenApiSpec(entities, undefined, config);
+    const body = (paths(spec)['/user']!.get as any).responses['200'].content['application/json'].schema;
+    expect(body.properties.meta).toEqual({
+      type: 'object',
+      properties: { per_page: { type: 'integer' }, total_pages: { type: 'integer' }, locale: { const: 'en' } },
+    });
+    expect(schemas(spec)).not.toHaveProperty('PageMeta');
+  });
+
+  it('reflects a response.envelope template ($payload/$meta/listKey + literals)', () => {
+    const config: MockConfig = { ...DEFAULT_CONFIG, response: { envelope: { rows: '$payload', page_info: '$meta', errors: [] }, listKey: 'items' } };
+    const spec = generateOpenApiSpec(entities, undefined, config);
+    const body = (paths(spec)['/user']!.get as any).responses['200'].content['application/json'].schema;
+    expect(body.properties.rows).toEqual({ type: 'object', properties: { items: { type: 'array', items: { $ref: '#/components/schemas/User' } } } });
+    expect(body.properties.page_info).toEqual({ $ref: '#/components/schemas/PageMeta' });
+    expect(body.properties.errors).toEqual({ const: [] });
+    expect(schemas(spec)).toHaveProperty('PageMeta');
+  });
+
+  it('reflects a per-route responseShape.meta on a list operation', () => {
+    const routes = [{ id: 'u', kind: 'list', method: 'GET', path: '/users', from: 'user', responseShape: { meta: { per_page: '$limit' } } }] as any;
+    const spec = generateOpenApiSpec(entities, routes, DEFAULT_CONFIG);
+    const body = (paths(spec)['/users']!.get as any).responses['200'].content['application/json'].schema;
+    expect(body.properties.meta).toEqual({ type: 'object', properties: { per_page: { type: 'integer' } } });
+    // The only route inlines its meta, so the default PageMeta component is unreferenced and not registered.
+    expect(schemas(spec)).not.toHaveProperty('PageMeta');
+  });
+
   it('list response is a raw array + documented headers when pagination.envelope is false', () => {
     const config: MockConfig = { ...DEFAULT_CONFIG, pagination: { ...DEFAULT_CONFIG.pagination, envelope: false } };
     const spec = generateOpenApiSpec(entities, undefined, config);

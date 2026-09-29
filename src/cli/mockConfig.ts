@@ -70,6 +70,18 @@ export interface ResponseConfig {
   envelope?: unknown;
   /** When `$payload` is a list, nest the array under this key (`{ items: [...] }` for `data.items`). */
   listKey?: string;
+  /**
+   * Reshapes the pagination meta object. A template where `"$<field>"` is
+   * replaced by that field of the computed meta (`$page`, `$limit`, `$total`,
+   * `$pageCount`, `$offset`, `$nextCursor`, `$strategy`, `$groupBy`,
+   * `$limitPerGroup`, `$totalGroups`) and any other value passes through
+   * literally — so you can rename fields (`per_page: "$limit"`) and add static
+   * ones (`locale: "en"`). Applies wherever the meta lands in the JSON body
+   * (the default `{ data, meta }`, or an envelope's `$meta`); response headers
+   * in the no-envelope mode are unaffected. Unset → the raw
+   * `{ strategy, total, page, limit, pageCount }`-style meta.
+   */
+  meta?: unknown;
 }
 
 export interface DocsConfig {

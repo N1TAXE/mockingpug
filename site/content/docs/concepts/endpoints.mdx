@@ -167,7 +167,28 @@ module.exports = {
 
 `$payload` is replaced by the result, `$meta` by the pagination meta, and any
 other value is passed through literally. The template applies to
-`list`/`one`/`mutation`/`composite`/`action` responses.
+`list`/`one`/`mutation`/`composite`/`action` responses. Reshape the meta object
+itself — rename fields, add static ones — with
+[`response.meta`](/docs/reference/mock-config#response).
+
+### Per-endpoint override
+
+`response.*` in `mock.config.js` is the project-wide default. A single endpoint
+can override its envelope / `listKey` / meta with a `responseShape` field on the
+route — merged field-by-field over the config — for an API whose pagination
+shape isn't uniform:
+
+```json title="mock/routes/orders.json"
+{
+  "id": "orders_list", "kind": "list", "method": "GET", "from": "orders",
+  "responseShape": {
+    "meta": { "per_page": "$limit", "total_pages": "$pageCount", "locale": "en" }
+  }
+}
+```
+
+(It's `responseShape`, not `response`, so it doesn't collide with a `mutation`'s
+`response` body text.)
 
 ## Validation
 
@@ -191,6 +212,13 @@ import { generateOpenApi, renderOpenApiHtml } from 'mockingpug';
 const spec = generateOpenApi(tables, routes); // OpenAPI 3.1 document (config optional)
 const html = renderOpenApiHtml(spec);         // a standalone HTML page
 ```
+
+The spec reflects your response shaping: a `response.envelope` template becomes
+the documented list body, and a `response.meta` template (or a route's
+`responseShape.meta`) documents the meta object with your field names —
+placeholders (`$limit`, `$pageCount`, …) as typed properties, literals as
+`const`. Pass the config (with `response`) as the third arg — the `mpug docs`
+CLI and the devtools "API Docs" button do this automatically.
 
 It takes the same tables + routes the rest of the package uses, so the spec
 matches what the endpoints actually serve: `select`/`include` shape the response

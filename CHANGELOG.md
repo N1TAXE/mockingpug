@@ -121,6 +121,19 @@ framework-agnostic devtools core, a cloud "open" command, and hot-reload of
   Route Handler; re-fetches the context per request so a live `next dev` picks
   up `mpug pull` / schema edits (data regenerated) without a restart.
 
+- **`response.meta`** — a template that reshapes the pagination meta object so
+  its field names match your real API (`per_page: "$limit"`, `total_pages:
+  "$pageCount"`, …) and lets you add static fields (`locale`, `country`).
+  Placeholders cover every strategy's meta; literals pass through. Applies to the
+  default `{ data, meta }` body and to an envelope's `$meta`.
+- **Per-endpoint `responseShape`** — a route can override its envelope /
+  `listKey` / meta, merged field-by-field over the project-wide `response.*`
+  config, for an API whose pagination shape isn't uniform. Flows through cloud
+  sync as part of the route.
+- **OpenAPI reflects response shaping** — the generated spec now documents a
+  `response.envelope` template as the list body and a `response.meta` /
+  `responseShape.meta` template as the meta object (renamed/added fields), so
+  `mpug docs` and the "API Docs" button match the real response.
 - **`hash.bcrypt` / `hash.argon2`** — generators shaped like real password
   hashes (bcrypt `$2b$10$…`, argon2id PHC), deterministic from the seed, for
   realistic `users` tables. Not real hashes (nothing to verify against).

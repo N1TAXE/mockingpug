@@ -35,6 +35,7 @@ module.exports = {
   // response: {                    // optional: wrap list/one/mutation/composite/action bodies
   //   envelope: { data: '$payload', meta: '$meta', errors: [] },
   //   listKey: 'items',            // nests a list under data.items
+  //   meta: { per_page: '$limit', total_pages: '$pageCount', locale: 'en' }, // rename/add meta fields
   // },
   // target: 'https://api.example.com', // mockingpug/next only, no default — needed for <MockDevtools>'s per-request bypass
 };
@@ -164,3 +165,29 @@ by the result and `"$meta"` by the pagination meta (any other value passes
 through literally); `response.listKey` nests a list under that key inside
 `$payload`. Unset → the plain `{ data, meta }` / raw-array shape from
 `pagination.envelope`. See [Endpoints → Response envelope](/docs/concepts/endpoints#response-envelope).
+
+**`response.meta`** reshapes the pagination meta object itself, so its field
+names match your real API. It's a template where `"$<field>"` is replaced by
+that field of the computed meta and anything else passes through literally —
+rename fields and add static ones:
+
+```js
+response: {
+  meta: {
+    page: '$page',
+    per_page: '$limit',
+    total: '$total',
+    total_pages: '$pageCount',
+    locale: 'en',      // literal, passed through
+    country: 'US',
+  },
+}
+```
+
+Placeholders: `$strategy`, `$total`, `$page`, `$limit`, `$pageCount` (page),
+`$offset` (offset), `$nextCursor` (cursor), `$groupBy`, `$limitPerGroup`,
+`$totalGroups` (group) — a placeholder absent from the active strategy's meta is
+omitted. It applies wherever the meta lands in the JSON body (the default
+`{ data, meta }`, or an envelope's `$meta`); the no-envelope `X-*` headers stay
+as the canonical names. Unset → the raw
+`{ strategy, total, page, limit, pageCount }`-style meta.

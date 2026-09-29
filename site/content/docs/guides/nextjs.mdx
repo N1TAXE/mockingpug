@@ -254,6 +254,15 @@ survive the next cold start. Use `persist.adapter: 'memory'` there if
 persistence across requests isn't required, or accept that `'file'`
 behaves like `'fresh'` in practice on such platforms.
 
+**Server-side fetches use an absolute URL.** A relative `fetch('/api/user')`
+has no origin during SSR, so app code typically builds an absolute URL from an
+env var (e.g. `NEXT_PUBLIC_APP_URL`). The mock lives behind your own Route
+Handler, so an SSR request loops back to the same server over HTTP — if that env
+var points at a different port than the dev server actually runs on, the SSR
+fetch fails with `ECONNREFUSED` (the mock isn't the cause; the URL just points
+nowhere). Keep the base-URL env var in sync with the dev port, or derive it from
+the incoming request's headers.
+
 ## Logs and errors
 
 Everything mockingpug logs is prefixed `[mockingpug]`. Run

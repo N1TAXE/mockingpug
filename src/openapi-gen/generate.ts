@@ -3,8 +3,8 @@ import { defaultRoutes, routeEntity, type Route } from '../core/routes.js';
 import type { CustomDictionaryEntry, EntitySchema, FieldSpec } from '../core/types.js';
 import type { MockConfig } from '../cli/mockConfig.js';
 
-/** Only the two `MockConfig` fields the spec actually needs — lets a caller with just a `QueryContext` (no full loaded `mock.config.js`, e.g. the live `GET {baseUrl}/__mockingpug/docs` route) build one without fabricating the rest of the config shape. */
-export type OpenApiConfig = Pick<MockConfig, 'baseUrl' | 'pagination'>;
+/** Only the `MockConfig` fields the spec actually needs — lets a caller with just a `QueryContext` (no full loaded `mock.config.js`, e.g. the live `GET {baseUrl}/__mockingpug/docs` route) build one without fabricating the rest of the config shape. `response` is the project-wide envelope/meta template (routes may still override it per-endpoint via `responseShape`). */
+export type OpenApiConfig = Pick<MockConfig, 'baseUrl' | 'pagination' | 'response'>;
 
 /** A JSON Schema fragment (OpenAPI 3.1 schemas are JSON Schema 2020-12), kept as a plain object rather than a typed union: the shapes involved are small and ad hoc, a full JSON Schema type wouldn't earn its keep here. */
 export type JsonSchema = Record<string, unknown>;
@@ -201,6 +201,50 @@ function metaSchemaComponent(strategy: 'page' | 'offset' | 'cursor'): JsonSchema
   return { type: 'object', properties: { ...base, nextCursor: { type: ['string', 'null'] } } };
 }
 
+/** JSON Schema for each `response.meta` placeholder (`$page`, `$limit`, …). Unknown placeholders fall back to "any". */
+const META_FIELD_SCHEMA: Record<string, JsonSchema> = {
+  total: { type: 'integer' },
+  page: { type: 'integer' },
+  limit: { type: 'integer' },
+  pageCount: { type: 'integer' },
+  offset: { type: 'integer' },
+  nextCursor: { type: ['string', 'null'] },
+  groupBy: { type: 'string' },
+  limitPerGroup: { type: 'integer' },
+  totalGroups: { type: 'integer' },
+  strategy: { type: 'string' },
+};
+
+/**
+ * Turns a `response`-style template into a JSON Schema: a `"$name"` string is
+ * resolved by `resolve` (to a placeholder schema), everything else is a literal
+ * documented with `const`, and nested objects recurse.
+ */
+function templateSchema(node: unknown, resolve: (name: string) => JsonSchema): JsonSchema {
+  if (typeof node === 'string' && node.length > 1 && node[0] === '$') return resolve(node.slice(1));
+  if (node !== null && typeof node === 'object' && !Array.isArray(node)) {
+    return { type: 'object', properties: Object.fromEntries(Object.entries(node).map(([k, v]) => [k, templateSchema(v, resolve)])) };
+  }
+  return { const: node };
+}
+
+/** The `meta` object schema for a `response.meta` template (renamed/added fields → typed placeholders / consts). */
+function metaTemplateSchema(template: unknown): JsonSchema {
+  return templateSchema(template, (field) => META_FIELD_SCHEMA[field] ?? {});
+}
+
+/** Per-endpoint `responseShape` merged field-by-field over the project-wide `response.*`. */
+function effectiveResponse(route: Route, config: OpenApiConfig): MockConfig['response'] {
+  const override = (route as { responseShape?: { envelope?: unknown; listKey?: string; meta?: unknown } }).responseShape;
+  const base = config.response;
+  if (!override) return base;
+  return {
+    envelope: override.envelope !== undefined ? override.envelope : base?.envelope,
+    listKey: override.listKey !== undefined ? override.listKey : base?.listKey,
+    meta: override.meta !== undefined ? override.meta : base?.meta,
+  };
+}
+
 function intParam(name: string, description: string, defaultValue?: number): JsonSchema {
   return {
     name,
@@ -271,14 +315,28 @@ function listParameters(
   return params;
 }
 
-/** Wraps an item schema in the configured list envelope (`{data, meta}`) or leaves it a bare array (envelope off / no pagination). */
-function listEnvelope(itemsSchema: JsonSchema, config: OpenApiConfig): JsonSchema {
-  const items = { type: 'array', items: itemsSchema };
-  if (config.pagination.strategy === false || !config.pagination.envelope) return items;
-  return {
-    type: 'object',
-    properties: { data: items, meta: { $ref: `#/components/schemas/${metaSchemaName(config.pagination.strategy)}` } },
-  };
+/**
+ * The list response body schema. Reflects the effective `response` config: a
+ * `response.meta` template reshapes the meta object; a `response.envelope`
+ * template (with `$payload`/`$meta`/`listKey`) reshapes the whole wrapper.
+ * Falls back to the default `{ data, meta: $ref … }` (or a bare array).
+ */
+function listEnvelope(itemsSchema: JsonSchema, config: OpenApiConfig, response: MockConfig['response']): JsonSchema {
+  const items: JsonSchema = { type: 'array', items: itemsSchema };
+  if (config.pagination.strategy === false) return items;
+
+  const metaSchema: JsonSchema =
+    response?.meta !== undefined
+      ? metaTemplateSchema(response.meta)
+      : { $ref: `#/components/schemas/${metaSchemaName(config.pagination.strategy)}` };
+
+  if (response?.envelope !== undefined) {
+    const payloadSchema: JsonSchema = response.listKey !== undefined ? { type: 'object', properties: { [response.listKey]: items } } : items;
+    return templateSchema(response.envelope, (name) => (name === 'payload' ? payloadSchema : name === 'meta' ? metaSchema : {}));
+  }
+
+  if (!config.pagination.envelope) return items; // bare array + X-* headers
+  return { type: 'object', properties: { data: items, meta: metaSchema } };
 }
 
 function listResponseHeaders(config: OpenApiConfig): JsonSchema | undefined {
@@ -356,7 +414,7 @@ function resourcePaths(route: Extract<Route, { kind: 'resource' }>, entities: Re
   const single: JsonSchema = { parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }] };
 
   if (route.methods.includes('list')) {
-    collection.get = { tags: [tag], summary: `List "${route.table}" records`, parameters: listParameters(schema, entities, config, customDictionaries), responses: { '200': { description: 'OK', ...jsonContent(listEnvelope(ref, config)), ...(listHeaders ? { headers: listHeaders } : {}) } } };
+    collection.get = { tags: [tag], summary: `List "${route.table}" records`, parameters: listParameters(schema, entities, config, customDictionaries), responses: { '200': { description: 'OK', ...jsonContent(listEnvelope(ref, config, effectiveResponse(route, config))), ...(listHeaders ? { headers: listHeaders } : {}) } } };
   }
   if (route.methods.includes('create')) {
     collection.post = { tags: [tag], summary: `Create a "${route.table}" record`, description: 'Generates a fully-formed record and merges the request body over it, so a minimal or empty body still yields a complete record.', requestBody: { required: false, ...jsonContent(ref) }, responses: { '201': { description: 'Created', ...jsonContent(ref) } } };
@@ -391,7 +449,7 @@ function addRouteOperation(paths: Record<string, JsonSchema>, route: Route, enti
   if (route.kind === 'list') {
     const items = projectedSchema(route.from, route.select, route.include, entities, customDictionaries);
     const listHeaders = listResponseHeaders(config);
-    op = { ...base, summary: `List from "${route.from}"`, parameters: [...params, ...listParameters(entities[route.from] ?? { data: {} } as EntitySchema, entities, config, customDictionaries, route.filterable)], responses: { '200': { description: 'OK', ...jsonContent(listEnvelope(items, config)), ...(listHeaders ? { headers: listHeaders } : {}) } } };
+    op = { ...base, summary: `List from "${route.from}"`, parameters: [...params, ...listParameters(entities[route.from] ?? { data: {} } as EntitySchema, entities, config, customDictionaries, route.filterable)], responses: { '200': { description: 'OK', ...jsonContent(listEnvelope(items, config, effectiveResponse(route, config))), ...(listHeaders ? { headers: listHeaders } : {}) } } };
   } else if (route.kind === 'one') {
     const schema = projectedSchema(route.from, route.select, route.include, entities, customDictionaries);
     op = { ...base, summary: `Get one from "${route.from}"`, responses: { '200': { description: 'OK', ...jsonContent(schema) }, '404': errorResponse('No record matched.') } };
@@ -470,8 +528,15 @@ export function generateOpenApiSpec(
   for (const schema of Object.values(entities).sort((a, b) => a.name.localeCompare(b.name))) {
     schemas[pascalCase(schema.name)] = entitySchemaComponent(schema, entities, customDictionaries, writeOnly.get(schema.name));
   }
-  if (config.pagination.strategy !== false && config.pagination.envelope) {
-    schemas[metaSchemaName(config.pagination.strategy)] = metaSchemaComponent(config.pagination.strategy);
+  // Register the default meta component only if it's actually referenced. A
+  // `response.meta` / `responseShape.meta` template inlines the meta at each use
+  // site, so with a project-wide template (or every route overriding) nothing
+  // `$ref`s it — scan the built paths rather than guessing from config.
+  if (config.pagination.strategy !== false) {
+    const metaRef = `#/components/schemas/${metaSchemaName(config.pagination.strategy)}`;
+    if (JSON.stringify(paths).includes(metaRef)) {
+      schemas[metaSchemaName(config.pagination.strategy)] = metaSchemaComponent(config.pagination.strategy);
+    }
   }
 
   return {
