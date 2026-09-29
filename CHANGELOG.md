@@ -98,9 +98,9 @@ framework-agnostic devtools core, a cloud "open" command, and hot-reload of
   framework-neutral (Vue/Svelte/Solid/vanilla).
 - **GraphQL support** (`mockingpug/graphql`): a GraphQL API auto-generated from
   the same tables and resolved through the same store as REST. `createGraphQLHandler(ctx)`
-  adds a `POST /graphql` MSW handler; `executeGraphQL(body, ctx)` runs one
-  request (the Next.js Route Handler answers `POST /graphql` out of the box).
-  `graphql` is an optional peer dependency.
+  adds a `POST /graphql` MSW handler (browser); in Next.js, add a small
+  `app/graphql/route.ts` that calls `executeGraphQL(body, ctx)`. `graphql` is an
+  optional peer — only imported where you use it, so it never forces a build.
 - **Public OpenAPI generator**: `generateOpenApi(entities, routes?, config?)`
   (an OpenAPI 3.1 document) and `renderOpenApiHtml(spec)` are exported from the
   root `mockingpug` entry — dependency- and fs-free, so they run in the browser

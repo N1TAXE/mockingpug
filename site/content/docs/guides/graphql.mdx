@@ -57,13 +57,16 @@ The endpoint path defaults to `/graphql`; pass `{ path, baseUrl }` to move it.
 
 ## Next.js
 
-The catch-all Route Handler already answers `POST <baseUrl>/graphql` — no extra
-wiring. Or call the executor directly from any handler:
+Add a dedicated Route Handler that calls `executeGraphQL`. It's opt-in (not part
+of the catch-all): only this file pulls the optional `graphql` peer into your
+build, so Next apps that don't use GraphQL never need it installed.
 
-```ts
+```ts title="app/graphql/route.ts"
+import { getMockContext } from 'mockingpug/next';
 import { executeGraphQL } from 'mockingpug/graphql';
 
 export async function POST(request: Request) {
+  const { ctx } = await getMockContext(process.cwd());
   const result = await executeGraphQL(await request.json(), ctx);
   return Response.json(result);
 }

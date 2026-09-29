@@ -73,27 +73,12 @@ export function createNextHandlers(ctx: QueryContext): NextRouteHandlers {
   async function dispatch(request: Request, routeCtx: NextRouteContext): Promise<Response> {
     const segments = await resolveSegments(routeCtx);
 
-    // GraphQL endpoint (`POST /graphql`): a single field lands here, resolved
-    // against the same store. `graphql` is an optional peer, so it's imported
-    // dynamically — a project that never hits /graphql never needs it installed.
-    if (segments[0] === 'graphql' && request.method === 'POST') {
-      const startedAt = Date.now();
-      try {
-        const { executeGraphQL } = await import('../graphql/execute.js');
-        let body: unknown;
-        try {
-          body = await request.json();
-        } catch {
-          body = {};
-        }
-        const result = await executeGraphQL(body as { query?: string }, ctx);
-        const response = Response.json(result);
-        recordRequest(ctx, request, response.status, startedAt);
-        return response;
-      } catch (error) {
-        return errorResponse(error);
-      }
-    }
+    // NOTE: GraphQL is intentionally NOT auto-handled here. Even a dynamic
+    // `import('mockingpug/graphql')` gets followed by bundlers (Turbopack/
+    // webpack) at build time, which would then hard-require the optional `graphql`
+    // peer for every Next app — defeating "optional". Instead, GraphQL in Next is
+    // opt-in: add an `app/graphql/route.ts` that calls `executeGraphQL(body, ctx)`
+    // (see the GraphQL guide). Only that route pulls `graphql` into the graph.
 
     // The devtools sub-API (`/__mockingpug/*`) is not a data route: handle it
     // first and never log it into the request ring buffer.
