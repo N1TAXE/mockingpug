@@ -273,6 +273,26 @@ version — Publish it in the editor first, or pass `--force` to mirror the
 published version and discard the draft. `--watch` waits for the Publish and
 then mirrors automatically.
 
+<Callout>
+Under `next dev`, a `pull` is picked up without a restart when your Route Handler
+uses [`createNextRouteHandlers()`](/docs/guides/nextjs#4-the-catch-all-route-handler).
+On Vite (React/Vue), the plugin already full-reloads on `mock/` changes. Other
+setups need a dev-server restart.
+</Callout>
+
+## `open`
+
+```bash
+npx mpug open           # open the linked cloud project in your browser
+npx mpug open schema    # deep-link to the Schema tab
+npx mpug open api       # …the API tab
+npx mpug open data      # …the Data tab
+```
+
+Reads the project id from `.mockingpug/project.json` (written by `link`) and
+opens the cloud project page. The URL is also printed, so it works over SSH / in
+CI where no browser can be launched. Not linked yet → run `link` first.
+
 ## Logs and errors
 
 Every message is prefixed `[mockingpug]`; warnings are prefixed

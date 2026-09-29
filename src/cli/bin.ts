@@ -12,6 +12,7 @@ import { generators } from './commands/generators.js';
 import { codegen } from './commands/codegen.js';
 import { login } from './commands/login.js';
 import { link } from './commands/link.js';
+import { open } from './commands/open.js';
 import { pull } from './commands/pull.js';
 import { migrate } from './commands/migrate.js';
 import type { CommandResult } from './commandResult.js';
@@ -27,7 +28,8 @@ Commands:
   login     Sign in to MockingPug Cloud (device auth)
   link      Link this folder to a cloud project: mockingpug link <projectId>
               --no-push                   link only; don't upload existing local mocks
-  pull      Pull (mirror 1:1) the published schema into mock/
+  open      Open the linked cloud project in the browser: mockingpug open [schema|api|data]
+pull      Pull (mirror 1:1) the published schema into mock/
               --watch                     keep syncing as the schema changes in cloud
               --version <n>               pull a pinned published version (CI)
               --project <id>              pull a specific project (CI, overrides the link file)
@@ -86,6 +88,12 @@ export async function run(argv: string[], cwd: string): Promise<number> {
       case 'link': {
         const projectId = rest.find((arg) => !arg.startsWith('-'));
         const result = await link(cwd, projectId, { noPush: flags.has('--no-push') });
+        printResult(result);
+        return result.ok ? 0 : 1;
+      }
+      case 'open': {
+        const tab = rest.find((arg) => !arg.startsWith('-'));
+        const result = await open(cwd, tab);
         printResult(result);
         return result.ok ? 0 : 1;
       }
