@@ -19,6 +19,29 @@ export interface AppIdentity {
   'X-Mockingpug-Framework': string;
 }
 
+/**
+ * Normalizes a git origin URL to a stable `host/owner/repo`, so the same repo
+ * cloned over ssh/https (or with a trailing `.git`, a login/token, or a port)
+ * hashes to ONE App-Id. Scheme, userinfo, port, trailing `.git`/`/` are dropped
+ * and the host is lower-cased; the path is left as-is, since owner/repo case is
+ * significant on GitLab and self-hosted forges (R28).
+ */
+export function normalizeOrigin(raw: string): string {
+  let url = raw.trim();
+  // scp-like syntax: git@host:owner/repo(.git) — has no `//` after a scheme.
+  const scp = /^[^/@]+@([^:/]+):(.+)$/.exec(url);
+  if (scp) {
+    url = `${scp[1]}/${scp[2]}`;
+  } else {
+    url = url.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, ''); // strip scheme://
+    url = url.replace(/^[^@/]+@/, ''); // strip user[:token]@
+  }
+  const slash = url.indexOf('/');
+  const host = (slash === -1 ? url : url.slice(0, slash)).replace(/:\d+$/, '').toLowerCase();
+  const path = (slash === -1 ? '' : url.slice(slash + 1)).replace(/\/+$/, '').replace(/\.git$/, '');
+  return path ? `${host}/${path}` : host;
+}
+
 async function gitOrigin(projectDir: string): Promise<string | undefined> {
   try {
     const { stdout } = await exec('git', ['config', '--get', 'remote.origin.url'], { cwd: projectDir });
@@ -50,7 +73,7 @@ async function detectFramework(projectDir: string): Promise<string> {
 
 export async function appIdentity(projectDir: string): Promise<AppIdentity> {
   const origin = await gitOrigin(projectDir);
-  const idSource = origin ?? projectDir;
+  const idSource = origin ? normalizeOrigin(origin) : projectDir;
   const appId = createHash('sha256').update(idSource).digest('hex');
   // Name: repo name from the origin URL if present, else the folder name.
   const name = origin ? basename(origin.replace(/\.git$/, '')) || basename(projectDir) : basename(projectDir);

@@ -28,8 +28,11 @@ Commands:
   login     Sign in to MockingPug Cloud (device auth)
   link      Link this folder to a cloud project: mockingpug link <projectId>
               --no-push                   link only; don't upload existing local mocks
+              --push                      re-linking an already-linked folder: also upload local mocks
+              --yes                       skip the relink / pre-push overwrite confirmation
+              --force                     override unpublished cloud edits a push conflicts with
   open      Open the linked cloud project in the browser: mockingpug open [schema|api|data]
-pull      Pull (mirror 1:1) the published schema into mock/
+  pull      Pull (mirror 1:1) the published schema into mock/
               --watch                     keep syncing as the schema changes in cloud
               --version <n>               pull a pinned published version (CI)
               --project <id>              pull a specific project (CI, overrides the link file)
@@ -87,7 +90,12 @@ export async function run(argv: string[], cwd: string): Promise<number> {
       }
       case 'link': {
         const projectId = rest.find((arg) => !arg.startsWith('-'));
-        const result = await link(cwd, projectId, { noPush: flags.has('--no-push') });
+        const result = await link(cwd, projectId, {
+          noPush: flags.has('--no-push'),
+          push: flags.has('--push'),
+          force: flags.has('--force'),
+          yes: flags.has('--yes'),
+        });
         printResult(result);
         return result.ok ? 0 : 1;
       }

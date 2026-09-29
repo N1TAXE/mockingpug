@@ -121,6 +121,16 @@ framework-agnostic devtools core, a cloud "open" command, and hot-reload of
   Route Handler; re-fetches the context per request so a live `next dev` picks
   up `mpug pull` / schema edits (data regenerated) without a restart.
 
+### Changed
+
+- **Cloud sync safety.** The git origin is normalized (ssh/https, trailing
+  `.git`, ports, tokens) so a repo counts as one connected app. Re-running
+  `mpug link` on an already-linked folder no longer silently pushes — it
+  suggests `pull` (or `link --push`); relinking to a different project needs
+  `--yes`. A push over a non-empty cloud draft asks first (`--yes` to confirm),
+  and `--force` overrides unpublished cloud edits a push conflicts with
+  (`CLOUD-CONFLICT` now lists exactly what would be overwritten).
+
 ## [1.3.0]
 
 ### Added

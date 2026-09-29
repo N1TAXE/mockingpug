@@ -228,6 +228,9 @@ priority over the config file.
 ```bash
 npx mpug link <projectId>            # e.g. proj_abc123
 npx mpug link <projectId> --no-push  # link only, don't upload local mocks
+npx mpug link <projectId> --push     # already linked? also upload local mocks
+npx mpug link <projectId> --yes      # skip the relink / pre-push confirmation
+npx mpug link <projectId> --force    # override unpublished cloud edits on push
 ```
 
 Ties this folder to a cloud project (writes `.mockingpug/project.json` —
@@ -240,6 +243,13 @@ commit it). What it does next depends on whether you already have local mocks:
   Nothing is published and nothing is pulled — open the cloud editor, review
   the draft, **Publish**, then `pull`. `--no-push` skips the upload (link only;
   mirror later with `pull --yes`).
+
+Re-running `link` on a folder already linked to the **same** project won't
+push — it points you at `pull` (add `--push` to upload local mocks). Relinking
+to a **different** project needs `--yes`. Pushing over a non-empty cloud draft
+asks first (`--yes` to confirm); if the push would overwrite tables/endpoints
+that were edited but not published in the cloud, you get `CLOUD-CONFLICT` listing
+them — Publish (or discard) those and `pull`, or re-run with `--force`.
 
 Push needs a personal token with *edit schema* rights; a CI token
 (`MOCKINGPUG_TOKEN`) is read-only and will get a clear `CLOUD-FORBIDDEN`. If

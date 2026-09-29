@@ -10,13 +10,24 @@ export function cloudAdvice(error: CloudError): string {
     case 'CLOUD-VERSION':
       return `version unavailable: ${error.message}`;
     case 'CLOUD-LIMIT':
-      return `connected-apps limit reached: ${error.message} — upgrade or unlink an app`;
+      // A repo cloned over ssh vs https (or with/without a trailing `.git`) used
+      // to count as separate apps against the free limit — fixed in this version
+      // (R28); older local copies keep their old app-id until their next pull.
+      return `connected-apps limit reached: ${error.message} — upgrade, unlink an app, or (if a repo is double-counted from different clone URLs) update mockingpug and re-run`;
     case 'CLOUD-NETWORK':
       return `${error.message} — check your connection, or set MOCKINGPUG_URL for a self-hosted/local instance`;
     case 'CLOUD-BUSY':
       return `project is being edited: ${error.message} — close the cloud editor and retry`;
+    case 'CLOUD-CONFLICT': {
+      // The push would overwrite tables/endpoints edited but not published in the
+      // cloud. Server lists them in `conflicts`; offer the two ways forward (R30).
+      const list = error.conflicts?.length ? `\n  ${error.conflicts.join('\n  ')}` : '';
+      return `push conflicts with unpublished cloud edits: ${error.message}${list}\n  → Publish (or discard) those in the cloud editor, then "mockingpug pull"\n  → or re-run with "--force" to overwrite them`;
+    }
     case 'CLOUD-FORBIDDEN':
-      return `not allowed: ${error.message} — push needs a personal token with "edit schema" (a CI token can only pull)`;
+      // The push-permission text is set by the project owner and comes from the
+      // server; print it as-is, then a hint (R30/R31).
+      return `not allowed: ${error.message} — a CI token can only pull; for a read-only member use "mockingpug link --no-push" and "pull"`;
     default:
       return error.message;
   }

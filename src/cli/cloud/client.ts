@@ -5,11 +5,14 @@ import type { Route } from '../../core/index.js';
 export class CloudError extends Error {
   readonly code: string;
   readonly status: number;
-  constructor(code: string, message: string, status: number) {
+  /** Present on `CLOUD-CONFLICT`: the cloud tables/endpoints a push would overwrite (R30). */
+  readonly conflicts?: readonly string[];
+  constructor(code: string, message: string, status: number, conflicts?: readonly string[]) {
     super(message);
     this.name = 'CloudError';
     this.code = code;
     this.status = status;
+    if (conflicts) this.conflicts = conflicts;
   }
 }
 
@@ -69,14 +72,16 @@ export type TokenPoll = { status: 'granted'; value: TokenGranted } | { status: '
 async function parseError(res: Response): Promise<CloudError> {
   let code = 'CLOUD-REQUEST';
   let message = `${res.status} ${res.statusText}`;
+  let conflicts: string[] | undefined;
   try {
-    const body = (await res.json()) as { error?: { code?: string; message?: string } };
+    const body = (await res.json()) as { error?: { code?: string; message?: string; conflicts?: string[] } };
     if (body.error?.code) code = body.error.code;
     if (body.error?.message) message = body.error.message;
+    if (Array.isArray(body.error?.conflicts)) conflicts = body.error!.conflicts;
   } catch {
     /* non-JSON error body: keep the status line */
   }
-  return new CloudError(code, message, res.status);
+  return new CloudError(code, message, res.status, conflicts);
 }
 
 export interface RequestInit_ {
@@ -140,14 +145,20 @@ export async function pullProject(
   return (await res.json()) as PullResponse;
 }
 
-/** POST /api/cli/projects/:id/push — uploads the local snapshot; cloud merges it into the project's draft (no publish). */
+/**
+ * POST /api/cli/projects/:id/push[?force=1] — uploads the local snapshot; cloud
+ * merges it into the project's draft (no publish). `force` overrides unpublished
+ * cloud edits the push would otherwise conflict with (409 `CLOUD-CONFLICT`, R30).
+ */
 export async function pushProject(
   id: string,
   token: string,
   headers: Record<string, string>,
   payload: PushPayload,
+  force = false,
 ): Promise<PushResponse> {
-  const res = await request(`/api/cli/projects/${encodeURIComponent(id)}/push`, { method: 'POST', token, headers, body: payload });
+  const query = force ? '?force=1' : '';
+  const res = await request(`/api/cli/projects/${encodeURIComponent(id)}/push${query}`, { method: 'POST', token, headers, body: payload });
   if (!res.ok) throw await parseError(res);
   return (await res.json()) as PushResponse;
 }

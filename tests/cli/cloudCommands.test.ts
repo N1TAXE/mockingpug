@@ -77,7 +77,7 @@ describe('link', () => {
     let pushed: any;
     stubCloud({ onPush: (body) => { pushed = body; return new Response(JSON.stringify({ project: { id: 'proj_x', name: 'My App', url: 'https://cloud/app/proj_x' }, draft: { summary: 'ok' } }), { status: 200 }); } });
 
-    const result = await link(dir, 'proj_x');
+    const result = await link(dir, 'proj_x', { yes: true });
     expect(result.ok).toBe(true);
     // legacy api/users → tables.users (data only) + 6 routes with bypass on each endpoint
     expect(pushed.tables.users).toEqual({ amount: 3, data: { id: 'uuid' } });
@@ -103,7 +103,7 @@ describe('link', () => {
     await mkdir(join(dir, 'mock', 'tables'), { recursive: true });
     await writeFile(join(dir, 'mock', 'tables', 'x.json'), JSON.stringify({ amount: 1, data: { id: 'uuid' } }), 'utf-8');
     stubCloud({ onPush: () => new Response(JSON.stringify({ error: { code: 'CLOUD-BUSY', message: 'Ann is editing' } }), { status: 409 }) });
-    const result = await link(dir, 'proj_x');
+    const result = await link(dir, 'proj_x', { yes: true });
     expect(result.ok).toBe(false);
     expect(result.messages[0]).toContain('close the cloud editor');
   });
@@ -112,9 +112,9 @@ describe('link', () => {
     await mkdir(join(dir, 'mock', 'tables'), { recursive: true });
     await writeFile(join(dir, 'mock', 'tables', 'x.json'), JSON.stringify({ amount: 1, data: { id: 'uuid' } }), 'utf-8');
     stubCloud({ onPush: () => new Response(JSON.stringify({ error: { code: 'CLOUD-FORBIDDEN', message: 'read-only token' } }), { status: 403 }) });
-    const result = await link(dir, 'proj_x');
+    const result = await link(dir, 'proj_x', { yes: true });
     expect(result.ok).toBe(false);
-    expect(result.messages[0]).toContain('edit schema');
+    expect(result.messages[0]).toContain('can only pull');
   });
 
   it('fails clearly without a token', async () => {
@@ -129,6 +129,77 @@ describe('link', () => {
     const result = await link(dir, 'proj_x');
     expect(result.ok).toBe(false);
     expect(result.messages[0]).toContain('not found');
+  });
+
+  async function writeLocalMock(): Promise<void> {
+    await mkdir(join(dir, 'mock', 'tables'), { recursive: true });
+    await writeFile(join(dir, 'mock', 'tables', 'x.json'), JSON.stringify({ amount: 1, data: { id: 'uuid' } }), 'utf-8');
+  }
+  async function writeExistingLink(projectId: string): Promise<void> {
+    await mkdir(join(dir, '.mockingpug'), { recursive: true });
+    await writeFile(join(dir, '.mockingpug', 'project.json'), JSON.stringify({ projectId }), 'utf-8');
+  }
+
+  it('R29: re-linking the same project does not push — suggests pull / --push', async () => {
+    await writeLocalMock();
+    await writeExistingLink('proj_x');
+    let pushed = false;
+    stubCloud({ onPush: () => { pushed = true; return new Response('{}', { status: 200 }); } });
+    const result = await link(dir, 'proj_x');
+    expect(result.ok).toBe(true);
+    expect(pushed).toBe(false);
+    expect(result.messages[0]).toContain('already linked');
+    expect(result.messages.some((m) => m.includes('link --push'))).toBe(true);
+  });
+
+  it('R29: re-linking a different project without --yes fails', async () => {
+    await writeExistingLink('proj_other');
+    stubCloud();
+    const result = await link(dir, 'proj_x');
+    expect(result.ok).toBe(false);
+    expect(result.messages[0]).toContain('different project');
+  });
+
+  it('R30: pushing over a non-empty project without --yes shows a plan and does not push', async () => {
+    await writeLocalMock();
+    let pushed = false;
+    stubCloud({ onPush: () => { pushed = true; return new Response('{}', { status: 200 }); } });
+    const result = await link(dir, 'proj_x');
+    expect(result.ok).toBe(false);
+    expect(pushed).toBe(false);
+    expect(result.messages.some((m) => m.includes('will replace'))).toBe(true);
+  });
+
+  it('R30: an empty cloud project pushes without a confirmation', async () => {
+    await writeLocalMock();
+    let pushed = false;
+    stubCloud({ project: { id: 'proj_x', name: 'My App', latestVersion: null, empty: true }, onPush: () => { pushed = true; return new Response(JSON.stringify({ project: { id: 'proj_x', name: 'My App' }, draft: {} }), { status: 200 }); } });
+    const result = await link(dir, 'proj_x');
+    expect(result.ok).toBe(true);
+    expect(pushed).toBe(true);
+  });
+
+  it('R30: --force sends ?force=1', async () => {
+    await writeLocalMock();
+    let forced = false;
+    stubFetch((url) => {
+      if (url.includes('/push')) { forced = url.includes('force=1'); return new Response(JSON.stringify({ project: { id: 'proj_x', name: 'My App' }, draft: {} }), { status: 200 }); }
+      return new Response(JSON.stringify({ id: 'proj_x', name: 'My App', latestVersion: 4 }), { status: 200 });
+    });
+    const result = await link(dir, 'proj_x', { force: true });
+    expect(result.ok).toBe(true);
+    expect(forced).toBe(true);
+  });
+
+  it('R30/R31: CLOUD-CONFLICT lists the conflicts and offers --force', async () => {
+    await writeLocalMock();
+    stubCloud({ onPush: () => new Response(JSON.stringify({ error: { code: 'CLOUD-CONFLICT', message: 'unpublished edits', conflicts: ['table users', 'endpoint GET /users/:id'] } }), { status: 409 }) });
+    const result = await link(dir, 'proj_x', { yes: true });
+    expect(result.ok).toBe(false);
+    const text = result.messages.join('\n');
+    expect(text).toContain('table users');
+    expect(text).toContain('endpoint GET /users/:id');
+    expect(text).toContain('--force');
   });
 });
 
