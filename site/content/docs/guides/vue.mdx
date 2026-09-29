@@ -66,6 +66,23 @@ for a `mockServiceWorker.js` / `mockingpug/dist/vue` leak.
 
 ## Devtools
 
-The in-app devtools panel (`<MockDevtools>`) ships for React only today; the Vue
-transport currently exposes the runtime controls programmatically via
-`bypass()` / `unbypass()`. A Vue panel is on the roadmap.
+The floating `<MockDevtools>` panel ships for Vue too, from
+`mockingpug/vue/client` — the same UI as the React panel (mock-data browser,
+request log, per-entity and per-request mock/real bypass, one-shot fail/delay,
+snapshot import/export). Render it once, dev-only, passing the same `ctx`:
+
+```vue
+<script setup lang="ts">
+import { MockDevtools } from 'mockingpug/vue/client';
+import { ctx } from './mocks'; // the QueryContext you passed to setupMockWorker
+</script>
+
+<template>
+  <MockDevtools v-if="import.meta.env.DEV" :ctx="ctx" base-url="/api" />
+</template>
+```
+
+The `import.meta.env.DEV` guard keeps it (and the `mockingpug/vue/client` import)
+out of production; `mpug doctor --assert-prod-safe` flags a `mockingpug/dist/vue`
+leak. You can still drive the runtime controls programmatically with
+`bypass()` / `unbypass()` without the panel.

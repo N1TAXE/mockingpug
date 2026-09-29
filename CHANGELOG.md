@@ -110,6 +110,11 @@ framework-agnostic devtools core, a cloud "open" command, and hot-reload of
   bypass (mock/real), entity bypass, and store snapshot export/import, all
   DOM-free. Lets a Vue/RN/custom panel drive the running mock the same way the
   React `<MockDevtools>` does.
+- **Vue devtools panel** (`mockingpug/vue/client`): the full `<MockDevtools>`
+  panel for Vue — mock-data browser, request log, per-entity/per-request bypass,
+  one-shot fail/delay, snapshot import/export. The panel UI is now a single
+  framework-agnostic implementation shared by the React, Next and Vue entries
+  (no per-framework duplication).
 - **`mpug open [schema|api|data]`** — opens the linked cloud project (or a tab)
   in the browser; the URL is also printed for CI/SSH.
 - **`createNextRouteHandlers()`** — the recommended one-liner for the catch-all
