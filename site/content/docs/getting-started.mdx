@@ -127,14 +127,18 @@ exactly what "in place" means for existing records.
 
 ## 6. Wire it into your app
 
-The CLI is transport-agnostic: actually *serving* this data to your app
-over HTTP is the job of `mockingpug/react` or `mockingpug/next`:
+The CLI is transport-agnostic: actually *serving* this data to your app is the
+job of a transport adapter — pick the one for your stack:
 
 - [React guide](/docs/guides/react): MSW-backed mocking for any SPA
   (Vite, CRA, plain webpack).
+- [Vue guide](/docs/guides/vue): the same MSW worker for Vue and any non-React
+  browser framework (Svelte/Solid/vanilla).
+- [React Native guide](/docs/guides/react-native): React Native / Expo.
 - [Next.js guide](/docs/guides/nextjs): a real App Router Route Handler.
+- [GraphQL guide](/docs/guides/graphql): a GraphQL endpoint over the same data.
 - [Vite guide](/docs/guides/vite): the auto-discovery plugin that removes
-  the need to hand-import every schema file in a React+Vite app.
+  the need to hand-import every schema file.
 
 ## Deterministic by design
 

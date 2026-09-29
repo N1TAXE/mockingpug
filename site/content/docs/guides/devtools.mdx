@@ -324,9 +324,19 @@ default) from scratch, nothing is persisted or corrupted. See
 for more.
 </Callout>
 
+## Vue and other frameworks
+
+The same floating panel ships for Vue as `mockingpug/vue/client` — see the
+[Vue guide](/docs/guides/vue#devtools). The panel UI is a single
+framework-agnostic implementation shared by the React, Next and Vue entries; the
+runtime controls behind it (request log, one-shot fail/delay, per-request/entity
+bypass, snapshot import/export) are exposed headless via
+`mockingpug/devtools-core`'s `createRuntimeController(ctx)`, so you can build a
+custom panel for any framework over the same API.
+
 ## Reference
 
 Full prop/context shapes are in `mockingpug/react`'s type exports:
 `MockProviderProps`, `MockContextValue`, `MockMode`, `MockWorker`. The
 Next.js devtools component's props (`MockDevtoolsProps`) are exported from
-`mockingpug/next`.
+`mockingpug/next`; the Vue panel takes `ctx` (see the Vue guide).

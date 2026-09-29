@@ -4,10 +4,11 @@ description: What mockingpug is, and when to reach for it
 ---
 
 **mockingpug** is a declarative, JSON-schema-driven mock data generator and
-REST-like API mocker for JavaScript/TypeScript apps: React SPAs (via
-[MSW](https://mswjs.io)) and Next.js (via a real App Router Route Handler).
-No separate mock server process, no hand-written fixture arrays, no
-imperative factory functions to maintain.
+REST-like API mocker for JavaScript/TypeScript apps: React SPAs and any browser
+framework (Vue/Svelte/Solid/vanilla) via [MSW](https://mswjs.io), React Native /
+Expo, and Next.js (via a real App Router Route Handler) — plus an auto-generated
+GraphQL API over the same data. No separate mock server process, no hand-written
+fixture arrays, no imperative factory functions to maintain.
 
 You describe each entity once, as a small JSON file:
 
@@ -72,9 +73,10 @@ mock/data/role.json     ─┘                                                  
 
 Every transport shares the exact same `query` resolver: pagination,
 cross-entity relation resolution, and error shaping are implemented once,
-not duplicated per framework. Adding a new transport (Vue is the next
-roadmap item) means writing a thin adapter over `query`, not reimplementing
-generation or storage.
+not duplicated per framework. That's why the same core already powers React,
+Vue (and any browser framework), React Native, Next.js, and a GraphQL endpoint
+— each is a thin adapter over `query`, not a reimplementation of generation or
+storage.
 
 ## What's in this package
 
@@ -83,11 +85,15 @@ project only pulls in what it actually uses:
 
 | Import | What it's for |
 |---|---|
-| `mockingpug` | Core: schema parsing, generators, seeded RNG, dependency graph. No framework dependency. |
-| `mockingpug/cli` | Programmatic access to the CLI commands (`init`, `doctor`, `generate`, `reset`, `prune`, `types`). |
+| `mockingpug` | Core: schema parsing, generators, seeded RNG, dependency graph, OpenAPI export. No framework dependency. |
+| `mockingpug/cli` | Programmatic access to the CLI commands. |
 | `mockingpug/react` | MSW handler generation, `<MockProvider>`/`<MockDevtools>`, `bypass()`/`unbypass()`. |
+| `mockingpug/vue` | MSW browser worker for Vue and any non-React SPA (Svelte/Solid/vanilla); `mockingpug/vue/client` is the Vue devtools panel. |
+| `mockingpug/native` | React Native / Expo: the same handlers over MSW's native server (no DOM). |
 | `mockingpug/next` | App Router catch-all Route Handler builder + context loader. |
-| `mockingpug/vite` | Vite plugin: auto-discovers `mock/api/**`/`mock/data/**` as a virtual module. |
+| `mockingpug/vite` | Vite plugin: auto-discovers `mock/**` as a virtual module. |
+| `mockingpug/graphql` | GraphQL API auto-generated from the same tables (optional `graphql` peer). |
+| `mockingpug/devtools-core` | Framework-agnostic runtime controller behind the devtools panels. |
 
 Plus a CLI binary (`npx mpug <command>`, alias `npx mockingpug <command>`)
 for scaffolding, validating, and generating data offline (useful for CI
@@ -98,6 +104,7 @@ fixtures).
 - **New to the library?** Start with [Getting Started](/docs/getting-started).
 - **Want the full schema syntax?** See [Schema DSL](/docs/concepts/schema-dsl).
 - **Wiring up a specific framework?** Jump straight to the
-  [guides](/docs/guides): React, Next.js, Vite, or the CLI on its own.
+  [guides](/docs/guides): React, Vue, React Native, Next.js, Vite, GraphQL, or
+  the CLI on its own.
 - **Looking for a specific config key or error code?** See
   [Reference](/docs/reference).
