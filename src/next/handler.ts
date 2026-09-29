@@ -1,5 +1,6 @@
 import { defaultRoutes, matchRoute, routeEntity, RequestError, type Route } from '../core/index.js';
 import { errorResponse, recordRequest, serveRoute, type QueryContext } from '../query/index.js';
+import { getMockContext } from './context.js';
 import { DEVTOOLS_SEGMENT, handleDevtoolsRequest } from './devtools.js';
 import { forwardToTarget } from './forward.js';
 
@@ -120,4 +121,37 @@ export function createNextHandlers(ctx: QueryContext): NextRouteHandlers {
   }
 
   return { GET: dispatch, POST: dispatch, PUT: dispatch, PATCH: dispatch, DELETE: dispatch };
+}
+
+/**
+ * The recommended one-liner for a catch-all Route Handler:
+ *
+ * ```ts
+ * // app/api/[[...mock]]/route.ts
+ * import { createNextRouteHandlers } from 'mockingpug/next';
+ * export const { GET, POST, PUT, PATCH, DELETE } = createNextRouteHandlers();
+ * ```
+ *
+ * Unlike caching `createNextHandlers(ctx)` at module scope, this re-fetches the
+ * context per request via {@link getMockContext} — which is process-memoized and
+ * only rebuilds after its file watcher sees a change under `mock/**` (or
+ * `mock.config.js`). So a live `next dev` picks up `mpug pull` / schema edits
+ * (data included — the rebuild re-runs generation/reconcile) without a restart.
+ * The handler objects themselves are memoized per context instance, so the
+ * steady state is just one cheap cache lookup per request.
+ */
+export function createNextRouteHandlers(projectDir: string = process.cwd()): NextRouteHandlers {
+  let cache: { ctx: QueryContext; handlers: NextRouteHandlers } | undefined;
+
+  async function handlers(): Promise<NextRouteHandlers> {
+    const { ctx } = await getMockContext(projectDir);
+    if (!cache || cache.ctx !== ctx) cache = { ctx, handlers: createNextHandlers(ctx) };
+    return cache.handlers;
+  }
+
+  const method =
+    (name: keyof NextRouteHandlers) => async (request: Request, routeCtx: NextRouteContext) =>
+      (await handlers())[name](request, routeCtx);
+
+  return { GET: method('GET'), POST: method('POST'), PUT: method('PUT'), PATCH: method('PATCH'), DELETE: method('DELETE') };
 }

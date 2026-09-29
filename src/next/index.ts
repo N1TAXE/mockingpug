@@ -1,4 +1,4 @@
-export { createNextHandlers, type NextRouteContext, type NextRouteHandlers } from './handler.js';
+export { createNextHandlers, createNextRouteHandlers, type NextRouteContext, type NextRouteHandlers } from './handler.js';
 export { createMockContext, getMockContext, resetMockContextCache, type MockContext } from './context.js';
 export { createProxyHandler, type CreateProxyHandlerOptions } from './proxy.js';
 export {

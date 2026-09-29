@@ -53,23 +53,27 @@ real backend path around the mock entirely.
 ## 4. The catch-all Route Handler
 
 ```ts title="app/api/[[...mock]]/route.ts"
-import { createNextHandlers, getMockContext, type NextRouteContext } from 'mockingpug/next';
+import { createNextRouteHandlers } from 'mockingpug/next';
 
-const handlersPromise = getMockContext(process.cwd()).then(({ ctx }) => createNextHandlers(ctx));
-
-export const GET = async (request: Request, routeCtx: NextRouteContext) => (await handlersPromise).GET(request, routeCtx);
-export const POST = async (request: Request, routeCtx: NextRouteContext) => (await handlersPromise).POST(request, routeCtx);
-export const PUT = async (request: Request, routeCtx: NextRouteContext) => (await handlersPromise).PUT(request, routeCtx);
-export const PATCH = async (request: Request, routeCtx: NextRouteContext) => (await handlersPromise).PATCH(request, routeCtx);
-export const DELETE = async (request: Request, routeCtx: NextRouteContext) => (await handlersPromise).DELETE(request, routeCtx);
+export const { GET, POST, PUT, PATCH, DELETE } = createNextRouteHandlers();
 ```
 
-`getMockContext()` loads `mock.config.js`, parses every schema (the same
-loader the CLI uses), and reconciles/generates the store, so the very
-first request already has data, without running `mpug generate` as
-a separate step. It's memoized per `projectDir` for the life of the
-process, so `next dev` doesn't re-scan `mock/` and re-run reconciliation
-on every request.
+`createNextRouteHandlers()` re-fetches the mock context per request via
+`getMockContext()` — which loads `mock.config.js`, parses every schema (the same
+loader the CLI uses), and reconciles/generates the store, so the very first
+request already has data without a separate `mpug generate` step. The context is
+memoized per `projectDir` for the life of the process (so `next dev` doesn't
+re-scan `mock/` on every request), and its file watcher rebuilds it on changes —
+so `mpug pull` and schema edits are picked up **without restarting `next dev`**
+(the rebuild re-runs generation, so the data updates too). The handler objects
+are memoized per context instance, so steady state is one cheap cache lookup.
+
+<Callout>
+Prefer full control? `createNextHandlers(ctx)` still takes a context you build
+yourself — but caching it at module scope pins the first context, so a live
+`pull` won't be picked up until you restart. Use `createNextRouteHandlers()` for
+the hot-reload behavior.
+</Callout>
 
 `app/api/[[...mock]]/route.ts` (double brackets: an *optional* catch-all)
 means `/api` itself, `/api/user`, and `/api/user/1` all route here;
