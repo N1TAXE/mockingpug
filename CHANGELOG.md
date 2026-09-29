@@ -73,10 +73,22 @@ project.
 - **Configurable response envelope** (`response.envelope` + `listKey`):
   `$payload`/`$meta` placeholders let the mock match a contract's exact body
   shape (e.g. `{ data: { items: [...] }, meta, errors: [] }`).
-- **Public OpenAPI generator**: `generateOpenApi(entities, routes?, config?)`
-  (an OpenAPI 3.1 document) and `renderOpenApiHtml(spec)` are exported from the
-  root `mockingpug` entry — dependency- and fs-free, so they run in the browser
-  and Node.
+- **`mockingpug/vite`** virtual module now also exports `routes`.
+- **`data.<entity>.<field>!unique`** — 1:1 relations (identity mapping).
+
+### Changed
+
+- `mpug init` scaffolds the new `mock/{tables,routes,data}` layout.
+- Examples (Next.js, CRA, Vite) migrated to the endpoint format.
+
+## [2.1.0]
+
+More framework reach (React Native, Vue, GraphQL), a public OpenAPI export, a
+framework-agnostic devtools core, a cloud "open" command, and hot-reload of
+`mpug pull` under `next dev`.
+
+### Added
+
 - **React Native / Expo support** (`mockingpug/native`): `setupNativeMocks(ctx)`
   runs the same handlers through MSW's React Native server (no DOM). New
   `mpug codegen` writes `mock/.generated/schemas.ts` for bundlers without a
@@ -89,13 +101,20 @@ project.
   adds a `POST /graphql` MSW handler; `executeGraphQL(body, ctx)` runs one
   request (the Next.js Route Handler answers `POST /graphql` out of the box).
   `graphql` is an optional peer dependency.
-- **`mockingpug/vite`** virtual module now also exports `routes`.
-- **`data.<entity>.<field>!unique`** — 1:1 relations (identity mapping).
-
-### Changed
-
-- `mpug init` scaffolds the new `mock/{tables,routes,data}` layout.
-- Examples (Next.js, CRA, Vite) migrated to the endpoint format.
+- **Public OpenAPI generator**: `generateOpenApi(entities, routes?, config?)`
+  (an OpenAPI 3.1 document) and `renderOpenApiHtml(spec)` are exported from the
+  root `mockingpug` entry — dependency- and fs-free, so they run in the browser
+  and Node.
+- **`mockingpug/devtools-core`** — a framework-agnostic runtime controller
+  (`createRuntimeController(ctx)`): request log, one-shot fail/delay, per-request
+  bypass (mock/real), entity bypass, and store snapshot export/import, all
+  DOM-free. Lets a Vue/RN/custom panel drive the running mock the same way the
+  React `<MockDevtools>` does.
+- **`mpug open [schema|api|data]`** — opens the linked cloud project (or a tab)
+  in the browser; the URL is also printed for CI/SSH.
+- **`createNextRouteHandlers()`** — the recommended one-liner for the catch-all
+  Route Handler; re-fetches the context per request so a live `next dev` picks
+  up `mpug pull` / schema edits (data regenerated) without a restart.
 
 ## [1.3.0]
 

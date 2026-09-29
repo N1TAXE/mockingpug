@@ -1,6 +1,6 @@
 {
   "name": "mockingpug",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Declarative JSON-schema mock data generation and REST-like mocking for React/Next.js — no separate server.",
   "keywords": [
     "mock",
@@ -51,6 +51,10 @@
     "./graphql": {
       "types": "./dist/graphql/index.d.ts",
       "import": "./dist/graphql/index.js"
+    },
+    "./devtools-core": {
+      "types": "./dist/devtools-core/index.d.ts",
+      "import": "./dist/devtools-core/index.js"
     },
     "./next": {
       "types": "./dist/next/index.d.ts",
