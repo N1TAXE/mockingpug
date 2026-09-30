@@ -525,7 +525,7 @@ describe('MockDevtools', () => {
     expect(screen.getByText('No matching entities.')).toBeTruthy();
   });
 
-  it('virtualizes the "Mock Data" list: only rows near the scroll position are rendered', async () => {
+  it('renders every entity in the scrollable "Mock Data" list (native scroll, no per-scroll re-render)', async () => {
     const ctx = await makeManyEntitiesCtx(30);
     render(
       <MockProvider worker={fakeWorker()} ctx={ctx} storageKey={null}>
@@ -535,14 +535,15 @@ describe('MockDevtools', () => {
     openPanel();
     await openList();
 
-    // Scrolled to the top: an entity far down the list isn't in the DOM at all yet.
+    // No windowed virtualization: all rows are in the DOM and the container scrolls.
     expect(screen.getByTestId('entity-row-entity0')).toBeTruthy();
-    expect(screen.queryByTestId('entity-row-entity25')).toBeNull();
+    expect(screen.getByTestId('entity-row-entity25')).toBeTruthy();
 
-    fireEvent.scroll(screen.getByTestId('entity-list-scroll'), { target: { scrollTop: 25 * 49 } });
-
-    await waitFor(() => expect(screen.getByTestId('entity-row-entity25')).toBeTruthy());
-    expect(screen.queryByTestId('entity-row-entity0')).toBeNull();
+    // A scroll event must NOT tear down/rebuild the list (that froze the panel).
+    const before = screen.getByTestId('entity-row-entity0');
+    fireEvent.scroll(screen.getByTestId('entity-list-scroll'), { target: { scrollTop: 200 } });
+    expect(screen.getByTestId('entity-row-entity0')).toBe(before); // same node — the list wasn't rebuilt on scroll
+    expect(screen.getByTestId('entity-row-entity25')).toBeTruthy();
   });
 
   it('"Copy as curl" copies a GET curl command for that exact record\'s URL', async () => {

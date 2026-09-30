@@ -20,9 +20,7 @@ const SWITCH_OFF = '#D9D4C5';
 const WINDOW_SHADOW = '0px 8px 16px rgba(0, 0, 0, 0.15)';
 const LINE_HEIGHT = 'normal';
 
-const ENTITY_ROW_HEIGHT = 49;
 const ENTITY_LIST_HEIGHT = 221;
-const ENTITY_LIST_OVERSCAN = 3;
 
 type Style = Record<string, string>;
 
@@ -141,12 +139,36 @@ function pathnameOnly(path: string): string {
   const q = path.indexOf('?');
   return q === -1 ? path : path.slice(0, q);
 }
-function randomWindowPosition(width: number, height: number): { x: number; y: number } {
+// A data window is `width: 620; max-width: 92vw` and `height: 420; max-height: 80vh`.
+const WIN_W = 620;
+const WIN_H = 420;
+
+/** The window's actual on-screen box after the max-width/max-height clamps, plus the viewport size. */
+function winBox(): { w: number; h: number; vw: number; vh: number } {
   const vw = typeof window !== 'undefined' ? window.innerWidth : 1024;
   const vh = typeof window !== 'undefined' ? window.innerHeight : 768;
-  const maxX = Math.max(24, vw - width - 24);
-  const maxY = Math.max(24, vh - height - 24);
-  return { x: 24 + Math.random() * Math.max(1, maxX - 24), y: 24 + Math.random() * Math.max(1, maxY - 24) };
+  return { w: Math.min(WIN_W, vw * 0.92), h: Math.min(WIN_H, vh * 0.8), vw, vh };
+}
+
+/**
+ * Keeps a window's top-left inside the viewport (8px gutter) using its *real*
+ * height (420px capped at 80vh), so the whole window — its header with the close
+ * button and the scrollable body — stays on screen on short viewports and can't
+ * be dragged out of reach.
+ */
+function clampPos(x: number, y: number): { x: number; y: number } {
+  const { w, h, vw, vh } = winBox();
+  return {
+    x: Math.min(Math.max(8, x), Math.max(8, vw - w - 8)),
+    y: Math.min(Math.max(8, y), Math.max(8, vh - h - 8)),
+  };
+}
+
+function randomWindowPosition(): { x: number; y: number } {
+  const { w, h, vw, vh } = winBox();
+  const maxX = Math.max(8, vw - w - 8);
+  const maxY = Math.max(8, vh - h - 8);
+  return { x: 8 + Math.random() * Math.max(0, maxX - 8), y: 8 + Math.random() * Math.max(0, maxY - 8) };
 }
 
 // ── DOM helper ───────────────────────────────────────────────────────────────
@@ -253,7 +275,7 @@ function panelHeader(o: HeaderOpts): HTMLElement {
 }
 
 // ── Data window (draggable per-entity records viewer/editor) ──────────────────
-interface DataWindowHandle { el: HTMLElement; setZ: (z: number) => void; entity: string; id: string; }
+interface DataWindowHandle { el: HTMLElement; setZ: (z: number) => void; reclamp: () => void; entity: string; id: string; }
 function createDataWindow(
   props: DevtoolsPanelProps,
   entity: string,
@@ -261,7 +283,7 @@ function createDataWindow(
   start: { x: number; y: number },
   hooks: { onFocus: () => void; onClose: () => void },
 ): DataWindowHandle {
-  let pos = { ...start };
+  let pos = clampPos(start.x, start.y);
   let records: unknown[] | null = null;
   let editText: string | null = null;
   let error: string | null = null;
@@ -284,11 +306,14 @@ function createDataWindow(
     drag = { startX: e.clientX, startY: e.clientY, originX: pos.x, originY: pos.y };
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
   }
-  function onPointerMove(e: PointerEvent) {
-    if (!drag) return;
-    pos = { x: drag.originX + (e.clientX - drag.startX), y: drag.originY + (e.clientY - drag.startY) };
+  function applyPos() {
     root.style.left = `${pos.x}px`;
     root.style.top = `${pos.y}px`;
+  }
+  function onPointerMove(e: PointerEvent) {
+    if (!drag) return;
+    pos = clampPos(drag.originX + (e.clientX - drag.startX), drag.originY + (e.clientY - drag.startY));
+    applyPos();
   }
   function onPointerUp() { drag = null; }
 
@@ -403,7 +428,13 @@ function createDataWindow(
   }
 
   render();
-  return { el: root, entity, id, setZ: (z) => { root.style.zIndex = String(z); } };
+  return {
+    el: root,
+    entity,
+    id,
+    setZ: (z) => { root.style.zIndex = String(z); },
+    reclamp: () => { pos = clampPos(pos.x, pos.y); applyPos(); },
+  };
 }
 
 // ── Request row ──────────────────────────────────────────────────────────────
@@ -434,7 +465,6 @@ export function mountDevtoolsPanel(target: HTMLElement, initialProps: DevtoolsPa
   let bypassedRequestKeys = new Set<string>();
   let importError: string | null = null;
   let entityFilter = '';
-  let entityScrollTop = 0;
   let pollTimer: ReturnType<typeof setInterval> | undefined;
   const windows: DataWindowHandle[] = [];
   let order: string[] = [];
@@ -450,6 +480,11 @@ export function mountDevtoolsPanel(target: HTMLElement, initialProps: DevtoolsPa
   target.append(container);
   const windowLayer = el('div', {});
   target.append(windowLayer);
+
+  // Shrinking the browser window can push a data window (partly) off-screen —
+  // re-clamp every open one so its header/close button stays reachable.
+  const onResize = () => { for (const w of windows) w.reclamp(); };
+  if (typeof window !== 'undefined') window.addEventListener('resize', onResize);
 
   function openPanel() { open = true; props.onOpen?.(); startPolling(); render(); }
   function closePanel() { open = false; stopPolling(); render(); }
@@ -482,7 +517,7 @@ export function mountDevtoolsPanel(target: HTMLElement, initialProps: DevtoolsPa
   function openEntity(entity: string) {
     const existing = windows.find((w) => w.entity === entity);
     if (existing) { focusWindow(existing.id); return; }
-    const { x, y } = randomWindowPosition(620, 320);
+    const { x, y } = randomWindowPosition();
     const id = `${entity}-${windows.length}-${Math.random().toString(36).slice(2, 8)}`;
     const handle = createDataWindow(props, entity, id, { x, y }, { onFocus: () => focusWindow(id), onClose: () => closeWindow(id) });
     windows.push(handle);
@@ -582,38 +617,35 @@ export function mountDevtoolsPanel(target: HTMLElement, initialProps: DevtoolsPa
     ]));
     if (importError) parts.push(el('div', { text: importError, style: { padding: '4px 16px 8px', fontFamily: FONT_UI, fontSize: '12px', fontWeight: '600', color: '#c0392b', flex: 'none' } }));
 
-    const onFilter = (e: Event) => { entityFilter = (e.target as HTMLInputElement).value; entityScrollTop = 0; renderPanel(); };
+    const onFilter = (e: Event) => { entityFilter = (e.target as HTMLInputElement).value; renderPanel(); };
     const filter = el('input', { attrs: { type: 'text', placeholder: 'Filter entities…', 'aria-label': 'Filter entities' }, style: filterInput, on: { input: onFilter, change: onFilter } });
     filter.value = entityFilter;
     parts.push(el('div', { style: { padding: '8px 16px', borderBottom: `1px solid ${BORDER}`, flex: 'none' } }, [filter]));
 
     const wrap = el('div', { style: { position: 'relative', width: '100%' } });
     const filtered = Object.entries(props.entities).filter(([e]) => e.toLowerCase().includes(entityFilter.trim().toLowerCase()));
-    const visibleRowCount = Math.ceil(ENTITY_LIST_HEIGHT / ENTITY_ROW_HEIGHT) + ENTITY_LIST_OVERSCAN * 2;
-    const startIndex = Math.max(0, Math.floor(entityScrollTop / ENTITY_ROW_HEIGHT) - ENTITY_LIST_OVERSCAN);
-    const visible = filtered.slice(startIndex, startIndex + visibleRowCount);
 
-    const scroll = el('div', { attrs: { 'data-testid': 'entity-list-scroll' }, style: { maxHeight: `${ENTITY_LIST_HEIGHT}px`, overflowY: 'auto' }, on: { scroll: (e) => { entityScrollTop = (e.target as HTMLElement).scrollTop; renderPanel(); } } });
+    // ponytail: no list virtualization — the browser scrolls all rows natively.
+    // The old windowed version re-rendered the whole panel on every scroll event
+    // (a scroll-linked reflow that froze the panel); a plain scroll container of
+    // a few hundred rows is a non-issue. Narrow with the filter if a project ever
+    // has thousands of tables.
+    const scroll = el('div', { attrs: { 'data-testid': 'entity-list-scroll' }, style: { maxHeight: `${ENTITY_LIST_HEIGHT}px`, overflowY: 'auto' } });
     if (filtered.length === 0) {
       scroll.append(rowEl([el('span', { text: 'No matching entities.', style: faded })], { hoverable: false }));
     } else {
-      const spacer = el('div', { style: { position: 'relative', height: `${filtered.length * ENTITY_ROW_HEIGHT}px` } });
-      const inner = el('div', { style: { position: 'absolute', top: `${startIndex * ENTITY_ROW_HEIGHT}px`, left: '0', right: '0' } });
-      for (const [entity, count] of visible) {
+      for (const [entity, count] of filtered) {
         const left = el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0' } }, [
           iconSpan(ICON_DIR),
           (() => { const s = el('span', { style: rowLabel }, [document.createTextNode(`${entity} `)]); s.append(el('span', { text: `(${count})`, style: faded })); return s; })(),
         ]);
         const rightChildren: Node[] = [];
-        if (props.bypass) rightChildren.push(switchEl(props.bypass.isBypassed(entity), `Bypass ${entity}`, () => { props.bypass!.onToggle(entity); renderPanel(); }, true));
+        // The switch flips its own visuals; no panel re-render (which would reset scroll).
+        if (props.bypass) rightChildren.push(switchEl(props.bypass.isBypassed(entity), `Bypass ${entity}`, () => props.bypass!.onToggle(entity), true));
         rightChildren.push(el('button', { attrs: { type: 'button', 'aria-label': `Open ${entity} records` }, style: { boxSizing: 'border-box', display: 'flex', padding: '0', margin: '0', border: 'none', background: 'transparent', cursor: 'pointer' }, on: { click: (e) => { e.stopPropagation(); openEntity(entity); } } }, [iconSpan(ICON_CHEVRON)]));
-        inner.append(rowEl([left, el('span', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, rightChildren)], { onClick: () => openEntity(entity), testId: `entity-row-${entity}` }));
+        scroll.append(rowEl([left, el('span', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, rightChildren)], { onClick: () => openEntity(entity), testId: `entity-row-${entity}` }));
       }
-      spacer.append(inner);
-      scroll.append(spacer);
     }
-    // Restore scroll position after rebuild.
-    queueMicrotask(() => { scroll.scrollTop = entityScrollTop; });
     wrap.append(scroll);
     wrap.append(el('div', { style: { position: 'absolute', top: '0', left: '0', right: '0', height: '24px', background: 'linear-gradient(180deg,#fff,rgba(255,255,255,0))', pointerEvents: 'none' } }));
     wrap.append(el('div', { style: { position: 'absolute', bottom: '0', left: '0', right: '0', height: '24px', background: 'linear-gradient(0deg,#fff,rgba(255,255,255,0))', pointerEvents: 'none' } }));
@@ -657,6 +689,7 @@ export function mountDevtoolsPanel(target: HTMLElement, initialProps: DevtoolsPa
     update: (next) => { props = next; render(); },
     dispose: () => {
       stopPolling();
+      if (typeof window !== 'undefined') window.removeEventListener('resize', onResize);
       for (const w of windows) w.el.remove();
       container.remove();
       windowLayer.remove();
